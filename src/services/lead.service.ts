@@ -234,7 +234,7 @@ export class LeadService {
             }
           });
         }
-        return existingLead;
+          return { lead: existingLead };
       } else {
         // Dropped/Cancelled lead duplicate check
         const isAutomatedChannel = dto.source !== 'MANUAL_ENTRY' && dto.source !== 'REFERRAL';
@@ -262,7 +262,7 @@ export class LeadService {
             }
           });
           
-          return recovered;
+          return { lead: recovered };
         } else {
           // Task 8: Manual intake -> throw 409 with history
           const historicalContext = {

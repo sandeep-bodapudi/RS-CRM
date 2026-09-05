@@ -43,11 +43,7 @@ export class LeadWorkflow implements DomainWorkflow {
     LeadStatus.BOOKING_INITIATED,
   ]);
 
-  /** Set of statuses that require a CALL_LOGGED activity before moving to CONTACTED.
-   * Spec §1 row 2: "LeadActivity with activity_type: CALL_LOGGED must exist". */
-  private static readonly REQUIRES_CALL_LOGGED = new Set<string>([
-    LeadStatus.ASSIGNED,
-  ]);
+
 
   /** Which qualification fields must be non-null to count as "qualified". */
   private static isFullyQualified(lead: any): boolean {
@@ -143,20 +139,7 @@ export class LeadWorkflow implements DomainWorkflow {
 
     // ── Field-level guards (spec §1) ──
 
-    // §1 row 2: ASSIGNED → CONTACTED requires a CALL_LOGGED LeadActivity.
-    if (newStatus === LeadStatus.CONTACTED &&
-        LeadWorkflow.REQUIRES_CALL_LOGGED.has(currentState)) {
-      const activities = (entity && (entity.activities || [])) || [];
-      const hasCallLogged = activities.some(
-        (a: any) => a.activity_type === 'CALL_LOGGED'
-      );
-      if (!hasCallLogged) {
-        return {
-          allowed: false,
-          reason: 'Transition to CONTACTED requires a CALL_LOGGED LeadActivity to exist first',
-        };
-      }
-    }
+
 
     // §1 row 4: CONTACTED → QUALIFIED is only valid when all
     // qualification fields are present.

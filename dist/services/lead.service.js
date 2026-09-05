@@ -239,7 +239,7 @@ class LeadService {
                         }
                     });
                 }
-                return existingLead;
+                return { lead: existingLead };
             }
             else {
                 // Dropped/Cancelled lead duplicate check
@@ -265,7 +265,7 @@ class LeadService {
                             notes: `Lead automatically recovered to POOL due to new inquiry via ${dto.source}.`
                         }
                     });
-                    return recovered;
+                    return { lead: recovered };
                 }
                 else {
                     // Task 8: Manual intake -> throw 409 with history
