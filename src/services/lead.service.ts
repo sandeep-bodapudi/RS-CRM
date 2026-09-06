@@ -581,20 +581,90 @@ export class LeadService {
       throw new AppError(403, 'Forbidden: You do not have permission to mutate this lead');
     }
 
+    const _guardFields = guardFields || {};
+
+    if (newStatus === 'DEMO_SCHEDULED') {
+      const prefLoc = _guardFields.qualification?.preferred_location || lead.preferred_location;
+      
+      let assignedHandlerId: number | null = null;
+      let assignedRole: string | null = null;
+      let fallbackReason: string | null = null;
+      
+      if (prefLoc) {
+        const pmAssignment = await p.pMLocationAssignment.findFirst({
+          where: { location: prefLoc, company_id: lead.company_id },
+          include: { pm: true }
+        });
+        if (pmAssignment && pmAssignment.pm && pmAssignment.pm.status === 'ACTIVE') {
+          assignedHandlerId = pmAssignment.pm.id;
+          assignedRole = 'PM';
+        }
+      }
+      
+      if (!assignedHandlerId) {
+        const sm = await p.employee.findFirst({
+          where: { company_id: lead.company_id, status: 'ACTIVE', roles: { some: { role: { name: { equals: 'Sales manager', mode: 'insensitive' } } } } }
+        });
+        if (sm) { assignedHandlerId = sm.id; assignedRole = 'SALES_MANAGER'; fallbackReason = 'no PM assigned to territory'; }
+      }
+      
+      if (!assignedHandlerId) {
+        const mdDir = await p.employee.findFirst({
+          where: { company_id: lead.company_id, status: 'ACTIVE', roles: { some: { role: { name: { equals: 'marketing director', mode: 'insensitive' } } } } }
+        });
+        if (mdDir) { assignedHandlerId = mdDir.id; assignedRole = 'MARKETING_DIRECTOR'; fallbackReason = 'no PM or Sales Manager'; }
+      }
+      
+      if (!assignedHandlerId) {
+        const md = await p.employee.findFirst({
+          where: { company_id: lead.company_id, status: 'ACTIVE', roles: { some: { role: { name: { equals: 'Managing director', mode: 'insensitive' } } } } }
+        });
+        if (md) { assignedHandlerId = md.id; assignedRole = 'MD'; fallbackReason = 'no PM, Sales Manager, or Marketing Director'; }
+      }
+      
+      if (!assignedHandlerId) {
+        const admin = await p.employee.findFirst({
+          where: { company_id: lead.company_id, status: 'ACTIVE', roles: { some: { role: { name: { contains: 'Admin', mode: 'insensitive' } } } } }
+        });
+        if (admin) { assignedHandlerId = admin.id; assignedRole = 'ADMIN'; fallbackReason = 'no other roles available'; }
+      }
+      
+      if (!assignedHandlerId) {
+         throw new AppError(500, 'Could not find any available employee to handle the demo.');
+      }
+      
+      _guardFields.demo_handler_id = assignedHandlerId;
+
+      if (assignedRole !== 'PM') {
+         const admins = await p.employee.findMany({
+           where: { company_id: lead.company_id, status: 'ACTIVE', roles: { some: { role: { name: { contains: 'Admin', mode: 'insensitive' } } } } }
+         });
+         const notifications = admins.map(a => ({
+           employee_id: a.id,
+           type: 'SYSTEM_ALERT',
+           title: 'Demo Fallback Assignment',
+           message: `Lead ${lead.lead_code} Demo assigned to ${assignedRole} because ${fallbackReason}.`
+         }));
+         if (notifications.length > 0) {
+           await p.notification.createMany({ data: notifications });
+         }
+      }
+    }
+
     // §0: the workflow engine is the ONLY authority allowed to write Lead.status.
     // We assemble the entity context the engine uses for its field-level guards.
     const entityContext: any = {
       ...lead,
-      exit_reason: guardFields?.exit_reason ?? lead.exit_reason,
+      exit_reason: _guardFields.exit_reason ?? lead.exit_reason,
     };
-    if (guardFields?.demo_scheduled_at) {
+    if (_guardFields.demo_scheduled_at) {
       entityContext.pending_demo = {
-        scheduled_at: guardFields.demo_scheduled_at,
-        handler_id: guardFields.demo_handler_id
+        scheduled_at: _guardFields.demo_scheduled_at,
+        handler_id: _guardFields.demo_handler_id
       };
     }
-    if (guardFields?.qualification) {
-      const q = guardFields.qualification;
+    if (_guardFields.qualification) {
+      const q = _guardFields.qualification;
       if (q.budget_min !== undefined) entityContext.budget_min = q.budget_min;
       if (q.budget_max !== undefined) entityContext.budget_max = q.budget_max;
       if (q.property_type_preference !== undefined) entityContext.property_type_preference = q.property_type_preference;
@@ -667,12 +737,12 @@ export class LeadService {
         updateData.exited_from_status = lead.status; // snapshot per §1
       }
       // Create Demo record when entering DEMO_SCHEDULED instead of updating Lead fields
-      if (newStatus === 'DEMO_SCHEDULED' && guardFields?.demo_scheduled_at && guardFields?.demo_handler_id) {
+      if (newStatus === 'DEMO_SCHEDULED' && _guardFields.demo_scheduled_at && _guardFields.demo_handler_id) {
         await tx.demo.create({
           data: {
             lead_id: leadId,
-            handler_id: guardFields.demo_handler_id,
-            scheduled_at: new Date(guardFields.demo_scheduled_at),
+            handler_id: _guardFields.demo_handler_id,
+            scheduled_at: new Date(_guardFields.demo_scheduled_at),
             summary: notes || 'Demo Scheduled',
           }
         });
