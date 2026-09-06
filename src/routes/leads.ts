@@ -6,6 +6,7 @@ import { Roles, LeadCreateSchema, LeadStatusUpdateSchema, LeadReassignSchema, Pe
 import { validateRequestBody } from '../middleware/validate';
 import { LeadService, AppError } from '../services/lead.service';
 import { OpportunityService } from '../services/opportunity.service';
+import prisma from '../lib/prisma';
 
 const router = Router();
 
@@ -155,6 +156,55 @@ router.patch(
 
       return res.status(200).json({
         message: `Lead ${updated.lead_code} status updated to ${status}`,
+        lead: updated,
+      });
+    } catch (error: any) {
+      return handleServiceError(error, res);
+    }
+  }
+);
+
+// PATCH /api/v1/leads/:id - Generic lead update (for qualification, budget, notes, etc.)
+router.patch(
+  '/:id',
+  authenticateToken,
+  requireAuthz(Permissions.LEADS_UPDATE),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const leadId = parseInt(req.params.id, 10);
+      const updateData = req.body;
+      
+      const existingLead = await LeadService.getLeadById(req.user!, leadId);
+      if (!existingLead) {
+        return res.status(404).json({ error: 'Lead not found' });
+      }
+
+      // Basic update using prisma
+      const updated = await prisma.lead.update({
+        where: { id: leadId },
+        data: {
+          budget_min: updateData.budget_min !== undefined ? updateData.budget_min : undefined,
+          budget_max: updateData.budget_max !== undefined ? updateData.budget_max : undefined,
+          property_type_preference: updateData.property_type_preference !== undefined ? updateData.property_type_preference : undefined,
+          preferred_location: updateData.preferred_location !== undefined ? updateData.preferred_location : undefined,
+          notes: updateData.notes !== undefined ? updateData.notes : undefined,
+        }
+      });
+
+      // Log activity for qualification update if provided
+      if (updateData.budget_min !== undefined || updateData.property_type_preference) {
+        await prisma.leadActivity.create({
+          data: {
+            lead_id: leadId,
+            actor_id: req.user!.employeeId,
+            activity_type: 'QUALIFIED',
+            notes: 'Lead qualification details updated manually.',
+          }
+        });
+      }
+
+      return res.status(200).json({
+        message: `Lead ${updated.lead_code} updated successfully`,
         lead: updated,
       });
     } catch (error: any) {
