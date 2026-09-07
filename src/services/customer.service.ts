@@ -113,7 +113,7 @@ export class CustomerService {
 
   static async convertFromLead(user: TokenPayload, leadId: number) {
     const lead = await p.lead.findFirst({
-      where: { id: leadId, },
+      where: { id: leadId, company_id: user.companyId },
       include: { converted_customer: true },
     });
 

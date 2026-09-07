@@ -11,7 +11,6 @@ const router = Router();
 const CreateBookingSchema = z.object({
   customer_id: z.number().int().positive(),
   property_id: z.number().int().positive(),
-  company_id: z.number().int().positive(),
   agreed_price: z.number().positive(),
   booking_amount: z.number().positive(),
   notes: z.string().optional(),

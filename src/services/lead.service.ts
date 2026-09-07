@@ -917,14 +917,14 @@ export class LeadService {
   }
 
   static async addPropertyInterest(user: TokenPayload, leadId: number, propertyId: number) {
-    const lead = await p.lead.findFirst({ where: { id: leadId, } });
+    const lead = await p.lead.findFirst({ where: { id: leadId, company_id: user.companyId } });
     if (!lead) throw new AppError(404, 'Lead not found');
 
     if (!can(user, Permissions.LEADS_UPDATE, lead)) {
       throw new AppError(403, 'Forbidden: You do not have permission to modify this lead');
     }
 
-    const property = await p.property.findFirst({ where: { id: propertyId, } });
+    const property = await p.property.findFirst({ where: { id: propertyId, company_id: lead.company_id } });
     if (!property) {
       throw new Error('Property not found');
     }

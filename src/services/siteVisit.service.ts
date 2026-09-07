@@ -162,7 +162,7 @@ export class SiteVisitService {
       ? data.property_ids 
       : (data.property_id ? [data.property_id] : []);
     if (propertyIds.length > 0) {
-      const props = await p.property.findMany({ where: { id: { in: propertyIds }, } });
+      const props = await p.property.findMany({ where: { id: { in: propertyIds }, company_id: user.companyId } });
       if (props.length !== propertyIds.length) {
         throw { status: 404, message: 'One or more properties not found' };
       }

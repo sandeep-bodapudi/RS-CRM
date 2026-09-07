@@ -15,7 +15,9 @@ const LOCK_DURATION_MS = 24 * 60 * 60 * 1000;
 interface CreateBookingInput {
   customer_id: number;
   property_id: number;
-  company_id: number;
+  // Always overwritten from the authenticated caller's own company in
+  // createBooking() below -- never trust a caller-supplied company_id here.
+  company_id?: number;
   agreed_price: number;
   booking_amount: number;
   assigned_employee_id?: number;
@@ -31,6 +33,7 @@ export class BookingService {
   /** List bookings scoped to the user's company. */
   static async getBookings(user: TokenPayload) {
     const bookings = await prisma.booking.findMany({
+      where: { company_id: user.companyId },
       orderBy: { id: 'desc' },
     });
     return bookings;
@@ -69,13 +72,19 @@ export class BookingService {
    * - Otherwise it opens its own transaction with a bounded P2002 retry.
    */
   static async createBooking(user: TokenPayload, dto: CreateBookingInput, tx?: Prisma.TransactionClient) {
+    // Tenant scope is ALWAYS derived from the authenticated caller, never trusted
+    // from client/caller input -- a caller-supplied company_id would let a user
+    // (or a buggy internal caller) create a booking, and lock a property, under
+    // a company they don't belong to.
+    const scopedDto: CreateBookingInput & { company_id: number } = { ...dto, company_id: user.companyId };
+
     if (tx) {
-      return BookingService.claimAndCreate(tx, user, dto);
+      return BookingService.claimAndCreate(tx, user, scopedDto);
     }
 
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        return await prisma.$transaction((client) => BookingService.claimAndCreate(client, user, dto));
+        return await prisma.$transaction((client) => BookingService.claimAndCreate(client, user, scopedDto));
       } catch (err: any) {
         if ((err?.code === 'P2002' || err?.code === 'P2034') && attempt < 2) continue;
         throw err;
@@ -84,7 +93,8 @@ export class BookingService {
     throw new AppError(500, 'Failed to create booking after retries');
   }
 
-  private static async claimAndCreate(client: Prisma.TransactionClient, user: TokenPayload, dto: CreateBookingInput) {
+  // company_id is guaranteed set by createBooking() before this internal method ever runs.
+  private static async claimAndCreate(client: Prisma.TransactionClient, user: TokenPayload, dto: CreateBookingInput & { company_id: number }) {
     // Serialize concurrent requests and read the property state via the same locking
     // (FOR UPDATE) read. A locking read always returns the latest committed row, so the
     // claim decision is never stale behind a REPEATABLE-READ snapshot (needed when this
@@ -95,6 +105,14 @@ export class BookingService {
     if (!rows || rows.length === 0) throw new AppError(404, 'Property not found');
 
     const property = rows[0];
+
+    // Never let a booking be created against another company's property, even
+    // though company_id above is now always the caller's own -- without this,
+    // a staff member could still book/lock a property that belongs to the
+    // other company under their own company's booking record.
+    if (property.company_id !== dto.company_id) {
+      throw new AppError(404, 'Property not found');
+    }
 
     const now = new Date();
     const lockUntil = property.locked_until ? new Date(property.locked_until) : null;

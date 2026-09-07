@@ -115,7 +115,10 @@ if (!fs.existsSync(expenseProofsDir)) fs.mkdirSync(expenseProofsDir, { recursive
 
 app.use('/uploads/properties', express.static(propertiesDir));
 app.use('/uploads/profiles', express.static(profilesDir));
-app.use('/uploads/expense-proofs', express.static(expenseProofsDir));
+// expense-proofs is intentionally NOT served statically -- these are private
+// financial documents. They are only served via the authenticated,
+// ownership-checked GET /expense-refunds/:id/proof route (expenseRefunds.ts),
+// which the frontend already uses exclusively.
 
 // Global API Rate Limiter
 app.use('/api/', apiRateLimiter);

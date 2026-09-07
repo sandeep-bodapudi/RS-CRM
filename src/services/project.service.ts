@@ -181,17 +181,21 @@ export class ProjectService {
   }
 
   static async reassignProject(user: TokenPayload, projectId: number, newPmId: number, reason: string) {
-    if (!can(user, Permissions.PROJECTS_UPDATE)) { 
-      throw { status: 403, message: 'Forbidden: Missing permission to reassign project' };
-    }
     if (!reason || reason.trim() === '') {
       throw { status: 400, message: 'Reassignment reason is mandatory' };
     }
 
+    // can() needs the actual project row to evaluate PROJECTS_UPDATE (it's
+    // resource-scoped -- always false with no resource), so fetch must run
+    // before the permission check, not after.
     const project = await p.project.findFirst({
       where: { id: projectId, company_id: user.companyId }
     });
     if (!project) throw { status: 404, message: 'Project not found or unauthorized' };
+
+    if (!can(user, Permissions.PROJECTS_UPDATE, project)) {
+      throw { status: 403, message: 'Forbidden: Missing permission to reassign project' };
+    }
 
     const newPm = await p.employee.findFirst({
       where: { id: newPmId, company_id: user.companyId, status: 'ACTIVE' }

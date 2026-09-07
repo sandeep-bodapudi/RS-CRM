@@ -104,7 +104,7 @@ router.post('/', authenticateToken, requireAuthz(Permissions.TASKS_CREATE), vali
     const creatorId = req.user!.employeeId;
 
     // Validate Assignee Company Isolation
-    const assignee = await p.employee.findFirst({ where: { id: assignee_id, } });
+    const assignee = await p.employee.findFirst({ where: { id: assignee_id, company_id: req.user!.companyId } });
     if (!assignee) {
       return res.status(400).json({ error: 'Assignee not found or outside your company.' });
     }
@@ -122,7 +122,7 @@ router.post('/', authenticateToken, requireAuthz(Permissions.TASKS_CREATE), vali
 
     // Validate Opportunity Access if opportunity_id is provided
     if (opportunity_id) {
-      const existingOpp = await p.opportunity.findFirst({ where: { id: opportunity_id, } });
+      const existingOpp = await p.opportunity.findFirst({ where: { id: opportunity_id, company_id: req.user!.companyId } });
       if (!existingOpp) {
         return res.status(404).json({ error: 'Opportunity not found.' });
       }
@@ -170,8 +170,7 @@ router.get('/:id/sla', authenticateToken, async (req: AuthenticatedRequest, res:
 
     // Locate the Task within the user's company scope
     const task = await p.task.findFirst({
-      where: { id: taskId, },
-      include: { assignee: { select: { company_id: true } } },
+      where: { id: taskId, assignee: { company_id: req.user!.companyId } },
     });
 
     if (!task) {
@@ -210,7 +209,7 @@ router.patch('/:id/status', authenticateToken, requireAuthz(Permissions.TASKS_UP
     const employeeId = req.user!.employeeId;
 
     const existingTask = await p.task.findFirst({
-      where: { id: taskId, },
+      where: { id: taskId, assignee: { company_id: req.user!.companyId } },
       include: { assignee: { select: { company_id: true } } }
     });
 

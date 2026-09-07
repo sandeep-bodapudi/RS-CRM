@@ -17,12 +17,12 @@ import { KycPolicy } from '../policies/kyc.policy';
  * @returns boolean indicating if access is granted
  */
 export const can = (user: TokenPayload, action: Permission, resource?: any): boolean => {
-  // 1. Super Admin Global Access Bypass
-  if (user.roles.includes(Roles.ADMIN)) {
-    return true;
-  }
+  // Admin (Technical) is deliberately NOT a blanket bypass -- RolePermissionsMatrix
+  // curates a specific list for Admin and explicitly withholds some permissions
+  // (e.g. no EMPLOYEES_VIEW_SENSITIVE, no LEADS_* at all). Only Roles.MD is
+  // granted ALL_PERMISSIONS, via the matrix itself, not here.
 
-  // 2. Basic Permission Check
+  // 1. Basic Permission Check
   const hasBasePermission = (user.permissions || []).includes(action);
 
   if (!hasBasePermission) {
