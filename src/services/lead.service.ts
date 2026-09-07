@@ -603,28 +603,28 @@ export class LeadService {
       
       if (!assignedHandlerId) {
         const sm = await p.employee.findFirst({
-          where: { company_id: lead.company_id, status: 'ACTIVE', roles: { some: { role: { name: { equals: 'Sales manager', mode: 'insensitive' } } } } }
+          where: { company_id: lead.company_id, status: 'ACTIVE', roles: { some: { role: { name: { equals: 'Sales manager' } } } } }
         });
         if (sm) { assignedHandlerId = sm.id; assignedRole = 'SALES_MANAGER'; fallbackReason = 'no PM assigned to territory'; }
       }
       
       if (!assignedHandlerId) {
         const mdDir = await p.employee.findFirst({
-          where: { company_id: lead.company_id, status: 'ACTIVE', roles: { some: { role: { name: { equals: 'marketing director', mode: 'insensitive' } } } } }
+          where: { company_id: lead.company_id, status: 'ACTIVE', roles: { some: { role: { name: { equals: 'marketing director' } } } } }
         });
         if (mdDir) { assignedHandlerId = mdDir.id; assignedRole = 'MARKETING_DIRECTOR'; fallbackReason = 'no PM or Sales Manager'; }
       }
       
       if (!assignedHandlerId) {
         const md = await p.employee.findFirst({
-          where: { company_id: lead.company_id, status: 'ACTIVE', roles: { some: { role: { name: { equals: 'Managing director', mode: 'insensitive' } } } } }
+          where: { company_id: lead.company_id, status: 'ACTIVE', roles: { some: { role: { name: { equals: 'Managing director' } } } } }
         });
         if (md) { assignedHandlerId = md.id; assignedRole = 'MD'; fallbackReason = 'no PM, Sales Manager, or Marketing Director'; }
       }
       
       if (!assignedHandlerId) {
         const admin = await p.employee.findFirst({
-          where: { company_id: lead.company_id, status: 'ACTIVE', roles: { some: { role: { name: { contains: 'Admin', mode: 'insensitive' } } } } }
+          where: { company_id: lead.company_id, status: 'ACTIVE', roles: { some: { role: { name: { contains: 'Admin' } } } } }
         });
         if (admin) { assignedHandlerId = admin.id; assignedRole = 'ADMIN'; fallbackReason = 'no other roles available'; }
       }
@@ -637,7 +637,7 @@ export class LeadService {
 
       if (assignedRole !== 'PM') {
          const admins = await p.employee.findMany({
-           where: { company_id: lead.company_id, status: 'ACTIVE', roles: { some: { role: { name: { contains: 'Admin', mode: 'insensitive' } } } } }
+           where: { company_id: lead.company_id, status: 'ACTIVE', roles: { some: { role: { name: { contains: 'Admin' } } } } }
          });
          const notifications = admins.map(a => ({
            employee_id: a.id,
