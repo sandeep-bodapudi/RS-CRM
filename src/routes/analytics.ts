@@ -62,4 +62,26 @@ router.get(
   }
 );
 
+// GET /api/v1/analytics/hr-overview
+//
+// Real trend data for HRDashboard's Overview tab (Phase-19 audit #7),
+// replacing the previously-hardcoded "+3"/"-1"/"+2.1%" trend badges and the
+// permanent-status-based "On Leave Today" count.
+router.get(
+  '/hr-overview',
+  authenticateToken,
+  requireAuthz(Permissions.EMPLOYEES_READ),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const companyId = req.user!.companyId;
+      if (!companyId) return res.status(400).json({ error: 'Company context required' });
+      const overview = await AnalyticsService.getHrOverview(companyId);
+      return res.status(200).json(overview);
+    } catch (error: any) {
+      logger.error('Fetch HR overview error:', error);
+      return res.status(500).json({ error: 'Failed to fetch HR overview' });
+    }
+  }
+);
+
 export default router;

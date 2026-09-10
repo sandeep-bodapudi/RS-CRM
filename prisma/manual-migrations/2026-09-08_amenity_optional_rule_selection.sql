@@ -1,0 +1,24 @@
+-- ============================================================================
+-- Amenities -> Pricing Engine wiring: per-unit optional-rule selection
+-- Generated 2026-09-08 (Rebuild Phase 3)
+--
+-- Adds ProjectUnit.selected_optional_rule_ids, a nullable JSON array of ids
+-- (positive = an optional ProjectPricingRule this unit opted into; negative
+-- `-amenity_id` = a CHARGEABLE+SELECTED_UNITS ProjectAmenity this unit opted
+-- into). See services/pricing/pricing.service.ts's getEffectiveRules and
+-- amenityToEngineRule, and services/amenity.service.ts's applySelectedUnits.
+--
+-- SAFETY: purely additive — 1 ADD COLUMN, nullable, no default needed.
+--   * 0 CREATE TABLE, 0 DROP TABLE, 0 DROP COLUMN, 0 MODIFY COLUMN.
+--
+-- HOW TO APPLY
+--   Local:      npx prisma db execute --url "$DATABASE_URL" --file apps/api/prisma/manual-migrations/2026-09-08_amenity_optional_rule_selection.sql
+--   Production: run the same command with DATABASE_URL_PRODUCTION, deliberately.
+--
+-- NOTE: apps/api/prisma/migrations/ is stale (see the Phase 1 migration's own
+-- header) — do not run `prisma migrate deploy`/`dev`. This file was generated
+-- via `prisma migrate diff --from-url` against the live local database.
+-- ============================================================================
+
+-- AlterTable
+ALTER TABLE `projectunit` ADD COLUMN `selected_optional_rule_ids` JSON NULL;

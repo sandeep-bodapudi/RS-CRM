@@ -4,6 +4,7 @@ export enum WorkflowDomain {
   LEAD = 'LEAD',
   PROPERTY = 'PROPERTY',
   SITE_VISIT = 'SITE_VISIT',
+  PROJECT = 'PROJECT',
 }
 
 export interface WorkflowTransitionRequest {

@@ -15,12 +15,27 @@ enum LeadOwnershipType {
   DIRECT
 }
 
+// Expanded from the original 6 (Phase 2, production-hardening plan) to cover
+// the realistic range of reasons a real-estate lead gets dropped — a
+// comparable spread to what real-estate CRMs (LeadSquared, Sell.Do-style
+// tools) categorize lost leads by: fit/budget/timing, contact quality,
+// financing, logistics, and competitor loss, not just a generic sales list.
 enum LeadExitReason {
   NO_MATCHING_INVENTORY
   CHOSE_COMPETITOR
   BUDGET_MISMATCH
   NOT_READY
   DO_NOT_CONTACT
+  UNRESPONSIVE
+  INVALID_CONTACT
+  DUPLICATE_LEAD
+  FINANCING_ISSUE
+  LOCATION_MISMATCH
+  ALREADY_PURCHASED
+  JUST_ENQUIRING
+  SITE_VISIT_NO_SHOW
+  NEGOTIATION_FAILED
+  OUT_OF_SERVICE_AREA
   OTHER
 }
 
@@ -41,24 +56,159 @@ enum SiteVisitStatus {
   CANCELLATION_PENDING_PM_CONFIRMATION
 }
 
+// ---------------------------------------------------------------------------
+// Inventory & pricing vocabulary
+//
+// These are real DB enums rather than the String-plus-comment convention used by
+// the older models. Property.status has never been enum-backed, which is why
+// "ARCHIVED" ended up in the code but not in the schema's own comment. New
+// inventory tables get real constraints so that cannot repeat.
+// ---------------------------------------------------------------------------
+
+/// Commercial availability of a saleable item. Separate from listing/publication
+/// state: a SOLD unit still has an editable listing.
+/// RESERVED/BOOKED/SOLD are owned by the booking workflow, never set by hand.
+enum SalesStatus {
+  AVAILABLE
+  HOLD
+  RESERVED
+  BOOKED
+  SOLD
+  BLOCKED
+  UNAVAILABLE
+}
+
+enum UnitType {
+  PLOT
+  FLAT
+  VILLA
+  HOUSE
+  COMMERCIAL
+  OTHER
+}
+
+enum ProjectType {
+  PLOTTED
+  APARTMENT
+  VILLA
+  MIXED
+  COMMERCIAL
+}
+
+enum AreaUnit {
+  SQFT
+  SQYD
+  SQM
+  ACRE
+  GUNTA
+  CENT
+  ANKANAM
+  HECTARE
+}
+
+/// Which measured area a rate is applied against. Getting this wrong is the
+/// difference between quoting on carpet and quoting on super built-up.
+enum PriceBasis {
+  CARPET
+  BUILT_UP
+  SUPER_BUILT_UP
+  PLOT_AREA
+  LUMPSUM
+}
+
+enum PricingRuleKind {
+  BASE_RATE
+  PREMIUM
+  CHARGE
+  DISCOUNT
+  TAX
+}
+
+enum ChargeCalcMethod {
+  FIXED
+  PER_SQFT
+  PER_SQYD
+  PERCENT_OF_BASE
+  QTY_X_RATE
+}
+
+enum ChargeCategory {
+  FACING
+  FLOOR
+  CORNER
+  ROAD
+  PARK
+  VIEW
+  BHK
+  AMENITY
+  PARKING
+  INFRA
+  MAINTENANCE
+  LEGAL
+  CLUB
+  TAX
+  OTHER
+}
+
+/// How an amenity is offered: bundled, opt-in, or billed.
+enum AmenityAvailability {
+  INCLUDED
+  OPTIONAL
+  CHARGEABLE
+}
+
+enum AmenityApplicability {
+  ALL_UNITS
+  SELECTED_UNITS
+  BY_UNIT_TYPE
+}
+
+enum AmenityCategory {
+  SECURITY
+  RECREATION
+  CONVENIENCE
+  ENVIRONMENT
+  SPORTS
+  UTILITY
+  OTHER
+}
+
+enum ProjectMediaKind {
+  COVER
+  GALLERY
+  VIDEO
+  BROCHURE
+  MASTER_PLAN
+  LAYOUT_PLAN
+  FLOOR_PLAN
+}
+
+enum ProjectDocumentKind {
+  RERA
+  APPROVAL
+  LEGAL
+  OTHER
+}
+
 model Company {
   id                  Int    @id @default(autoincrement())
   name                String
   code                String @unique
   property_type_group String @default("RADHA_REAL_HOMES")
 
-  branches      Branch[]
-  employees     Employee[]
-  holidays      CompanyHoliday[]
-  leads         Lead[]
-  opportunities Opportunity[]
-  customers     Customer[]
-  properties    Property[]
-  projects      Project[]
-  daily_targets DailyTarget[]
-  bookings      Booking[]
-  payments      Payment[]
-  complaints    Complaint[]
+  branches        Branch[]
+  employees       Employee[]
+  employee_access EmployeeCompanyAccess[]
+  holidays        CompanyHoliday[]
+  leads           Lead[]
+  opportunities   Opportunity[]
+  customers       Customer[]
+  properties      Property[]
+  projects        Project[]
+  daily_targets   DailyTarget[]
+  bookings        Booking[]
+  payments        Payment[]
+  complaints      Complaint[]
 
   kiosk_credentials KioskCredential[]
 
@@ -66,8 +216,12 @@ model Company {
   integration_events      IntegrationEvent[]
   customer_notifications  CustomerNotification[]
   property_publications   PropertyPublication[]
+  project_units           ProjectUnit[]
+  amenities               Amenity[]
   public_api_keys         PublicApiKey[]
   pm_location_assignments PMLocationAssignment[]
+  website_accounts        WebsiteAccount[]
+  website_activity        WebsiteActivityEvent[]
   announcement_image_url  String?                @db.Text
   announcement_active     Boolean                @default(false)
 
@@ -89,6 +243,7 @@ model Branch {
   customers         Customer[]
   properties        Property[]
   projects          Project[]
+  project_units     ProjectUnit[]
   bookings          Booking[]
 
   kiosk_credentials KioskCredential[]
@@ -106,7 +261,7 @@ model Employee {
   company_id          Int
   branch_id           Int?
   password_hash       String
-  status              String  @default("ACTIVE") // ACTIVE, INACTIVE, SUSPENDED
+  status              String  @default("ACTIVE") // ACTIVE, INACTIVE, SUSPENDED, RESIGNED
   token_version       Int     @default(1)
   attendance_required Boolean @default(true)
   first_login_done    Boolean @default(false)
@@ -145,12 +300,15 @@ model Employee {
   date_of_joining      DateTime?
   salary_ctc           Float? // Monthly Base Compensation (INR ₹)
   background_education String? // Qualifications, Degrees & Certifications
+  resignation_date     DateTime? // when the employee submitted/was recorded as resigning
+  last_working_day     DateTime? // final day of employment; may be in the future at time of recording
 
   company Company @relation(fields: [company_id], references: [id])
   branch  Branch? @relation(fields: [branch_id], references: [id])
 
   roles                         EmployeeRole[]
   branches                      EmployeeBranch[]
+  company_access                EmployeeCompanyAccess[]
   permission_overrides          EmployeePermissionOverride[]
   qr_codes                      EmployeeQrCode[]
   attendance_logs               AttendanceLog[]
@@ -179,6 +337,14 @@ model Employee {
   pm_reassignments_made         PMReassignmentHistory[]      @relation("ReassignedByPM")
   pm_reassignments_received     PMReassignmentHistory[]      @relation("ReassignedToPM")
   agent_bookings                SiteVisitBooking[]           @relation("AgentBookings")
+  layout_images_uploaded        ProjectLayoutImage[]         @relation("LayoutImagesUploaded")
+  layout_regions_created        PropertyLayoutRegion[]       @relation("LayoutRegionsCreated")
+  created_project_units         ProjectUnit[]                @relation("CreatedProjectUnits")
+  overrode_unit_prices          ProjectUnit[]                @relation("OverrodeUnitPrices")
+  project_media_uploaded        ProjectMedia[]               @relation("ProjectMediaUploaded")
+  project_documents_uploaded    ProjectDocument[]            @relation("ProjectDocumentsUploaded")
+  project_unit_images_uploaded  ProjectUnitImage[]           @relation("ProjectUnitImagesUploaded")
+  project_unit_docs_uploaded    ProjectUnitDocument[]        @relation("ProjectUnitDocsUploaded")
 
   // §1 + §2 back-relations
   sv_reassignments_from      SiteVisitReassignment[] @relation("SiteVisitReassignmentFrom")
@@ -190,6 +356,8 @@ model Employee {
   created_property_interests LeadPropertyInterest[]
   owned_opportunities        Opportunity[]           @relation("OwnedOpportunities")
   assigned_bookings          Booking[]               @relation("AssignedBookings")
+  submitted_booking_forms    Booking[]               @relation("BookingFormSubmitter")
+  md_approved_bookings       Booking[]               @relation("BookingMDApprover")
   recorded_payments          Payment[]               @relation("RecordedPayments")
   recorded_installments      Installment[]           @relation("RecordedInstallments")
   push_subscriptions         PushSubscription[]
@@ -199,6 +367,8 @@ model Employee {
   manager                    Employee?               @relation("EmployeeManager", fields: [reporting_manager_id], references: [id])
   direct_reports             Employee[]              @relation("EmployeeManager")
   complaints                 Complaint[]             @relation("AssignedComplaints")
+  webauthn_credentials       WebAuthnCredential[]
+  received_feedback          SiteVisitFeedback[]     @relation("RatedInFeedback")
 
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
@@ -209,6 +379,53 @@ model Employee {
   @@index([company_id, created_at])
   @@index([phone])
   @@index([email])
+}
+
+/// § Phase 6: a registered platform-authenticator credential (Windows Hello,
+/// Touch ID, Android fingerprint, or the OS PIN fallback) used to unlock the
+/// app-lock screen. This is NOT a login credential — it never issues a
+/// session by itself; it only gates whether the already-valid refresh-token
+/// cookie gets used to fetch a fresh access token (see webauthn.service.ts).
+/// An employee can register more than one (e.g. desktop + phone).
+model WebAuthnCredential {
+  id            Int       @id @default(autoincrement())
+  employee_id   Int
+  credential_id String    @unique // base64url, from @simplewebauthn's WebAuthnCredential.id
+  public_key    String    @db.Text // base64url-encoded COSE public key
+  counter       Int       @default(0)
+  device_label  String? // e.g. "Windows Hello", set from the browser's User-Agent at registration time
+  transports    String? // comma-separated AuthenticatorTransport values
+  created_at    DateTime  @default(now())
+  last_used_at  DateTime?
+
+  employee Employee @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+
+  @@index([employee_id])
+}
+
+// § Phase 7 — a short, no-login customer feedback form reached via a
+// WhatsApp link sent after a site visit is marked COMPLETED. The raw token
+// goes out in the link and is never persisted (only its SHA-256 hash),
+// following the same pattern AuthSession uses for refresh tokens.
+model SiteVisitFeedback {
+  id               Int       @id @default(autoincrement())
+  site_visit_id    Int       @unique
+  rated_employee_id Int      // whoever actually ran the visit — snapshotted at creation so a later reassignment can't change who a submitted rating counts against
+  token_hash       String    @unique
+  expires_at       DateTime
+  submitted_at     DateTime?
+  rating           Int? // 1-5 stars
+  on_time          Boolean? // "Did the representative arrive on time?"
+  answered_questions Boolean? // "Did they answer your questions properly?"
+  property_as_described Boolean? // "Was the property as described?"
+  comment          String?   @db.Text
+  created_at       DateTime  @default(now())
+
+  site_visit     SiteVisitBooking @relation(fields: [site_visit_id], references: [id], onDelete: Cascade)
+  rated_employee Employee         @relation("RatedInFeedback", fields: [rated_employee_id], references: [id])
+
+  @@index([rated_employee_id])
+  @@index([expires_at])
 }
 
 model Role {
@@ -258,6 +475,25 @@ model EmployeeBranch {
   branch   Branch   @relation(fields: [branch_id], references: [id], onDelete: Cascade)
 
   @@id([employee_id, branch_id])
+}
+
+/// Explicit, per-employee grant of which companies' data an employee may see.
+/// Introduced for Phase 1.2 (multi-company data isolation): Radha Real Homes
+/// and Sonthillu Constructions currently share one employee base, so each
+/// employee is granted access to both companies here rather than the scope
+/// layer being wide open (the bug this fixes) or hard-locked to a single
+/// company (Employee.company_id, which only tracks a "home" company for
+/// HR/attendance purposes). When the employee bases are split apart later,
+/// remove the grant row for the company an employee should no longer see —
+/// no code change needed.
+model EmployeeCompanyAccess {
+  employee_id Int
+  company_id  Int
+
+  employee Employee @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [company_id], references: [id], onDelete: Cascade)
+
+  @@id([employee_id, company_id])
 }
 
 model EmployeePermissionOverride {
@@ -495,23 +731,36 @@ model Lead {
   referral_employee_id Int?
   previous_lead_id     Int?
 
-  company                Company   @relation(fields: [company_id], references: [id])
-  branch                 Branch?   @relation(fields: [branch_id], references: [id])
-  assigned_to            Employee? @relation("AssignedLeads", fields: [assigned_to_id], references: [id])
-  created_by             Employee? @relation("CreatedLeads", fields: [created_by_id], references: [id])
-  introduced_by          Employee? @relation("IntroducedLeads", fields: [introduced_by_id], references: [id])
-  referral_employee      Employee? @relation("ReferredLeads", fields: [referral_employee_id], references: [id])
-  project_id             Int?
-  project                Project?  @relation(fields: [project_id], references: [id])
-  previous_lead          Lead?     @relation("LeadHistory", fields: [previous_lead_id], references: [id])
-  next_leads             Lead[]    @relation("LeadHistory")
-  
+  // Phase-19 audit #9: Channel Partner Manager leads originate from an
+  // external agent who works for a partner company, not an internal
+  // employee -- these fields record that contact so CPM can trace where the
+  // lead came from. Populated only for CPM-created leads; null otherwise.
+  external_agent_name         String?
+  external_agent_phone        String?
+  external_agent_associate_id String?
+  external_agent_company      String?
+
+  company           Company   @relation(fields: [company_id], references: [id])
+  branch            Branch?   @relation(fields: [branch_id], references: [id])
+  assigned_to       Employee? @relation("AssignedLeads", fields: [assigned_to_id], references: [id])
+  created_by        Employee? @relation("CreatedLeads", fields: [created_by_id], references: [id])
+  introduced_by     Employee? @relation("IntroducedLeads", fields: [introduced_by_id], references: [id])
+  referral_employee Employee? @relation("ReferredLeads", fields: [referral_employee_id], references: [id])
+  project_id        Int?
+  project           Project?  @relation(fields: [project_id], references: [id])
+  previous_lead     Lead?     @relation("LeadHistory", fields: [previous_lead_id], references: [id])
+  next_leads        Lead[]    @relation("LeadHistory")
+
   enquiry_type           String?
   preferred_contact_time String?
   property_ids           Json?
 
   // §1 Lead Macro-Status Pipeline — exit & demo tracking
   exit_reason        LeadExitReason?
+  // Free-text detail captured only when exit_reason = OTHER — kept separate
+  // from the general `notes` field so "why was this actually dropped" stays
+  // queryable/reportable on its own, not buried in a mixed-purpose notes blob.
+  exit_reason_detail String?
   exited_from_status String? // snapshot of Lead.status at the moment of DROPPED (for reporting)
 
   activities           LeadActivity[]
@@ -522,6 +771,11 @@ model Lead {
   converted_customer   Customer?
   follow_up_tasks      Task[]
   opportunities        Opportunity[]
+  // A customer may be interested in more than one area — `preferred_location`
+  // above stays populated as the primary/first entry so every existing
+  // reader (matching, dashboards, exports) keeps working unchanged; this
+  // relation is the full list.
+  preferred_locations  LeadPreferredLocation[]
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -533,6 +787,23 @@ model Lead {
   @@index([company_id, created_at])
   @@index([phone])
   @@index([email])
+}
+
+/// Full list of a lead's preferred locations (§ Phase 2). `Lead.preferred_location`
+/// stays as the primary/first entry for backward compatibility with existing
+/// readers (matching engine fallback, dashboards); this table is the source of
+/// truth for the complete list entered via the multi-location UI.
+model LeadPreferredLocation {
+  id         Int      @id @default(autoincrement())
+  lead_id    Int
+  location   String
+  sort_order Int      @default(0)
+  created_at DateTime @default(now())
+
+  lead Lead @relation(fields: [lead_id], references: [id], onDelete: Cascade)
+
+  @@unique([lead_id, location])
+  @@index([lead_id])
 }
 
 model LeadActivity {
@@ -565,40 +836,87 @@ model LeadMatchingRequirement {
   created_at DateTime @default(now())
 }
 
+/// A lead's shortlist. Points at either a standalone Property or a ProjectUnit —
+/// exactly one of the two, enforced in the service layer.
 model LeadPropertyInterest {
-  id          Int      @id @default(autoincrement())
-  lead_id     Int
-  property_id Int
-  is_active   Boolean  @default(true)
-  created_by  Int // Employee ID who added this interest
-  created_at  DateTime @default(now())
+  id              Int      @id @default(autoincrement())
+  lead_id         Int
+  property_id     Int?
+  project_unit_id Int?
+  is_active       Boolean  @default(true)
+  created_by      Int // Employee ID who added this interest
+  created_at      DateTime @default(now())
 
-  lead     Lead     @relation(fields: [lead_id], references: [id], onDelete: Cascade)
-  property Property @relation(fields: [property_id], references: [id], onDelete: Cascade)
-  creator  Employee @relation(fields: [created_by], references: [id])
+  lead         Lead         @relation(fields: [lead_id], references: [id], onDelete: Cascade)
+  property     Property?    @relation(fields: [property_id], references: [id], onDelete: Cascade)
+  project_unit ProjectUnit? @relation(fields: [project_unit_id], references: [id], onDelete: Cascade)
+  creator      Employee     @relation(fields: [created_by], references: [id])
 
   @@unique([lead_id, property_id])
+  @@unique([lead_id, project_unit_id])
   @@index([property_id])
+  @@index([project_unit_id])
   @@index([created_by])
 }
 
+/// A development containing many saleable units. Holds every fact that is common
+/// to all of them — address, developer, approvals, amenities, pricing rules — so
+/// a unit never repeats them (spec section 28: don't duplicate common data).
 model Project {
-  id             Int       @id @default(autoincrement())
-  project_code   String    @unique
+  id             Int          @id @default(autoincrement())
+  project_code   String       @unique
   company_id     Int
   branch_id      Int?
   name           String
-  description    String?   @db.Text
+  description    String?      @db.Text
+  project_type   ProjectType?
+  developer_name String?
   location       String
-  total_area     String?
-  total_units    Int?
+  total_area     String? // Deprecated: free text, unusable for maths. Use total_area_value/unit.
+  total_units    Int? // Planned target only — live counts are aggregated from units.
   launch_date    DateTime?
-  status         String    @default("PLANNING") // PLANNING, UNDER_CONSTRUCTION, COMPLETED, CANCELLED
+  status         String       @default("PLANNING") // PLANNING, UNDER_CONSTRUCTION, COMPLETED, CANCELLED
   project_phase  String?
   rera_number    String?
-  amenities      Json? // Array of amenities
+  amenities      Json? // Deprecated: superseded by ProjectAmenity. Retained for old rows.
   assigned_pm_id Int?
-  slug           String    @default(uuid()) // WR-6: SEO-friendly public identifier (overridden by service layer)
+  slug           String       @default(uuid()) // WR-6: SEO-friendly public identifier (overridden by service layer)
+
+  // Scale
+  total_area_value Float?
+  total_area_unit  AreaUnit?
+  towers_count     Int?
+  blocks_count     Int?
+  floors_count     Int?
+  completion_date  DateTime?
+
+  // Approvals & compliance — RERA/DTCP/HMDA numbers are legally required on
+  // any public listing, so they are first-class rather than free text.
+  rera_status        String? // NOT_APPLICABLE, APPLIED, APPROVED
+  approval_authority String? // RERA, DTCP, HMDA, PANCHAYAT
+  approval_number    String?
+  lp_number          String?
+
+  // Structured location — Property already had these; Project only had a single
+  // free-text `location`, so units could not inherit a real address.
+  state     String?
+  district  String?
+  city      String?
+  mandal    String?
+  village   String?
+  locality  String?
+  address   String? @db.Text
+  pincode   String?
+  latitude  Float?
+  longitude Float?
+  maps_link String? @db.Text
+
+  // Pricing defaults inherited by new units
+  default_price_basis PriceBasis?
+  default_area_unit   AreaUnit?
+
+  cover_image_url String? @db.Text
+  is_published    Boolean @default(false)
 
   company     Company   @relation(fields: [company_id], references: [id])
   branch      Branch?   @relation(fields: [branch_id], references: [id])
@@ -608,6 +926,13 @@ model Project {
   opportunities Opportunity[]
   leads         Lead[]
   site_visits   SiteVisitBooking[]
+  layout_images ProjectLayoutImage[]
+
+  units             ProjectUnit[]
+  pricing_rules     ProjectPricingRule[]
+  project_amenities ProjectAmenity[]
+  media             ProjectMedia[]
+  documents         ProjectDocument[]
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -616,6 +941,576 @@ model Project {
   @@index([company_id])
   @@index([branch_id])
   @@index([assigned_pm_id])
+  @@index([project_type])
+  @@index([city])
+}
+
+/// An individual saleable unit inside a project — a plot, flat, villa or house.
+///
+/// Deliberately NOT a Property. A Property is a standalone listing that carries
+/// its own address and goes through the PM -> DM -> MD publication pipeline; a
+/// unit is internally-authored inventory that inherits everything common from
+/// its project. Previously both were Property rows, which meant every unit
+/// dragged ~20 unused listing columns (SEO fields, DM polish, verification logs)
+/// and `listProperties` needed a `project_id: null` filter to keep them apart.
+model ProjectUnit {
+  id         Int    @id @default(autoincrement())
+  unit_code  String @unique
+  project_id Int
+  company_id Int
+  branch_id  Int?
+
+  // ---- Identity -----------------------------------------------------------
+  unit_number   String
+  unit_type     UnitType
+  plot_number   String?
+  survey_number String?
+  tower         String?
+  block         String?
+  floor         Int?
+  flat_number   String?
+  villa_number  String?
+  /// Villa Type A/B/C, or a plot type. Lets one project price sub-types
+  /// differently (spec section 15).
+  type_code     String?
+
+  // ---- Configuration ------------------------------------------------------
+  bhk            String?
+  bedrooms       Int?
+  bathrooms      Int?
+  balconies      Int?
+  living_rooms   Int?
+  kitchens       Int?
+  utility_rooms  Int?
+  has_pooja_room Boolean @default(false)
+  has_study_room Boolean @default(false)
+
+  // ---- Area ---------------------------------------------------------------
+  // area_value/area_unit hold what was typed (plots are sold in Sq.Yds and the
+  // sales team negotiates in them); area_sqft/area_sqyd are derived and indexed
+  // so filtering and sorting never depend on the entry unit.
+  area_value Float?
+  area_unit  AreaUnit?
+  area_sqft  Float?
+  area_sqyd  Float?
+
+  plot_area_sqyd Float?
+  plot_length_ft Float?
+  plot_width_ft  Float?
+
+  carpet_area_sqft         Float?
+  built_up_area_sqft       Float?
+  super_built_up_area_sqft Float?
+
+  ground_floor_area_sqft Float?
+  first_floor_area_sqft  Float?
+  total_floors           Int?
+
+  price_basis PriceBasis @default(SUPER_BUILT_UP)
+
+  // ---- Characteristics ----------------------------------------------------
+  facing              String?
+  is_corner           Boolean @default(false)
+  is_road_facing      Boolean @default(false)
+  is_park_facing      Boolean @default(false)
+  is_main_road_facing Boolean @default(false)
+  road_width_ft       Float?
+  view                String?
+
+  // ---- Parking ------------------------------------------------------------
+  parking_included Boolean @default(false)
+  parking_type     String?
+  parking_count    Int?
+  parking_slots    String?
+
+  // ---- Pricing (computed by services/pricing/engine.ts) -------------------
+  base_rate                  Float?
+  base_rate_unit             ChargeCalcMethod?
+  base_price                 Float             @default(0)
+  premiums_total             Float             @default(0)
+  charges_total              Float             @default(0)
+  taxes_total                Float             @default(0)
+  discount_amount            Float             @default(0)
+  discount_reason            String?
+  /// What the rules produce. Never overwritten by an override (spec section 20).
+  calculated_price           Float             @default(0)
+  override_price             Float?
+  override_reason            String?           @db.Text
+  overridden_by_id           Int?
+  overridden_at              DateTime?
+  /// override_price when set, else calculated_price. Stored so lists can sort.
+  final_price                Float             @default(0)
+  price_computed_at          DateTime?
+  /// Ids of optional (non-mandatory) ProjectPricingRule rows, or of
+  /// CHARGEABLE+SELECTED_UNITS ProjectAmenity rows encoded as a negative
+  /// `-amenity_id` (see services/pricing/pricing.service.ts's
+  /// getEffectiveRules/amenityToEngineRule), that this specific unit has opted
+  /// into. Persisted so a later "Recalculate All Units" reproduces the exact
+  /// same selection instead of silently dropping it (Phase 1 deferred this;
+  /// wired up in Phase 3 — see the implementation plan's section 6.2).
+  selected_optional_rule_ids Json?
+
+  // ---- Status -------------------------------------------------------------
+  sales_status         SalesStatus @default(AVAILABLE)
+  hold_until           DateTime?
+  held_for_lead_id     Int?
+  locked_until         DateTime?
+  locked_by_booking_id Int?        @unique
+  is_published         Boolean     @default(false)
+
+  notes                     String? @db.Text
+  created_by_id             Int?
+  /// Set during the Property -> ProjectUnit migration so the old row can be
+  /// traced. Null for units created natively.
+  migrated_from_property_id Int?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  project           Project   @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  company           Company   @relation(fields: [company_id], references: [id])
+  branch            Branch?   @relation(fields: [branch_id], references: [id])
+  created_by        Employee? @relation("CreatedProjectUnits", fields: [created_by_id], references: [id])
+  overridden_by     Employee? @relation("OverrodeUnitPrices", fields: [overridden_by_id], references: [id])
+  locked_by_booking Booking?  @relation("ProjectUnitLock", fields: [locked_by_booking_id], references: [id])
+
+  price_lines    PriceLine[]
+  features       InventoryFeature[]
+  images         ProjectUnitImage[]
+  documents      ProjectUnitDocument[]
+  layout_regions PropertyLayoutRegion[]
+
+  bookings         Booking[]
+  opportunities    Opportunity[]
+  interested_leads LeadPropertyInterest[]
+  site_visits      SiteVisitBooking[]
+  site_visit_links SiteVisitProperty[]
+  complaints       Complaint[]              @relation("ProjectUnitComplaints")
+  demo_interests   DemoInterestedProperty[]
+  website_shortlists WebsiteShortlistItem[]
+  website_compares   WebsiteCompareItem[]
+
+  // Inventory tables get filtered hard — every one of these backs a real filter
+  // on the Units tab.
+  @@index([project_id, sales_status])
+  @@index([project_id, unit_type])
+  @@index([project_id, tower, floor])
+  @@index([project_id, bhk])
+  @@index([company_id])
+  @@index([final_price])
+  @@index([area_sqft])
+}
+
+/// A pricing rule belonging to a project. Conditions are explicit nullable
+/// columns rather than a JSON blob so they stay queryable and a rule-builder UI
+/// can render them directly. A null condition means "don't care".
+model ProjectPricingRule {
+  id         Int @id @default(autoincrement())
+  project_id Int
+
+  label                String
+  kind                 PricingRuleKind
+  category             ChargeCategory
+  calc_method          ChargeCalcMethod
+  rate                 Float
+  area_basis           PriceBasis?
+  applies_to_unit_type UnitType?
+
+  /// Mandatory rules apply automatically; optional ones only when ticked on a
+  /// specific unit.
+  is_mandatory  Boolean @default(true)
+  /// Taxes are reported separately and excluded from the calculated price.
+  is_tax        Boolean @default(false)
+  /// Refundable deposits (IFMS) are charged but flagged for transparency.
+  is_refundable Boolean @default(false)
+  is_active     Boolean @default(true)
+  sort_order    Int     @default(0)
+
+  match_facing           String?
+  match_corner           Boolean?
+  match_park_facing      Boolean?
+  match_road_facing      Boolean?
+  match_main_road_facing Boolean?
+  match_floor_min        Int?
+  match_floor_max        Int?
+  match_bhk              String?
+  match_type_code        String?
+  match_view             String?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  project     Project     @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  price_lines PriceLine[]
+
+  @@index([project_id, kind])
+  @@index([project_id, is_active])
+}
+
+/// § Phase 3: Property's own conditional pricing rules, mirroring
+/// ProjectPricingRule's shape. A Project's rules price MANY units of varying
+/// facing/floor/corner from one shared rule set; a standalone Property is a
+/// single unit whose own facing/corner/etc. are already fixed — so a rule
+/// here always matches (or doesn't) against that one property's own stored
+/// attributes. No `applies_to_unit_type` (a property already has one fixed
+/// category) and no floor matching (Property has no top-level numeric floor).
+model PropertyPricingRule {
+  id          Int @id @default(autoincrement())
+  property_id Int
+
+  label       String
+  kind        PricingRuleKind
+  category    ChargeCategory
+  calc_method ChargeCalcMethod
+  rate        Float
+  area_basis  PriceBasis?
+
+  is_mandatory  Boolean @default(true)
+  is_tax        Boolean @default(false)
+  is_refundable Boolean @default(false)
+  is_active     Boolean @default(true)
+  sort_order    Int     @default(0)
+
+  match_facing           String?
+  match_corner           Boolean?
+  match_park_facing      Boolean?
+  match_road_facing      Boolean?
+  match_main_road_facing Boolean?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  property    Property    @relation(fields: [property_id], references: [id], onDelete: Cascade)
+  price_lines PriceLine[] @relation("PropertyPriceLineRule")
+
+  @@index([property_id, kind])
+  @@index([property_id, is_active])
+}
+
+/// One line of a computed cost sheet, persisted at the moment of calculation.
+///
+/// Snapshotted rather than recomputed on read: a quotation given to a customer
+/// must stay reproducible even after the project's pricing rules change. Rule
+/// edits therefore require an explicit recalculate (with a diff preview), never
+/// a silent drift.
+model PriceLine {
+  id              Int  @id @default(autoincrement())
+  project_unit_id Int?
+  property_id     Int?
+  rule_id         Int?
+  // § Phase 3: a Property line sources from PropertyPricingRule, never
+  // ProjectPricingRule — a separate FK rather than overloading rule_id,
+  // since Prisma has no polymorphic relations. Exactly one of rule_id /
+  // property_rule_id / neither (manual line) is ever set.
+  property_rule_id Int?
+
+  label         String
+  kind          PricingRuleKind
+  category      ChargeCategory
+  calc_method   ChargeCalcMethod
+  rate          Float
+  quantity      Float            @default(1)
+  area_basis    PriceBasis?
+  amount        Float
+  is_manual     Boolean          @default(false)
+  is_refundable Boolean          @default(false)
+  sort_order    Int              @default(0)
+
+  created_at DateTime @default(now())
+
+  project_unit ProjectUnit?         @relation(fields: [project_unit_id], references: [id], onDelete: Cascade)
+  property     Property?            @relation(fields: [property_id], references: [id], onDelete: Cascade)
+  rule         ProjectPricingRule?  @relation(fields: [rule_id], references: [id], onDelete: SetNull)
+  property_rule PropertyPricingRule? @relation("PropertyPriceLineRule", fields: [property_rule_id], references: [id], onDelete: SetNull)
+
+  @@index([project_unit_id])
+  @@index([property_id])
+  @@index([rule_id])
+  @@index([property_rule_id])
+}
+
+/// Company-wide amenity catalogue, so "Swimming Pool" is one row rather than a
+/// string retyped per project.
+model Amenity {
+  id         Int             @id @default(autoincrement())
+  company_id Int
+  name       String
+  icon       String?
+  category   AmenityCategory @default(OTHER)
+  is_active  Boolean         @default(true)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  company            Company            @relation(fields: [company_id], references: [id])
+  project_amenities  ProjectAmenity[]
+  inventory_features InventoryFeature[]
+
+  @@unique([company_id, name])
+  @@index([company_id])
+}
+
+/// An amenity as offered by one project. Chargeable rows are read by the pricing
+/// engine as charge rules, which is how spec sections 5 and 29 connect: an
+/// amenity is not merely "Yes", it can be included, opt-in, or billed.
+model ProjectAmenity {
+  id         Int @id @default(autoincrement())
+  project_id Int
+  amenity_id Int
+
+  availability         AmenityAvailability  @default(INCLUDED)
+  charge_calc_method   ChargeCalcMethod?
+  charge_amount        Float?
+  applicability        AmenityApplicability @default(ALL_UNITS)
+  applicable_unit_type UnitType?
+  notes                String?
+  sort_order           Int                  @default(0)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  project Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  amenity Amenity @relation(fields: [amenity_id], references: [id], onDelete: Cascade)
+
+  @@unique([project_id, amenity_id])
+  @@index([project_id])
+}
+
+/// A feature belonging to one specific unit or standalone property — "Park
+/// Facing", "2 Car Parking", "Premium View". Distinct from project amenities,
+/// which are shared by every unit (spec section 29).
+model InventoryFeature {
+  id              Int  @id @default(autoincrement())
+  project_unit_id Int?
+  property_id     Int?
+  amenity_id      Int?
+
+  label         String
+  charge_amount Float?
+  sort_order    Int    @default(0)
+
+  created_at DateTime @default(now())
+
+  project_unit ProjectUnit? @relation(fields: [project_unit_id], references: [id], onDelete: Cascade)
+  property     Property?    @relation(fields: [property_id], references: [id], onDelete: Cascade)
+  amenity      Amenity?     @relation(fields: [amenity_id], references: [id], onDelete: SetNull)
+
+  @@index([project_unit_id])
+  @@index([property_id])
+}
+
+model ProjectMedia {
+  id             Int              @id @default(autoincrement())
+  project_id     Int
+  kind           ProjectMediaKind
+  url            String           @db.Text
+  title          String?
+  sort_order     Int              @default(0)
+  uploaded_by_id Int?
+
+  created_at DateTime @default(now())
+
+  project     Project   @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  uploaded_by Employee? @relation("ProjectMediaUploaded", fields: [uploaded_by_id], references: [id])
+
+  @@index([project_id, kind])
+}
+
+model ProjectDocument {
+  id             Int                 @id @default(autoincrement())
+  project_id     Int
+  kind           ProjectDocumentKind @default(OTHER)
+  url            String              @db.Text
+  title          String?
+  uploaded_by_id Int?
+
+  created_at DateTime @default(now())
+
+  project     Project   @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  uploaded_by Employee? @relation("ProjectDocumentsUploaded", fields: [uploaded_by_id], references: [id])
+
+  @@index([project_id, kind])
+}
+
+model ProjectUnitImage {
+  id              Int     @id @default(autoincrement())
+  project_unit_id Int
+  image_url       String  @db.Text
+  alt_text        String?
+  is_primary      Boolean @default(false)
+  sort_order      Int     @default(0)
+  uploaded_by_id  Int?
+
+  created_at DateTime @default(now())
+
+  project_unit ProjectUnit @relation(fields: [project_unit_id], references: [id], onDelete: Cascade)
+  uploaded_by  Employee?   @relation("ProjectUnitImagesUploaded", fields: [uploaded_by_id], references: [id])
+
+  @@index([project_unit_id])
+}
+
+model ProjectUnitDocument {
+  id              Int     @id @default(autoincrement())
+  project_unit_id Int
+  url             String  @db.Text
+  title           String?
+  uploaded_by_id  Int?
+
+  created_at DateTime @default(now())
+
+  project_unit ProjectUnit @relation(fields: [project_unit_id], references: [id], onDelete: Cascade)
+  uploaded_by  Employee?   @relation("ProjectUnitDocsUploaded", fields: [uploaded_by_id], references: [id])
+
+  @@index([project_unit_id])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Public-website visitor accounts — self-service registration on the
+// marketing sites (Sonthillu / Radha Real Home), deliberately NOT the same
+// as `Customer` above. `Customer` is an operational CRM record (KYC,
+// bookings, assigned employee) created once someone is an actual lead; a
+// `WebsiteAccount` is just "someone who signed up to shortlist properties",
+// created with zero CRM involvement. They convert into a Lead (via the
+// existing POST /public/:brand/leads) independently of whether they ever
+// created an account. Scoped by company_id like everything else under
+// PublicApiKey; there is no email-sending infrastructure in this codebase
+// yet, so there is no email-verification/password-reset flow here — only
+// register/login/logout/me.
+// ─────────────────────────────────────────────────────────────
+
+model WebsiteAccount {
+  id            Int     @id @default(autoincrement())
+  company_id    Int
+  email         String
+  phone         String?
+  full_name     String
+  password_hash String
+  /// Bumped on password change to invalidate every previously-issued token
+  /// (same revocation pattern as Employee.tokenVersion) — no session table.
+  token_version Int     @default(1)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  company   Company                @relation(fields: [company_id], references: [id])
+  shortlist WebsiteShortlistItem[]
+  compare   WebsiteCompareItem[]
+  activity  WebsiteActivityEvent[]
+
+  @@unique([company_id, email])
+  @@index([company_id])
+}
+
+/// One row per saved property or project unit. XOR enforced in the service
+/// layer (same polymorphic pattern as PriceLine/InventoryFeature elsewhere in
+/// this schema) — MySQL unique indexes treat NULLs as distinct, so the two
+/// partial-unique constraints below coexist safely.
+model WebsiteShortlistItem {
+  id              Int      @id @default(autoincrement())
+  account_id      Int
+  property_id     Int?
+  project_unit_id Int?
+  created_at      DateTime @default(now())
+
+  account      WebsiteAccount @relation(fields: [account_id], references: [id], onDelete: Cascade)
+  property     Property?      @relation(fields: [property_id], references: [id], onDelete: Cascade)
+  project_unit ProjectUnit?   @relation(fields: [project_unit_id], references: [id], onDelete: Cascade)
+
+  @@unique([account_id, property_id])
+  @@unique([account_id, project_unit_id])
+  @@index([account_id])
+}
+
+model WebsiteCompareItem {
+  id              Int      @id @default(autoincrement())
+  account_id      Int
+  property_id     Int?
+  project_unit_id Int?
+  created_at      DateTime @default(now())
+
+  account      WebsiteAccount @relation(fields: [account_id], references: [id], onDelete: Cascade)
+  property     Property?      @relation(fields: [property_id], references: [id], onDelete: Cascade)
+  project_unit ProjectUnit?   @relation(fields: [project_unit_id], references: [id], onDelete: Cascade)
+
+  @@unique([account_id, property_id])
+  @@unique([account_id, project_unit_id])
+  @@index([account_id])
+}
+
+/// Lightweight visitor-behavior event log — powers AI-search personalization
+/// (recently-viewed exclusion, inferred preferences) and an admin demand
+/// report. Anonymous visitors are tracked only by a client-supplied
+/// `anonymous_id` string (no server-issued visitor-session record); once they
+/// register/log in, `account_id` takes over.
+model WebsiteActivityEvent {
+  id             Int      @id @default(autoincrement())
+  company_id     Int
+  account_id     Int?
+  anonymous_id   String?
+  event_name     String
+  page           String?
+  property_id    Int?
+  project_id     Int?
+  search_context Json?
+  metadata       Json?
+  created_at     DateTime @default(now())
+
+  company Company         @relation(fields: [company_id], references: [id])
+  account WebsiteAccount? @relation(fields: [account_id], references: [id], onDelete: SetNull)
+
+  @@index([company_id, created_at])
+  @@index([account_id])
+  @@index([anonymous_id])
+  @@index([event_name])
+}
+
+/// Phase 2.21: an uploaded layout/site-plan image for a project, with clickable
+/// pins mapping regions of the image to individual units (Property records).
+model ProjectLayoutImage {
+  id             Int      @id @default(autoincrement())
+  project_id     Int
+  image_url      String
+  title          String?
+  is_primary     Boolean  @default(false)
+  uploaded_by_id Int
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  project     Project                @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  uploaded_by Employee               @relation("LayoutImagesUploaded", fields: [uploaded_by_id], references: [id])
+  regions     PropertyLayoutRegion[]
+
+  @@index([project_id])
+}
+
+/// A single pin on a ProjectLayoutImage, tying one unit (Property) to a
+/// fractional (0-1) position on that image — resolution-independent, so it
+/// stays correctly placed regardless of how the image is displayed/resized.
+/// Deliberately has no status/color field: the viewer derives that live from
+/// Property.status, so a booking/workflow change elsewhere is automatically
+/// reflected without a second field to keep in sync.
+model PropertyLayoutRegion {
+  id              Int      @id @default(autoincrement())
+  layout_image_id Int
+  /// Deprecated: pins now point at ProjectUnit. Kept nullable so pre-migration
+  /// rows survive; a standalone Property has no site plan to be pinned on.
+  property_id     Int?
+  project_unit_id Int?
+  x               Float // fractional 0-1 position on the image
+  y               Float
+  created_by_id   Int
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  layout_image ProjectLayoutImage @relation(fields: [layout_image_id], references: [id], onDelete: Cascade)
+  property     Property?          @relation(fields: [property_id], references: [id], onDelete: Cascade)
+  project_unit ProjectUnit?       @relation(fields: [project_unit_id], references: [id], onDelete: Cascade)
+  created_by   Employee           @relation("LayoutRegionsCreated", fields: [created_by_id], references: [id])
+
+  @@unique([layout_image_id, property_id])
+  @@unique([layout_image_id, project_unit_id])
+  @@index([property_id])
+  @@index([project_unit_id])
 }
 
 model Property {
@@ -628,7 +1523,10 @@ model Property {
   description                    String?   @db.Text
   brand_type                     String    @default("SONTHILLU") // SONTHILLU (Residential), RADHA_REAL_HOMES (Commercial/Plots)
   category                       String    @default("VILLA") // APARTMENT, INDEPENDENT_HOUSE, DUPLEX, INDEPENDENT_FLOOR, VILLA, PENTHOUSE, STUDIO, PLOT, FARM_HOUSE, AGRICULTURAL_LAND
-  price                          Float
+  // § Phase 3: removed the standalone manually-typed listing price. It could
+  // silently diverge from the pricing engine's `final_price` (the two were
+  // never actually kept in sync). `final_price` is now the only authoritative
+  // price for a Property; `base_rate` below is the required engine input.
   area_sqft                      Float
   location                       String
   address                        String?   @db.Text
@@ -658,26 +1556,94 @@ model Property {
   slug                           String?
   source                         String    @default("INTERNAL") // INTERNAL, WEBSITE_SELLER
 
-  project                     Project?                  @relation(fields: [project_id], references: [id])
-  company                     Company                   @relation(fields: [company_id], references: [id])
-  branch                      Branch?                   @relation(fields: [branch_id], references: [id])
-  assigned_pm                 Employee?                 @relation("AssignedPMProperties", fields: [assigned_pm_id], references: [id])
-  digital_marketing_executive Employee?                 @relation("DMExecutiveProperties", fields: [digital_marketing_executive_id], references: [id])
-  created_by                  Employee?                 @relation("CreatedProperties", fields: [created_by_id], references: [id])
-  
-  pricing                     PropertyPricing?
-  plot_details                PropertyPlotDetails?
-  apartment_details           PropertyApartmentDetails?
+  // ---- Sales status -------------------------------------------------------
+  // `status` above remains the listing/publication pipeline (PENDING_VERIFICATION
+  // -> ... -> LIVE). Commercial availability is a separate axis so that a SOLD
+  // property still has an editable, re-verifiable listing.
+  sales_status     SalesStatus @default(AVAILABLE)
+  hold_until       DateTime?
+  held_for_lead_id Int?
 
-  images                      PropertyImage[]
-  publications                PropertyPublication[]
-  verification_logs           PropertyVerificationLog[]
-  interested_leads            LeadPropertyInterest[]
-  site_visits                 SiteVisitBooking[]
-  site_visit_property_links   SiteVisitProperty[]
-  bookings                    Booking[]
-  opportunities               Opportunity[]
-  complaints                  Complaint[]               @relation("PropertyComplaints")
+  // ---- Area (mirrors ProjectUnit so one form serves both) -----------------
+  area_value Float?
+  area_unit  AreaUnit?
+  area_sqyd  Float?
+
+  plot_area_sqyd Float?
+  plot_length_ft Float?
+  plot_width_ft  Float?
+
+  carpet_area_sqft         Float?
+  built_up_area_sqft       Float?
+  super_built_up_area_sqft Float?
+  ground_floor_area_sqft   Float?
+  first_floor_area_sqft    Float?
+  total_floors             Int?
+  construction_year        Int?
+
+  price_basis PriceBasis @default(SUPER_BUILT_UP)
+
+  // ---- Characteristics not previously on Property -------------------------
+  view                String?
+  road_width_ft       Float?
+  is_corner           Boolean @default(false)
+  is_park_facing      Boolean @default(false)
+  is_road_facing      Boolean @default(false)
+  is_main_road_facing Boolean @default(false)
+  /// "Premium Location" recurs across every category in the property spec
+  /// (Plot/Villa/House/Shop/Office/Farm Land) as the same boolean concept, so
+  /// it lives once here rather than duplicated across each category's own
+  /// details sub-table below.
+  is_premium_location Boolean @default(false)
+
+  // ---- Pricing (same engine as ProjectUnit) -------------------------------
+  base_rate         Float?
+  base_rate_unit    ChargeCalcMethod?
+  base_price        Float             @default(0)
+  premiums_total    Float             @default(0)
+  charges_total     Float             @default(0)
+  taxes_total       Float             @default(0)
+  discount_amount   Float             @default(0)
+  discount_reason   String?
+  calculated_price  Float             @default(0)
+  override_price    Float?
+  override_reason   String?           @db.Text
+  overridden_by_id  Int?
+  overridden_at     DateTime?
+  final_price       Float             @default(0)
+  price_computed_at DateTime?
+
+  project                     Project?  @relation(fields: [project_id], references: [id])
+  company                     Company   @relation(fields: [company_id], references: [id])
+  branch                      Branch?   @relation(fields: [branch_id], references: [id])
+  assigned_pm                 Employee? @relation("AssignedPMProperties", fields: [assigned_pm_id], references: [id])
+  digital_marketing_executive Employee? @relation("DMExecutiveProperties", fields: [digital_marketing_executive_id], references: [id])
+  created_by                  Employee? @relation("CreatedProperties", fields: [created_by_id], references: [id])
+
+  pricing                   PropertyPricing?
+  plot_details              PropertyPlotDetails?
+  apartment_details         PropertyApartmentDetails?
+  villa_details             PropertyVillaDetails?
+  house_details             PropertyHouseDetails?
+  commercial_shop_details   PropertyCommercialShopDetails?
+  commercial_office_details PropertyCommercialOfficeDetails?
+  farm_land_details         PropertyFarmLandDetails?
+
+  images                    PropertyImage[]
+  publications              PropertyPublication[]
+  verification_logs         PropertyVerificationLog[]
+  interested_leads          LeadPropertyInterest[]
+  site_visits               SiteVisitBooking[]
+  site_visit_property_links SiteVisitProperty[]
+  bookings                  Booking[]
+  opportunities             Opportunity[]
+  complaints                Complaint[]               @relation("PropertyComplaints")
+  layout_regions            PropertyLayoutRegion[]
+  price_lines               PriceLine[]
+  pricing_rules             PropertyPricingRule[]
+  features                  InventoryFeature[]
+  website_shortlists        WebsiteShortlistItem[]
+  website_compares          WebsiteCompareItem[]
 
   locked_until         DateTime?
   locked_by_booking_id Int?      @unique
@@ -697,7 +1663,7 @@ model Property {
   @@index([listing_type])
   @@index([digital_marketing_executive_id])
   @@index([company_id, created_at])
-  @@index([price])
+  @@index([final_price])
   @@index([category])
 }
 
@@ -759,6 +1725,7 @@ model SiteVisitBooking {
   booking_code                    String          @unique
   lead_id                         Int
   property_id                     Int?
+  project_unit_id                 Int?
   telecaller_id                   Int
   project_manager_id              Int?
   assigned_agent_id               Int?
@@ -777,6 +1744,7 @@ model SiteVisitBooking {
   lead                         Lead         @relation(fields: [lead_id], references: [id], onDelete: Cascade)
   opportunity                  Opportunity? @relation(fields: [opportunity_id], references: [id], onDelete: SetNull)
   property                     Property?    @relation(fields: [property_id], references: [id], onDelete: SetNull)
+  project_unit                 ProjectUnit? @relation(fields: [project_unit_id], references: [id], onDelete: SetNull)
   project                      Project?     @relation(fields: [project_id], references: [id], onDelete: SetNull)
   telecaller                   Employee     @relation("TelecallerBookings", fields: [telecaller_id], references: [id])
   project_manager              Employee?    @relation("PMBookings", fields: [project_manager_id], references: [id])
@@ -788,6 +1756,7 @@ model SiteVisitBooking {
   reassignments         SiteVisitReassignment[]
   reassignment_history  PMReassignmentHistory[]
   escalation            SiteVisitEscalation?
+  feedback              SiteVisitFeedback?
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -805,21 +1774,25 @@ model SiteVisitBooking {
 // ─────────────────────────────────────────────────────────────
 
 model SiteVisitProperty {
-  id             Int     @id @default(autoincrement())
-  visit_id       Int
-  property_id    Int
-  outcome        String? // INTERESTED, NOT_INTERESTED — null until captured
-  outcome_reason String? @db.Text // required when outcome = NOT_INTERESTED
+  id              Int     @id @default(autoincrement())
+  visit_id        Int
+  property_id     Int?
+  project_unit_id Int?
+  outcome         String? // INTERESTED, NOT_INTERESTED — null until captured
+  outcome_reason  String? @db.Text // required when outcome = NOT_INTERESTED
 
-  visit    SiteVisitBooking @relation(fields: [visit_id], references: [id], onDelete: Cascade)
-  property Property         @relation(fields: [property_id], references: [id], onDelete: Cascade)
+  visit        SiteVisitBooking @relation(fields: [visit_id], references: [id], onDelete: Cascade)
+  property     Property?        @relation(fields: [property_id], references: [id], onDelete: Cascade)
+  project_unit ProjectUnit?     @relation(fields: [project_unit_id], references: [id], onDelete: Cascade)
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
   @@unique([visit_id, property_id])
+  @@unique([visit_id, project_unit_id])
   @@index([visit_id])
   @@index([property_id])
+  @@index([project_unit_id])
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -949,6 +1922,7 @@ model Complaint {
   customer_id            Int
   booking_id             Int? // nullable — optional linkage to a Booking
   property_id            Int? // nullable — optional linkage; derivable from Booking.property_id
+  project_unit_id        Int? // nullable — set instead of property_id when the complaint is about a project unit
   title                  String
   description            String? // nullable Text
   category               String? // nullable
@@ -963,11 +1937,12 @@ model Complaint {
   created_at             DateTime  @default(now())
   updated_at             DateTime  @updatedAt
 
-  company           Company   @relation(fields: [company_id], references: [id])
-  customer          Customer  @relation("CustomerComplaints", fields: [customer_id], references: [id])
-  booking           Booking?  @relation("BookingComplaints", fields: [booking_id], references: [id], onDelete: SetNull)
-  property          Property? @relation("PropertyComplaints", fields: [property_id], references: [id], onDelete: SetNull)
-  assigned_employee Employee? @relation("AssignedComplaints", fields: [assigned_employee_id], references: [id], onDelete: SetNull)
+  company           Company      @relation(fields: [company_id], references: [id])
+  customer          Customer     @relation("CustomerComplaints", fields: [customer_id], references: [id])
+  booking           Booking?     @relation("BookingComplaints", fields: [booking_id], references: [id], onDelete: SetNull)
+  property          Property?    @relation("PropertyComplaints", fields: [property_id], references: [id], onDelete: SetNull)
+  project_unit      ProjectUnit? @relation("ProjectUnitComplaints", fields: [project_unit_id], references: [id], onDelete: SetNull)
+  assigned_employee Employee?    @relation("AssignedComplaints", fields: [assigned_employee_id], references: [id], onDelete: SetNull)
 
   @@index([company_id])
   @@index([customer_id])
@@ -1016,8 +1991,8 @@ model Customer {
   notifications CustomerNotification[]
   complaints    Complaint[]            @relation("CustomerComplaints")
 
-  pan_number     String? // Encrypted at rest (AES-256-CBC via encryptData) — Phase 11 Packet 3C
-  aadhaar_number String? // Encrypted at rest (AES-256-CBC via encryptData) — Phase 11 Packet 3C
+  pan_number     String? // Encrypted at rest (AES-256-GCM via encryptData, Phase 1.4) — Phase 11 Packet 3C
+  aadhaar_number String? // Encrypted at rest (AES-256-GCM via encryptData, Phase 1.4) — Phase 11 Packet 3C
 
   kyc_status          String? // PENDING, PARTIAL, VERIFIED, REJECTED
   kyc_verified_at     DateTime?
@@ -1045,10 +2020,15 @@ model Booking {
   company_id           Int
   branch_id            Int?
   customer_id          Int
-  property_id          Int
+  /// Exactly one of property_id / project_unit_id is set. property_id was
+  /// previously NOT NULL; it is nullable now that a booking can be against a
+  /// project unit. The XOR is enforced in booking.service.ts and by a CHECK
+  /// constraint added in the migration.
+  property_id          Int?
+  project_unit_id      Int?
   assigned_employee_id Int?
 
-  status String @default("PENDING") // INITIATED, PENDING, TOKEN_RECEIVED, CONFIRMED, REGISTERED, COMPLETED, CANCELLED
+  status String @default("PENDING") // DRAFT, FORM_SUBMITTED, PENDING_MD_APPROVAL, CONFIRMED, REGISTERED, COMPLETED, CANCELLED
 
   agreed_price   Float
   booking_amount Float
@@ -1063,17 +2043,63 @@ model Booking {
 
   notes String? @db.Text
 
-  company           Company   @relation(fields: [company_id], references: [id])
-  branch            Branch?   @relation(fields: [branch_id], references: [id])
-  customer          Customer  @relation(fields: [customer_id], references: [id])
-  property          Property  @relation(fields: [property_id], references: [id])
-  assigned_employee Employee? @relation("AssignedBookings", fields: [assigned_employee_id], references: [id])
+  // =========================================================================
+  // Physical Booking Form Fields (mirrors Radha Real Home Properties form)
+  // All nullable — existing bookings remain unaffected.
+  // =========================================================================
+  serial_no            String? // "Serial No" on the physical form
+  plot_no              String? // "Plot No"
+  area_sqyd            Float? // "Area" in Sq.Yds
+  facing               String? // "Sq.Yds Focusing" (North/South/East/West/Corner/Main Road)
+  price_per_sqyd       Float? // "Price/Sq.Yd"
+  sale_price_per_sqyd  Float? // "Sale Price/Sq.Yd"
+  charges_per_sqyd     Float? // "Charges/Sq Yd"
+  emi_months           Int? // "EMI months"
+  emi_charges          Float? // "EMI Charges" (monthly installment amount)
+  total_cost           Float? // "Total Cost" computed: area × sale_price_per_sqyd + charges
+  total_cost_words     String? // "In words" for total cost
+  receipt_no           String? // "Receipt No" for the booking amount receipt
+  receipt_date         DateTime? // Date of the booking receipt
+  booking_amount_words String? // "Rupees in words" for booking amount
+  referred_by          String? // "Referred by" — agent/referrer name
+  referred_by_code     String? // Referral/agent code
 
-  payments        Payment[]
-  installments    Installment[]
-  opportunity     Opportunity?
-  locked_property Property?     @relation("PropertyLock")
-  complaints      Complaint[]   @relation("BookingComplaints")
+  // =========================================================================
+  // Booking Form Workflow State
+  // Lifecycle: DRAFT → SUBMITTED → MD_APPROVED | MD_REJECTED
+  // =========================================================================
+  form_status          String    @default("DRAFT") // DRAFT, SUBMITTED, MD_APPROVED, MD_REJECTED
+  form_submitted_at    DateTime?
+  form_submitted_by_id Int?
+  md_approved_at       DateTime?
+  md_approved_by_id    Int?
+  md_rejection_reason  String?   @db.Text
+  tc_accepted_at       DateTime? // Timestamp when the Terms & Conditions were accepted
+  tc_accepted_by_name  String? // Purchaser's declared name at T&C acceptance
+
+  // =========================================================================
+  // Legacy / Backdated Booking Support
+  // Used when manually entering old paper-based booking records.
+  // =========================================================================
+  is_legacy           Boolean   @default(false) // TRUE = backdated entry from historical paper records
+  legacy_booking_date DateTime? // Actual historical booking date for legacy entries
+  legacy_notes        String?   @db.Text // Notes about the source paper record
+
+  company           Company      @relation(fields: [company_id], references: [id])
+  branch            Branch?      @relation(fields: [branch_id], references: [id])
+  customer          Customer     @relation(fields: [customer_id], references: [id])
+  property          Property?    @relation(fields: [property_id], references: [id])
+  project_unit      ProjectUnit? @relation(fields: [project_unit_id], references: [id])
+  assigned_employee Employee?    @relation("AssignedBookings", fields: [assigned_employee_id], references: [id])
+  form_submitted_by Employee?    @relation("BookingFormSubmitter", fields: [form_submitted_by_id], references: [id])
+  md_approved_by    Employee?    @relation("BookingMDApprover", fields: [md_approved_by_id], references: [id])
+
+  payments            Payment[]
+  installments        Installment[]
+  opportunity         Opportunity?
+  locked_property     Property?     @relation("PropertyLock")
+  locked_project_unit ProjectUnit?  @relation("ProjectUnitLock")
+  complaints          Complaint[]   @relation("BookingComplaints")
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -1081,7 +2107,10 @@ model Booking {
   @@index([company_id])
   @@index([customer_id])
   @@index([property_id])
+  @@index([project_unit_id])
   @@index([status])
+  @@index([form_status])
+  @@index([is_legacy])
 }
 
 model Payment {
@@ -1156,10 +2185,11 @@ model Opportunity {
   company_id       Int
   branch_id        Int?
 
-  lead_id     Int
-  project_id  Int?
-  property_id Int?
-  booking_id  Int? @unique
+  lead_id         Int
+  project_id      Int?
+  property_id     Int?
+  project_unit_id Int?
+  booking_id      Int? @unique
 
   expected_value      Float?
   probability         Float?    @default(10.0)
@@ -1179,13 +2209,14 @@ model Opportunity {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  company  Company   @relation(fields: [company_id], references: [id])
-  branch   Branch?   @relation(fields: [branch_id], references: [id])
-  lead     Lead      @relation(fields: [lead_id], references: [id], onDelete: Cascade)
-  project  Project?  @relation(fields: [project_id], references: [id])
-  property Property? @relation(fields: [property_id], references: [id])
-  booking  Booking?  @relation(fields: [booking_id], references: [id])
-  owner    Employee  @relation("OwnedOpportunities", fields: [owner_id], references: [id])
+  company      Company      @relation(fields: [company_id], references: [id])
+  branch       Branch?      @relation(fields: [branch_id], references: [id])
+  lead         Lead         @relation(fields: [lead_id], references: [id], onDelete: Cascade)
+  project      Project?     @relation(fields: [project_id], references: [id])
+  property     Property?    @relation(fields: [property_id], references: [id])
+  project_unit ProjectUnit? @relation(fields: [project_unit_id], references: [id])
+  booking      Booking?     @relation(fields: [booking_id], references: [id])
+  owner        Employee     @relation("OwnedOpportunities", fields: [owner_id], references: [id])
 
   site_visits SiteVisitBooking[]
   tasks       Task[]
@@ -1342,96 +2373,272 @@ model Demo {
 }
 
 model DemoInterestedProperty {
-  id          Int      @id @default(autoincrement())
-  demo_id     Int
-  property_id Int
-  created_at  DateTime @default(now())
+  id              Int      @id @default(autoincrement())
+  demo_id         Int
+  property_id     Int?
+  project_unit_id Int?
+  created_at      DateTime @default(now())
 
-  demo     Demo     @relation(fields: [demo_id], references: [id], onDelete: Cascade)
-  property Property @relation(fields: [property_id], references: [id], onDelete: Cascade)
+  demo         Demo         @relation(fields: [demo_id], references: [id], onDelete: Cascade)
+  property     Property?    @relation(fields: [property_id], references: [id], onDelete: Cascade)
+  project_unit ProjectUnit? @relation(fields: [project_unit_id], references: [id], onDelete: Cascade)
 
   @@unique([demo_id, property_id])
+  @@unique([demo_id, project_unit_id])
+  @@index([project_unit_id])
 }
 
 model PropertyPricing {
-  id                    Int      @id @default(autoincrement())
-  property_id           Int      @unique
+  id                    Int    @id @default(autoincrement())
+  property_id           Int    @unique
   base_price_per_unit   Float?
-  base_price            Float    @default(0)
-  facing_premium        Float?   @default(0)
-  corner_premium        Float?   @default(0)
-  park_facing_premium   Float?   @default(0)
-  road_facing_premium   Float?   @default(0)
-  floor_rise_charge     Float?   @default(0)
-  development_charges   Float?   @default(0)
-  maintenance_charges   Float?   @default(0)
-  documentation_charges Float?   @default(0)
-  registration_charges  Float?   @default(0)
-  other_charges         Float?   @default(0)
-  discount              Float?   @default(0)
-  final_price           Float    @default(0)
+  base_price            Float  @default(0)
+  facing_premium        Float? @default(0)
+  corner_premium        Float? @default(0)
+  park_facing_premium   Float? @default(0)
+  road_facing_premium   Float? @default(0)
+  floor_rise_charge     Float? @default(0)
+  development_charges   Float? @default(0)
+  maintenance_charges   Float? @default(0)
+  documentation_charges Float? @default(0)
+  registration_charges  Float? @default(0)
+  other_charges         Float? @default(0)
+  discount              Float? @default(0)
+  final_price           Float  @default(0)
 
   property Property @relation(fields: [property_id], references: [id], onDelete: Cascade)
 }
 
 model PropertyPlotDetails {
-  id                    Int      @id @default(autoincrement())
-  property_id           Int      @unique
-  plot_number           String?
-  phase                 String?
-  sector_block          String?
-  survey_number         String?
-  subdivision_number    String?
-  
-  length                Float?
-  width                 Float?
-  frontage              Float?
-  dimension_string      String?
-  
-  north_boundary        String?
-  south_boundary        String?
-  east_boundary         String?
-  west_boundary         String?
-  
-  road_width            Float?
-  number_of_roads       Int?
-  
-  is_corner             Boolean? @default(false)
-  is_park_facing        Boolean? @default(false)
-  is_main_road_facing   Boolean? @default(false)
-  near_entrance         Boolean? @default(false)
-  near_clubhouse        Boolean? @default(false)
+  id                 Int     @id @default(autoincrement())
+  property_id        Int     @unique
+  plot_number        String?
+  phase              String?
+  sector_block       String?
+  survey_number      String?
+  subdivision_number String?
+
+  length           Float?
+  width            Float?
+  frontage         Float?
+  dimension_string String?
+
+  north_boundary String?
+  south_boundary String?
+  east_boundary  String?
+  west_boundary  String?
+
+  road_width      Float?
+  number_of_roads Int?
+
+  is_corner           Boolean? @default(false)
+  is_park_facing      Boolean? @default(false)
+  is_main_road_facing Boolean? @default(false)
+  near_entrance       Boolean? @default(false)
+  near_clubhouse      Boolean? @default(false)
+  near_park           Boolean? @default(false)
 
   property Property @relation(fields: [property_id], references: [id], onDelete: Cascade)
 }
 
 model PropertyApartmentDetails {
-  id                    Int      @id @default(autoincrement())
-  property_id           Int      @unique
-  tower                 String?
-  block                 String?
-  floor                 String?
-  unit_number           String?
-  flat_number           String?
-  
-  bhk                   String?
-  balcony_count         Int?
-  has_study_room        Boolean? @default(false)
-  has_servant_room      Boolean? @default(false)
-  
-  carpet_area           Float?
-  built_up_area         Float?
-  super_built_up_area   Float?
-  
-  parking_included      Boolean? @default(false)
-  parking_type          String?
-  parking_slots         Int?
-  
-  structure_type        String?
-  flooring              String?
-  kitchen_type          String?
-  windows               String?
-  doors                 String?
-  
+  id          Int     @id @default(autoincrement())
+  property_id Int     @unique
+  tower       String?
+  block       String?
+  floor       String?
+  unit_number String?
+  flat_number String?
+
+  bhk              String?
+  balcony_count    Int?
+  has_study_room   Boolean? @default(false)
+  has_servant_room Boolean? @default(false)
+  has_utility_area Boolean? @default(false)
+
+  carpet_area         Float?
+  built_up_area       Float?
+  super_built_up_area Float?
+  balcony_area        Float?
+  terrace_area        Float?
+
+  is_pool_view      Boolean? @default(false)
+  is_garden_view    Boolean? @default(false)
+  is_road_view      Boolean? @default(false)
+  is_main_road_view Boolean? @default(false)
+  is_city_view      Boolean? @default(false)
+  is_higher_floor   Boolean? @default(false)
+  is_near_lift      Boolean? @default(false)
+  is_near_staircase Boolean? @default(false)
+
+  parking_included       Boolean? @default(false)
+  parking_type           String?
+  parking_slots          Int?
+  parking_number         String?
+  is_covered_parking     Boolean? @default(false)
+  has_additional_parking Boolean? @default(false)
+
+  structure_type String?
+  flooring       String?
+  kitchen_type   String?
+  windows        String?
+  doors          String?
+  electrical     String?
+  plumbing       String?
+  bathroom_type  String?
+  paint          String?
+  fixtures       String?
+
+  property Property @relation(fields: [property_id], references: [id], onDelete: Cascade)
+}
+
+/// Category-specific details for VILLA (property spec doc section 3) — fields
+/// not already covered by Property's own flat columns (plot_area_sqyd,
+/// built_up_area_sqft, ground/first_floor_area_sqft, facing/corner/park/
+/// road/main_road, parking_included/type/count, price_basis/base_rate).
+model PropertyVillaDetails {
+  id           Int     @id @default(autoincrement())
+  property_id  Int     @unique
+  villa_number String?
+  villa_type   String?
+
+  bhk               String?
+  has_second_floor  Boolean? @default(false)
+  second_floor_area Float?
+  has_servant_room  Boolean? @default(false)
+  has_pooja_room    Boolean? @default(false)
+  has_study_room    Boolean? @default(false)
+  has_family_room   Boolean? @default(false)
+
+  garden_area  Float?
+  terrace_area Float?
+
+  is_clubhouse_facing Boolean? @default(false)
+  is_pool_facing      Boolean? @default(false)
+
+  has_private_garden Boolean? @default(false)
+  has_private_pool   Boolean? @default(false)
+  has_terrace        Boolean? @default(false)
+  has_compound_wall  Boolean? @default(false)
+  has_gate           Boolean? @default(false)
+  number_of_cars     Int?
+  has_ev_charging    Boolean? @default(false)
+
+  property Property @relation(fields: [property_id], references: [id], onDelete: Cascade)
+}
+
+/// Category-specific details for INDEPENDENT HOUSE (property spec doc section 4).
+model PropertyHouseDetails {
+  id           Int     @id @default(autoincrement())
+  property_id  Int     @unique
+  house_number String?
+  house_type   String?
+
+  bhk              String?
+  has_kitchen      Boolean? @default(false)
+  has_pooja_room   Boolean? @default(false)
+  has_study_room   Boolean? @default(false)
+  has_servant_room Boolean? @default(false)
+  has_utility_room Boolean? @default(false)
+
+  garden_area  Float?
+  terrace_area Float?
+
+  is_covered_parking     Boolean? @default(false)
+  parking_capacity       Int?
+  parking_number         String?
+  has_additional_parking Boolean? @default(false)
+
+  property Property @relation(fields: [property_id], references: [id], onDelete: Cascade)
+}
+
+/// Category-specific details for COMMERCIAL SHOP (property spec doc section 5).
+model PropertyCommercialShopDetails {
+  id          Int     @id @default(autoincrement())
+  property_id Int     @unique
+  shop_number String?
+  building    String?
+  block       String?
+  floor       String?
+  shop_type   String?
+
+  frontage       Float?
+  depth          Float?
+  ceiling_height Float?
+
+  is_mall_facing            Boolean? @default(false)
+  is_entrance_facing        Boolean? @default(false)
+  is_parking_facing         Boolean? @default(false)
+  is_high_footfall_location Boolean? @default(false)
+
+  has_parking       Boolean? @default(false)
+  has_power         Boolean? @default(false)
+  has_water         Boolean? @default(false)
+  has_washroom      Boolean? @default(false)
+  has_lift          Boolean? @default(false)
+  has_security      Boolean? @default(false)
+  has_fire_safety   Boolean? @default(false)
+  has_signage_space Boolean? @default(false)
+
+  property Property @relation(fields: [property_id], references: [id], onDelete: Cascade)
+}
+
+/// Category-specific details for COMMERCIAL OFFICE (property spec doc section 6).
+model PropertyCommercialOfficeDetails {
+  id            Int     @id @default(autoincrement())
+  property_id   Int     @unique
+  office_number String?
+  tower         String?
+  floor         String?
+  block         String?
+  office_type   String?
+
+  cabins          Int?
+  workstations    Int?
+  meeting_rooms   Int?
+  has_reception   Boolean? @default(false)
+  has_pantry      Boolean? @default(false)
+  washrooms       Int?
+  has_server_room Boolean? @default(false)
+
+  is_city_view    Boolean? @default(false)
+  is_higher_floor Boolean? @default(false)
+
+  has_parking      Boolean? @default(false)
+  has_power_backup Boolean? @default(false)
+  has_lift         Boolean? @default(false)
+  has_security     Boolean? @default(false)
+  has_fire_safety  Boolean? @default(false)
+  has_hvac         Boolean? @default(false)
+  has_internet     Boolean? @default(false)
+  has_ev_charging  Boolean? @default(false)
+
+  property Property @relation(fields: [property_id], references: [id], onDelete: Cascade)
+}
+
+/// Category-specific details for FARM LAND (property spec doc section 7).
+model PropertyFarmLandDetails {
+  id               Int     @id @default(autoincrement())
+  property_id      Int     @unique
+  farm_land_number String?
+  parcel_number    String?
+  survey_number    String?
+  subdivision      String?
+
+  road_frontage    Float?
+  boundary_details String? @db.Text
+
+  is_near_water_source Boolean? @default(false)
+
+  has_internal_road        Boolean? @default(false)
+  has_electricity          Boolean? @default(false)
+  has_water                Boolean? @default(false)
+  has_borewell             Boolean? @default(false)
+  has_irrigation           Boolean? @default(false)
+  has_fencing              Boolean? @default(false)
+  has_plantation           Boolean? @default(false)
+  has_drainage             Boolean? @default(false)
+  has_farmhouse_permission Boolean? @default(false)
+
   property Property @relation(fields: [property_id], references: [id], onDelete: Cascade)
 }

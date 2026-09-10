@@ -6,17 +6,15 @@ import { DomainWorkflow, WorkflowTransitionRequest, WorkflowTransitionResult } f
  *
  * The workflow engine is the single authority permitted to write `Lead.status`.
  * Services MUST route every lead status change through
- * WorkflowEngine.transition(...) and never issue a raw
+ * WorkflowEngine.transitionLead(...) and never issue a raw
  * `tx.lead.update({ status })`.
  *
- * // Lead.status must only be written via engine.transition() — do not call tx.lead.update({status}) directly anywhere else in the codebase.
+ * // Lead.status must only be written via engine.transitionLead() — do not call tx.lead.update({status}) directly anywhere else in the codebase.
  *
  * This engine enforces BOTH:
  *  - the allowed state graph (transitionMatrix), and
  *  - the spec's field-level guards:
  *    • CALL_LOGGED activity required before ASSIGNED → CONTACTED (§1 row 2)
- *    • CONTACTED → QUALIFICATION_PENDING auto only when all qualification
- *      fields are null (§1 row 3)
  *    • CONTACTED → QUALIFIED direct only when all qualification fields present
  *      (§1 row 4)
  *    • SITE_VISIT_COMPLETED requires ALL linked visits COMPLETED (§1 row 6)
@@ -52,16 +50,6 @@ export class LeadWorkflow implements DomainWorkflow {
       lead.budget_max != null &&
       lead.property_type_preference != null &&
       lead.preferred_location != null
-    );
-  }
-
-  /** Which qualification fields are all null. */
-  private static isQualificationEmpty(lead: any): boolean {
-    return !!(
-      lead.budget_min == null &&
-      lead.budget_max == null &&
-      lead.property_type_preference == null &&
-      lead.preferred_location == null
     );
   }
 

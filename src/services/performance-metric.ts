@@ -6,11 +6,18 @@
  * (see task-sla.status.ts): no HTTP, no Express, no DB writes, deterministic,
  * and unit-testable.
  *
- * NOTES ON THE EXISTING FORMULAS (behavior preserved):
- *  - /performance/my-score and /performance/team share the FULL formula.
- *  - /performance/leaderboard intentionally uses a REDUCED formula that only
- *    counts completed tasks + daily reports (no attendance or penalties).
- *  These differences are preserved; they are NOT normalized here.
+ * NOTES ON THE EXISTING FORMULAS:
+ *  - /performance/my-score and /performance/team share the FULL formula
+ *    (calculatePerformanceScore below).
+ *  - § Phase 4: attendance scoring is no longer a flat presentCount * weight —
+ *    see PerformanceScoreInputs.attendanceBoost and utils/time.ts's
+ *    calculateAttendancePoints() for the time-of-day gradient this replaced.
+ *  - The ranked leaderboard view is served by GET /performance/achievements
+ *    (?employeeId=ALL), which ranks by deals closed / assisted conversions /
+ *    site visits executed — a different, deal-outcome-based ranking, not a
+ *    variant of this score formula. There is no separate
+ *    calculateLeaderboardScore function; an earlier design called for one,
+ *    but it was superseded by the achievements-based ranking.
  */
 
 export const PERFORMANCE_BASE_SCORE = 50.0;
@@ -18,7 +25,6 @@ export const PERFORMANCE_BASE_SCORE = 50.0;
 export const PERFORMANCE_WEIGHTS = {
   completedTaskBoost: 2.0,
   dailyReportBoost: 0.5,
-  presentBoost: 0.5,
   propertyBookingBoost: 10.0,
   targetExceededBoost: 0.5,
   latePenalty: 1.0,
@@ -37,6 +43,12 @@ export interface PerformanceScoreInputs {
   uninformedAbsentEvents: number;
   propertyBookingContributions: number;
   presentCount: number;
+  // § Phase 4: pre-summed points across the month's attendance logs, from
+  // utils/time.ts's calculateAttendancePoints() per log — replaced the old
+  // flat `presentCount * presentBoost` weight since a PRESENT check-in can
+  // now earn 1.0/0.5/0.0 depending on time-of-day, and approved-late/
+  // approved-half-day now correctly earn 0 instead of the old +0.5.
+  attendanceBoost: number;
   lateCount: number;
   halfDayCount: number;
 }
@@ -111,7 +123,7 @@ export function calculatePerformanceScore(inputs: PerformanceScoreInputs): Perfo
     dailyReports: inputs.dailyReports,
     reportBoost: inputs.dailyReports * PERFORMANCE_WEIGHTS.dailyReportBoost,
     presentCount: inputs.presentCount,
-    presentBoost: inputs.presentCount * PERFORMANCE_WEIGHTS.presentBoost,
+    presentBoost: inputs.attendanceBoost,
     propertyBookingContributions: inputs.propertyBookingContributions,
     propertyBookingBoost: inputs.propertyBookingContributions * PERFORMANCE_WEIGHTS.propertyBookingBoost,
     lateCount: inputs.lateCount,

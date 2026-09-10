@@ -17,10 +17,12 @@ jobManager.register({
   envDisableKey: 'DISABLE_JOB_STALE_LEADS'
 });
 
-// 3. Daily attendance rollup (Daily at 11:55 PM)
+// 3. Daily attendance rollup (Midnight, IST): force-checkout anyone still
+// checked in and escalate a summary notification to HR (falling back to MD
+// if the company has no HR_MANAGER employee onboarded).
 jobManager.register({
   name: 'Daily Attendance Rollup',
-  schedule: '55 23 * * *',
+  schedule: '0 0 * * *',
   handler: tasks.dailyAttendanceRollupJob,
   envDisableKey: 'DISABLE_JOB_ATTENDANCE_ROLLUP'
 });
@@ -79,6 +81,17 @@ jobManager.register({
   schedule: '0 2 * * *',
   handler: tasks.leadRecoveryJob,
   envDisableKey: 'DISABLE_JOB_LEAD_RECOVERY'
+});
+
+// 11. Inventory lock/hold expiry sweep (Every 15 minutes) — reclaims expired
+// booking locks proactively (matching Site Visit Escalation's cadence, since
+// a stale lock produces the same "search and booking disagree" class of bug)
+// and clears expired manual HOLDs back to AVAILABLE.
+jobManager.register({
+  name: 'Inventory Lock & Hold Expiry Sweep',
+  schedule: '*/15 * * * *',
+  handler: tasks.inventoryLockAndHoldExpirySweepJob,
+  envDisableKey: 'DISABLE_JOB_INVENTORY_EXPIRY'
 });
 
 export const initJobs = () => {

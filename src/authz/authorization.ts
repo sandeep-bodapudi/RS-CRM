@@ -17,10 +17,10 @@ import { KycPolicy } from '../policies/kyc.policy';
  * @returns boolean indicating if access is granted
  */
 export const can = (user: TokenPayload, action: Permission, resource?: any): boolean => {
-  // Admin (Technical) is deliberately NOT a blanket bypass -- RolePermissionsMatrix
+  // Admin (Technical) is deliberately NOT a blanket bypass — RolePermissionsMatrix
   // curates a specific list for Admin and explicitly withholds some permissions
-  // (e.g. no EMPLOYEES_VIEW_SENSITIVE, no LEADS_* at all). Only Roles.MD is
-  // granted ALL_PERMISSIONS, via the matrix itself, not here.
+  // (e.g. "Explicitly NO EMPLOYEES_VIEW_SENSITIVE for ADMIN", no LEADS_* at all).
+  // Only Roles.MD is granted ALL_PERMISSIONS, via the matrix itself, not here.
 
   // 1. Basic Permission Check
   const hasBasePermission = (user.permissions || []).includes(action);
@@ -46,7 +46,13 @@ export const can = (user: TokenPayload, action: Permission, resource?: any): boo
 
     // -- PROPERTIES --
     case Permissions.PROPERTIES_UPDATE:
+      if (!resource) return true; // Defer to service layer
+      return PropertyPolicy.canUpdate(user, resource);
+
     case Permissions.PROPERTIES_DELETE:
+      if (!resource) return true; // Defer to service layer
+      return PropertyPolicy.canDelete(user, resource);
+
     case Permissions.PROPERTIES_VERIFY:
       if (!resource) return true; // Defer to service layer
       return PropertyPolicy.canVerify(user, resource);

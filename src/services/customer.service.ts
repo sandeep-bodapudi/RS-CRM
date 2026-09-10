@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma';
 import { PrismaClient, Customer } from '@prisma/client';
 import { TokenPayload } from '../utils/jwt';
+import { Roles } from '../shared';
 import { buildCustomerScope } from '../authz/dataScope';
 import { CustomerPolicy } from '../policies/customer.policy';
 import { WorkflowEngine } from '../workflows/workflowEngine';
@@ -121,6 +122,16 @@ export class CustomerService {
       throw new AppError(404, 'Lead not found or access denied');
     }
 
+    // Phase-19 audit #9: Channel Partner Managers manage leads for an
+    // external partner company's own inventory -- they may only convert
+    // leads they personally entered, never a lead introduced or worked by
+    // someone else in the normal internal sales pipeline.
+    const isChannelPartnerManager = user.roles.includes(Roles.CHANNEL_PARTNER_MANAGER);
+    const isManagement = user.roles.includes(Roles.MD) || user.roles.includes(Roles.ADMIN);
+    if (isChannelPartnerManager && !isManagement && lead.created_by_id !== user.employeeId) {
+      throw new AppError(403, 'Channel Partner Managers may only convert leads they personally created.');
+    }
+
     if (lead.converted_customer) {
       throw new AppError(409, 'This lead has already been converted to a customer');
     }
@@ -154,7 +165,7 @@ export class CustomerService {
       });
 
       // Update lead status to BOOKED (won state) — routed through the engine.
-      await WorkflowEngine.transition(
+      await WorkflowEngine.transitionLead(
         tx,
         lead.id,
         'BOOKED',

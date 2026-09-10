@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { TokenPayload } from '../utils/jwt';
 import { Roles } from '../shared';
 import { getDownstreamEmployeeIds } from '../utils/hierarchy';
+import { prisma } from '../lib/prisma';
 
 const MANAGEMENT_ROLES = [
   Roles.MD,
@@ -14,29 +15,50 @@ const MANAGEMENT_ROLES = [
 ];
 
 /**
+ * Resolves which companies' data this employee may see, via the explicit
+ * EmployeeCompanyAccess grant table (Phase 1.2). Radha Real Homes and
+ * Sonthillu Constructions currently share one employee base, so employees
+ * are granted access to both there; when the employee bases are split
+ * apart later, removing a grant row is enough — no code change needed.
+ *
+ * Falls back to the employee's own `company_id` (their JWT "home" company)
+ * if no explicit grant rows exist yet, so an ungranted employee is scoped
+ * to at least one company rather than zero or all of them.
+ */
+async function getAccessibleCompanyIds(user: TokenPayload): Promise<number[]> {
+  const grants = await prisma.employeeCompanyAccess.findMany({
+    where: { employee_id: user.employeeId },
+    select: { company_id: true },
+  });
+  if (grants.length === 0) {
+    return [user.companyId];
+  }
+  return grants.map((g) => g.company_id);
+}
+
+/**
  * Ensures company isolation for all scopes, except for System Admins.
  */
-function getBaseScope(user: TokenPayload): any {
-  // Global visibility across all companies by default (except Properties)
-  return {};
+async function getBaseScope(user: TokenPayload): Promise<any> {
+  const companyIds = await getAccessibleCompanyIds(user);
+  return { company_id: { in: companyIds } };
 }
 
 /**
  * Builds the read-visibility scope for Leads.
  */
 export async function buildLeadScope(user: TokenPayload): Promise<Prisma.LeadWhereInput> {
-  const baseScope = getBaseScope(user);
-
   // 1. ADMIN
   if (user.roles.includes(Roles.ADMIN)) {
     return {}; // Global access
   }
 
+  const baseScope = await getBaseScope(user);
 
   // 3. MANAGEMENT
   const isManagement = user.roles.some((r) => MANAGEMENT_ROLES.includes(r as any));
   if (isManagement) {
-    return baseScope; // Entire company leads (which is now global)
+    return baseScope; // All companies this employee has been granted access to
   }
 
   // 4. MANAGERS & TELECALLERS (TEAM / OWN scope)
@@ -54,12 +76,12 @@ export async function buildLeadScope(user: TokenPayload): Promise<Prisma.LeadWhe
  * Builds the read-visibility scope for Employees.
  */
 export async function buildEmployeeScope(user: TokenPayload): Promise<Prisma.EmployeeWhereInput> {
-  const baseScope = getBaseScope(user);
-
   // 1. ADMIN
   if (user.roles.includes(Roles.ADMIN)) {
     return {}; // Global access
   }
+
+  const baseScope = await getBaseScope(user);
 
 
   // Hide system/invisible roles for everyone except Admin
@@ -89,8 +111,10 @@ export async function buildEmployeeScope(user: TokenPayload): Promise<Prisma.Emp
  * Builds the read-visibility scope for Properties.
  */
 export async function buildPropertyScope(user: TokenPayload): Promise<Prisma.PropertyWhereInput> {
-  // Properties strictly retain company_id segregation
-  const propertyBaseScope = user.roles.includes(Roles.ADMIN) ? {} : { company_id: user.companyId };
+  // Company-scoped like every other domain (Phase 1.2) — brought in line with
+  // Lead/Employee/Project/Customer rather than being locked to the single
+  // "home" company_id, since employees currently need both companies' data.
+  const propertyBaseScope = user.roles.includes(Roles.ADMIN) ? {} : await getBaseScope(user);
 
   // 1. ADMIN & MANAGEMENT
   const isManagement = user.roles.some((r) => MANAGEMENT_ROLES.includes(r as any));
@@ -127,14 +151,14 @@ export async function buildPropertyScope(user: TokenPayload): Promise<Prisma.Pro
  *   Others:              no access
  */
 export async function buildProjectScope(user: TokenPayload): Promise<Prisma.ProjectWhereInput> {
-  const baseScope = getBaseScope(user);
-
   // 1. ADMIN (global, no company restriction)
   if (user.roles.includes(Roles.ADMIN)) {
     return {};
   }
 
-  // 2. MANAGEMENT (all company projects)
+  const baseScope = await getBaseScope(user);
+
+  // 2. MANAGEMENT (all companies this employee has been granted access to)
   const isManagement = user.roles.some((r) => MANAGEMENT_ROLES.includes(r as any));
   if (isManagement) {
     return baseScope;
@@ -163,11 +187,11 @@ export async function buildProjectScope(user: TokenPayload): Promise<Prisma.Proj
  * Builds the read-visibility scope for Customers.
  */
 export async function buildCustomerScope(user: TokenPayload): Promise<Prisma.CustomerWhereInput> {
-  const baseScope = getBaseScope(user);
-
   if (user.roles.includes(Roles.ADMIN)) {
     return {};
   }
+
+  const baseScope = await getBaseScope(user);
 
   const isManagement = user.roles.some((r) => MANAGEMENT_ROLES.includes(r as any));
   if (isManagement) {

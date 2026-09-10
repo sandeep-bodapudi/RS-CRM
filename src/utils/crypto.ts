@@ -6,39 +6,72 @@ import crypto from 'crypto';
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || (process.env.NODE_ENV === 'production' ? '' : 'default_32_byte_secret_key_change_me_now!');
 const IV_LENGTH = 16; // For AES, this is always 16
 
+function deriveKey(): Buffer {
+  // Create a 32-byte key from the env variable (pad or truncate if necessary)
+  return Buffer.from(crypto.createHash('sha256').update(String(ENCRYPTION_KEY)).digest('base64').substring(0, 32));
+}
+
+/**
+ * Phase 1.4 (2026-09-06): upgraded from AES-256-CBC to AES-256-GCM, an
+ * authenticated cipher — CBC alone has no integrity check, so a corrupted or
+ * tampered ciphertext would silently decrypt to garbage instead of failing.
+ * New format is `iv:authTag:ciphertext` (3 hex parts) vs. the old `iv:ciphertext`
+ * (2 parts), so decryptData below can tell old and new values apart and this
+ * doesn't require a flag-day migration — see scripts/reencrypt-kyc-gcm.ts for
+ * the one-time pass that re-encrypts existing rows to the new format.
+ */
 export function encryptData(text: string | null | undefined): string | null {
   if (!text) return null;
-  
-  // Create a 32-byte key from the env variable (pad or truncate if necessary)
-  const key = crypto.createHash('sha256').update(String(ENCRYPTION_KEY)).digest('base64').substring(0, 32);
-  
+
+  const key = deriveKey();
   const iv = crypto.randomBytes(IV_LENGTH);
-  const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(key), iv);
-  
-  let encrypted = cipher.update(text);
-  encrypted = Buffer.concat([encrypted, cipher.final()]);
-  
-  return iv.toString('hex') + ':' + encrypted.toString('hex');
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+
+  const encrypted = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+
+  return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted.toString('hex')}`;
 }
 
 export function decryptData(text: string | null | undefined): string | null {
   if (!text) return null;
-  
+
+  const parts = text.split(':');
+  const key = deriveKey();
+
   try {
-    const key = crypto.createHash('sha256').update(String(ENCRYPTION_KEY)).digest('base64').substring(0, 32);
-    
-    const textParts = text.split(':');
-    const iv = Buffer.from(textParts.shift()!, 'hex');
-    const encryptedText = Buffer.from(textParts.join(':'), 'hex');
-    
-    const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(key), iv);
-    
-    let decrypted = decipher.update(encryptedText);
-    decrypted = Buffer.concat([decrypted, decipher.final()]);
-    
-    return decrypted.toString();
+    if (parts.length === 3) {
+      // Current format: AES-256-GCM.
+      const [ivHex, authTagHex, cipherHex] = parts;
+      const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(ivHex, 'hex'));
+      decipher.setAuthTag(Buffer.from(authTagHex, 'hex'));
+      const decrypted = Buffer.concat([
+        decipher.update(Buffer.from(cipherHex, 'hex')),
+        decipher.final(),
+      ]);
+      return decrypted.toString('utf8');
+    }
+
+    if (parts.length === 2) {
+      // Legacy format from before Phase 1.4: AES-256-CBC, unauthenticated.
+      // Kept read-only so existing rows keep working until
+      // scripts/reencrypt-kyc-gcm.ts re-encrypts them to GCM.
+      const [ivHex, cipherHex] = parts;
+      const decipher = crypto.createDecipheriv('aes-256-cbc', key, Buffer.from(ivHex, 'hex'));
+      const decrypted = Buffer.concat([
+        decipher.update(Buffer.from(cipherHex, 'hex')),
+        decipher.final(),
+      ]);
+      return decrypted.toString('utf8');
+    }
   } catch (error) {
     logger.error('Decryption failed, returning null or masked data', error);
     return null; // Return null if decryption fails so we don't break the app
   }
+
+  // Doesn't match either encrypted shape at all — most likely a plaintext
+  // value written before Phase 1.4 closed the employees.ts update-route bug
+  // that bypassed encryptData() entirely on write. Return it as-is rather
+  // than discarding real data the caller is already authorized to see.
+  return text;
 }

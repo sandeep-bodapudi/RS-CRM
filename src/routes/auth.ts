@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-import { generateAccessToken, generateRefreshToken } from '../utils/jwt';
+import { generateAccessToken, generateRefreshToken, REFRESH_TOKEN_TTL_MS } from '../utils/jwt';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 import { LoginSchema, ChangePasswordSchema, Roles } from '../shared';
 import { validateRequestBody } from '../middleware/validate';
@@ -100,7 +100,7 @@ router.post('/login', loginRateLimiter, validateRequestBody(LoginSchema), async 
         employee_id: employee.id,
         family_token: familyToken,
         refresh_token_hash: refreshTokenHash,
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        expires_at: new Date(Date.now() + REFRESH_TOKEN_TTL_MS)
       }
     });
 
@@ -114,7 +114,7 @@ router.post('/login', loginRateLimiter, validateRequestBody(LoginSchema), async 
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: REFRESH_TOKEN_TTL_MS,
     });
 
     return res.status(200).json({
@@ -251,7 +251,7 @@ router.post(
           employee_id: updatedEmployee.id,
           family_token: familyToken,
           refresh_token_hash: refreshTokenHash,
-          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+          expires_at: new Date(Date.now() + REFRESH_TOKEN_TTL_MS)
         }
       });
 
@@ -261,7 +261,7 @@ router.post(
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         path: '/',
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        maxAge: REFRESH_TOKEN_TTL_MS,
       });
 
       return res.status(200).json({
@@ -492,7 +492,7 @@ router.post('/refresh', refreshRateLimiter, validateRequestBody(EmptyBodySchema)
         employee_id: employee.id,
         family_token: session.family_token,
         refresh_token_hash: newRefreshTokenHash,
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        expires_at: new Date(Date.now() + REFRESH_TOKEN_TTL_MS)
       }
     });
 
@@ -501,7 +501,7 @@ router.post('/refresh', refreshRateLimiter, validateRequestBody(EmptyBodySchema)
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      maxAge: REFRESH_TOKEN_TTL_MS,
     });
 
     return res.status(200).json({ accessToken: newAccessToken, refreshToken: newRefreshToken });

@@ -42,6 +42,35 @@ export const publicWriteLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// § Phase 6: app-lock unlock endpoints are intentionally unauthenticated
+// (see routes/webauthn.ts's doc comment — the whole point is they run when
+// there's no valid access token in memory), so they need their own IP-based
+// throttle. More generous than loginRateLimiter since legitimate use means
+// "once per lock event, many times a day" for a single returning user,
+// potentially several staff sharing one office IP.
+export const appLockRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  skip: skipRateLimitInTests,
+  max: 20,
+  message: { error: 'Too many app-lock attempts, please try again after a minute', code: 'RATE_LIMIT_EXCEEDED' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// § Phase 7: the customer feedback form is reached via a token in a WhatsApp
+// link, with no login and no API key — same "unauthenticated but abusable"
+// shape as app-lock unlock, so it gets its own throttle rather than sharing
+// publicReadLimiter/publicWriteLimiter (those are scoped to the API-key-gated
+// routes in routes/public.ts, a different trust boundary).
+export const feedbackRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  skip: skipRateLimitInTests,
+  max: 20,
+  message: { error: 'Too many requests, please try again after a minute', code: 'RATE_LIMIT_EXCEEDED' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 export const loginRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   skip: skipRateLimitInTests,

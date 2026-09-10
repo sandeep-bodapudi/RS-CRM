@@ -1,1 +1,5 @@
 .env
+
+# § Phase 5: nightly mysqldump exports from backupVerificationJob — raw DB
+# dumps contain customer PII and must never be committed.
+backups/

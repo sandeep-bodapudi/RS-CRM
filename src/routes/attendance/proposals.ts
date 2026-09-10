@@ -251,11 +251,11 @@ router.get(
   },
 );
 
-// POST /api/v1/attendance/proposals/:id/approve - Approve proposal
+// POST /api/v1/attendance/proposals/:id/approve - Approve proposal (changes attendance status, e.g. LATE -> PRESENT)
 router.post(
   '/proposals/:id/approve',
   authenticateToken,
-  requireRole([Roles.HR_MANAGER, Roles.MD, Roles.ADMIN]),
+  requireRole([Roles.MD, Roles.ADMIN]),
   validateRequestBody(EmptyBodySchema),
   async (req: AuthenticatedRequest, res: Response) => {
     try {
@@ -318,11 +318,11 @@ router.post(
   },
 );
 
-// POST /api/v1/attendance/proposals/:id/reject - Reject proposal
+// POST /api/v1/attendance/proposals/:id/reject - Reject proposal (changes attendance status)
 router.post(
   '/proposals/:id/reject',
   authenticateToken,
-  requireRole([Roles.HR_MANAGER, Roles.MD, Roles.ADMIN]),
+  requireRole([Roles.MD, Roles.ADMIN]),
   validateRequestBody(EmptyBodySchema),
   async (req: AuthenticatedRequest, res: Response) => {
     try {

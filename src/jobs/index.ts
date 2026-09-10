@@ -25,7 +25,13 @@ export class JobManager {
         return;
       }
 
-      logger.info(`[Jobs] Scheduling ${job.name} at ${job.schedule}`);
+      logger.info(`[Jobs] Scheduling ${job.name} at ${job.schedule} (Asia/Kolkata)`);
+      // Explicit timezone -- without this, node-cron falls back to the
+      // process's local timezone, which on this server only happens to be
+      // IST because .env sets TZ=Asia/Kolkata. That's an environment
+      // dependency, not a guarantee; a deploy target that doesn't load .env
+      // (or overrides TZ) would silently shift every job's fire time, the
+      // same bug class already found and fixed elsewhere for attendance.
       cron.schedule(job.schedule, async () => {
         try {
           logger.info(`[Jobs] Starting ${job.name}...`);
@@ -36,7 +42,7 @@ export class JobManager {
         } catch (error) {
           logger.error({ err: error }, `[Jobs] FAILURE in ${job.name}: Alerting system!`);
         }
-      });
+      }, { timezone: 'Asia/Kolkata' });
     });
   }
 

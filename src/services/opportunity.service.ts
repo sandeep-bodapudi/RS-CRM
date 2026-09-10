@@ -91,7 +91,7 @@ export class OpportunityService {
       // engine (the only authority allowed to write Lead.status) rather than a
       // raw update. OPPORTUNITY_OPEN no longer exists.
       if (lead.status === 'SITE_VISIT_COMPLETED') {
-        await WorkflowEngine.transition(
+        await WorkflowEngine.transitionLead(
           tx,
           lead_id,
           'NEGOTIATION',
@@ -140,7 +140,7 @@ export class OpportunityService {
         company_id: lead.company_id,
         lead_id: lead.id,
         owner_id: actingEmployeeId,
-        expected_value: property?.price ?? null,
+        expected_value: property?.final_price ?? null,
         probability: 30,
         expected_close_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
         source: lead.source ?? null,

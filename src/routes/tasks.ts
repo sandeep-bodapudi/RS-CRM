@@ -19,15 +19,16 @@ router.get('/all-team-tasks', authenticateToken, requireAuthz(Permissions.REPORT
   try {
 
     const now = new Date();
+    const companyId = req.user!.companyId;
 
     // Auto-flip past target date tasks to OVERDUE & send alerts to MD & Dept Head
     const newlyOverdue = await p.task.findMany({
       where: {
         status: { in: ['PENDING', 'IN_PROGRESS'] },
         target_date: { lt: now },
-        
+        assignee: { company_id: companyId },
       },
-      include: { assignee: true },
+      include: { assignee: { select: { id: true, employee_code: true, full_name: true, company_id: true } } },
     });
 
     for (const t of newlyOverdue) {
@@ -36,11 +37,11 @@ router.get('/all-team-tasks', authenticateToken, requireAuthz(Permissions.REPORT
         data: { status: 'OVERDUE' },
       });
 
-      // Send alert to MD / System Admin & Assignee
+      // Send alert to MD / System Admin & Assignee (same company as the task)
       const mdEmp = await p.employee.findFirst({
-        where: { 
+        where: {
+          company_id: companyId,
           roles: { some: { role: { name: Roles.MD } } },
-          
         },
       });
 
@@ -57,8 +58,8 @@ router.get('/all-team-tasks', authenticateToken, requireAuthz(Permissions.REPORT
     }
 
     const allTasks = await p.task.findMany({
-      where: { },
-      include: { assignee: true },
+      where: { assignee: { company_id: companyId } },
+      include: { assignee: { select: { id: true, employee_code: true, full_name: true } } },
       orderBy: [{ target_date: 'asc' }],
     });
 
@@ -209,7 +210,7 @@ router.patch('/:id/status', authenticateToken, requireAuthz(Permissions.TASKS_UP
     const employeeId = req.user!.employeeId;
 
     const existingTask = await p.task.findFirst({
-      where: { id: taskId, assignee: { company_id: req.user!.companyId } },
+      where: { id: taskId, },
       include: { assignee: { select: { company_id: true } } }
     });
 

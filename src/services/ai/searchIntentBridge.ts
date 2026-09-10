@@ -61,7 +61,8 @@ const MATCH_PROPERTY_SELECT = {
   title: true,
   brand_type: true,
   category: true,
-  price: true,
+  // § Phase 3: Property.price removed — final_price is now authoritative.
+  final_price: true,
   area_sqft: true,
   location: true,
   state: true,
@@ -88,7 +89,7 @@ export function translateToPropertyFilters(intent: SearchIntent): Record<string,
     const budget: Record<string, number> = {};
     if (intent.budget.min !== undefined) budget.gte = intent.budget.min;
     if (intent.budget.max !== undefined) budget.lte = intent.budget.max;
-    if (Object.keys(budget).length) filter.price = budget;
+    if (Object.keys(budget).length) filter.final_price = budget;
   }
 
   if (intent.bhk && intent.bhk.min !== undefined) filter.bedrooms = { gte: intent.bhk.min };
@@ -199,7 +200,7 @@ export function scoreProperty(
 
   const max = intent.budget?.max;
   const min = intent.budget?.min;
-  const price = Number(prop.price || 0);
+  const price = Number(prop.final_price || 0);
   if (max && price <= max) {
     score += SEARCH_MATCH_WEIGHTS.BUDGET;
     breakdown.budgetMatch = true;
@@ -237,7 +238,7 @@ export function scoreAndSortPropertyRows(rows: any[], intent: SearchIntent): Sea
         title: prop.title,
         brandType: prop.brand_type,
         category: prop.category,
-        price: Number(prop.price),
+        price: Number(prop.final_price),
         areaSqft: Number(prop.area_sqft),
         location: prop.location,
         state: prop.state,

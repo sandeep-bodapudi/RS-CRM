@@ -5,6 +5,7 @@ import { requireAuthz } from '../middleware/authz';
 import { Roles, LeadCreateSchema, LeadStatusUpdateSchema, LeadReassignSchema, Permissions, AddPropertyInterestSchema } from '../shared';
 import { validateRequestBody } from '../middleware/validate';
 import { LeadService, AppError } from '../services/lead.service';
+import { syncLeadPreferredLocations } from '../services/lead/shared';
 import { OpportunityService } from '../services/opportunity.service';
 import prisma from '../lib/prisma';
 
@@ -105,6 +106,13 @@ router.post(
       return res.status(200).json({
         message: `Successfully processed and auto-distributed ${result.successful_imports} leads`,
         count: result.successful_imports,
+        // Previously dropped on the floor -- a partial failure (duplicates,
+        // missing fields, etc.) was invisible to the uploader beyond a lower
+        // count than expected, with no explanation of which rows or why.
+        total_rows: result.total_rows,
+        duplicates: result.duplicates,
+        failed_rows: result.failed_rows,
+        errors: result.errors,
       });
     } catch (error: any) {
       return handleServiceError(error, res);
@@ -144,14 +152,14 @@ router.patch(
   async (req: AuthenticatedRequest, res: Response) => {
     try {
       const leadId = parseInt(req.params.id, 10);
-      const { status, notes, exit_reason, demo_scheduled_at, demo_handler_id, qualification } = req.body;
+      const { status, notes, exit_reason, exit_reason_detail, demo_scheduled_at, demo_handler_id, qualification } = req.body;
 
       const updated = await LeadService.updateLeadStatus(
         req.user!,
         leadId,
         status,
         notes,
-        { exit_reason, demo_scheduled_at, demo_handler_id, qualification }
+        { exit_reason, exit_reason_detail, demo_scheduled_at, demo_handler_id, qualification }
       );
 
       return res.status(200).json({
@@ -180,15 +188,27 @@ router.patch(
       }
 
       // Basic update using prisma
-      const updated = await prisma.lead.update({
-        where: { id: leadId },
-        data: {
-          budget_min: updateData.budget_min !== undefined ? updateData.budget_min : undefined,
-          budget_max: updateData.budget_max !== undefined ? updateData.budget_max : undefined,
-          property_type_preference: updateData.property_type_preference !== undefined ? updateData.property_type_preference : undefined,
-          preferred_location: updateData.preferred_location !== undefined ? updateData.preferred_location : undefined,
-          notes: updateData.notes !== undefined ? updateData.notes : undefined,
+      const updated = await prisma.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
+        const lead = await tx.lead.update({
+          where: { id: leadId },
+          data: {
+            budget_min: updateData.budget_min !== undefined ? updateData.budget_min : undefined,
+            budget_max: updateData.budget_max !== undefined ? updateData.budget_max : undefined,
+            property_type_preference: updateData.property_type_preference !== undefined ? updateData.property_type_preference : undefined,
+            // Full multi-location list (§ Phase 2) wins over the legacy single
+            // field when both are sent — its first entry becomes the primary.
+            preferred_location: updateData.preferred_locations && updateData.preferred_locations.length > 0
+              ? updateData.preferred_locations[0]
+              : (updateData.preferred_location !== undefined ? updateData.preferred_location : undefined),
+            notes: updateData.notes !== undefined ? updateData.notes : undefined,
+          }
+        });
+
+        if (updateData.preferred_locations !== undefined) {
+          await syncLeadPreferredLocations(tx, leadId, updateData.preferred_locations || []);
         }
+
+        return lead;
       });
 
       // Log activity for qualification update if provided

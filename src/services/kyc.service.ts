@@ -21,7 +21,7 @@ export const KYC_EVENT_TYPE = 'CUSTOMER_KYC_STATUS_CHANGED';
  * Phase 11 Packet 3C - Customer KYC service.
  *
  * - CRM is the SOLE KYC verification authority.
- * - Raw PAN/Aadhaar are encrypted at rest (AES-256-CBC via encryptData).
+ * - Raw PAN/Aadhaar are encrypted at rest (AES-256-GCM via encryptData, Phase 1.4).
  * - Only kyc_status + masked_pan ever cross the CRM → Portal boundary.
  */
 export class KycService {

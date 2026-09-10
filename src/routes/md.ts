@@ -139,4 +139,22 @@ router.get(
     }
   }
 );
+
+// GET /api/v1/md/recent-activity - Portal-wide activity feed for the MD dashboard
+router.get(
+  '/recent-activity',
+  authenticateToken,
+  requireAuthz(Permissions.ADMIN_SYSTEM_METRICS),
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const companyId = req.user?.companyId || 1;
+      const activity = await AnalyticsService.getRecentActivity(companyId);
+      return res.status(200).json({ activity });
+    } catch (error: any) {
+      logger.error('Fetch recent activity error:', error);
+      return res.status(500).json({ error: 'Failed to fetch recent activity' });
+    }
+  }
+);
+
 export default router;

@@ -10,7 +10,9 @@
   },
   "dependencies": {
     "@prisma/client": "^5.12.1",
+    "@simplewebauthn/server": "^14.0.1",
     "@types/bcryptjs": "^2.4.6",
+    "@types/compression": "^1.8.1",
     "@types/cookie-parser": "^1.4.7",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
@@ -18,6 +20,9 @@
     "@types/jsonwebtoken": "^9.0.6",
     "@types/multer": "^2.2.0",
     "@types/node": "^20.12.7",
+    "@types/node-cron": "^3.0.11",
+    "@types/swagger-jsdoc": "^6.0.4",
+    "@types/swagger-ui-express": "^4.1.8",
     "@types/web-push": "^3.6.4",
     "basic-ftp": "^6.2.1",
     "bcryptjs": "^2.4.3",
@@ -33,10 +38,9 @@
     "node-cache": "^5.1.2",
     "node-cron": "^4.6.0",
     "nodemon": "^3.1.0",
-    "openai": "^7.4.0",
+    "openai": "^7.10.0",
     "pino": "^10.3.1",
     "prisma": "^5.12.1",
-    "puppeteer": "^25.8.0",
     "sharp": "^0.35.3",
     "ssh2-sftp-client": "^12.1.1",
     "swagger-jsdoc": "^6.3.0",
@@ -44,11 +48,7 @@
     "ts-node": "^10.9.2",
     "typescript": "5.4.5",
     "web-push": "^3.6.7",
-    "zod": "^3.22.4",
-    "@types/compression": "^1.8.1",
-    "@types/node-cron": "^3.0.11",
-    "@types/swagger-jsdoc": "^6.0.4",
-    "@types/swagger-ui-express": "^4.1.8"
+    "zod": "^3.22.4"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

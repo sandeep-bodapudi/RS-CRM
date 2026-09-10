@@ -3,6 +3,18 @@ import { MessageTemplateService } from '../services/messageTemplate.service';
 
 const p = prisma;
 
+/**
+ * A lead may now have multiple preferred locations (§ Phase 2). Prefers the
+ * full list when present; falls back to the legacy single scalar for leads
+ * created before this feature (or that never used the multi-location UI).
+ */
+function getLeadLocationCandidates(lead: { preferred_location: string | null; preferred_locations?: { location: string }[] }): string[] {
+  if (lead.preferred_locations && lead.preferred_locations.length > 0) {
+    return lead.preferred_locations.map((l) => l.location);
+  }
+  return lead.preferred_location ? [lead.preferred_location] : [];
+}
+
 export interface PropertyMatchResult {
   propertyId: number;
   propertyCode: string;
@@ -29,7 +41,7 @@ export const findMatchingPropertiesForLead = async (
 ): Promise<PropertyMatchResult[]> => {
   const lead = await p.lead.findUnique({
     where: { id: leadId },
-    include: { assigned_to: true },
+    include: { assigned_to: true, preferred_locations: true },
   });
 
   if (!lead) return [];
@@ -50,35 +62,41 @@ export const findMatchingPropertiesForLead = async (
     let budgetMatch = false;
     let categoryMatch = false;
 
-    // 1. Location Match (Weight: 40 points)
-    if (lead.preferred_location && prop.location) {
-      const prefLoc = lead.preferred_location.toLowerCase();
+    // 1. Location Match (Weight: 40 points) — best score across ALL of the
+    // lead's preferred locations (§ Phase 2), not just the primary one, so a
+    // lead interested in 3 areas matches a property in any of them.
+    const locationCandidates = getLeadLocationCandidates(lead);
+    if (locationCandidates.length > 0 && prop.location) {
       const propLoc = prop.location.toLowerCase();
+      let bestLocationScore = 0;
 
-      if (prefLoc.includes(propLoc) || propLoc.includes(prefLoc)) {
-        score += 40;
-        locationMatch = true;
-      } else {
-        // Partial word match check
-        const prefWords = prefLoc.split(/[\s,/]+/);
-        const hasWordMatch = prefWords.some(
-          (w: string) => w.length > 3 && propLoc.includes(w),
-        );
-        if (hasWordMatch) {
-          score += 25;
-          locationMatch = true;
+      for (const candidate of locationCandidates) {
+        const prefLoc = candidate.toLowerCase();
+        if (prefLoc.includes(propLoc) || propLoc.includes(prefLoc)) {
+          bestLocationScore = Math.max(bestLocationScore, 40);
+        } else {
+          const prefWords = prefLoc.split(/[\s,/]+/);
+          const hasWordMatch = prefWords.some(
+            (w: string) => w.length > 3 && propLoc.includes(w),
+          );
+          if (hasWordMatch) {
+            bestLocationScore = Math.max(bestLocationScore, 25);
+          }
         }
       }
+
+      score += bestLocationScore;
+      locationMatch = bestLocationScore > 0;
     } else {
       score += 20; // neutral fallback
     }
 
     // 2. Budget Fit (Weight: 40 points)
     if (lead.budget_max && lead.budget_max > 0) {
-      if (prop.price <= lead.budget_max) {
+      if (prop.final_price <= lead.budget_max) {
         score += 40;
         budgetMatch = true;
-      } else if (prop.price <= lead.budget_max * 1.15) {
+      } else if (prop.final_price <= lead.budget_max * 1.15) {
         score += 20; // 15% budget flex match
         budgetMatch = true;
       }
@@ -120,7 +138,7 @@ export const findMatchingPropertiesForLead = async (
       title: prop.title,
       brandType: prop.brand_type,
       category: prop.category,
-      price: prop.price,
+      price: prop.final_price,
       areaSqft: prop.area_sqft,
       location: prop.location,
       bedrooms: prop.bedrooms ?? undefined,
@@ -199,7 +217,7 @@ We found a premium property matching your exact requirements!
     prop.bedrooms ? prop.bedrooms + ' BHK' : prop.category
   })
 🧭 *Facing*: ${prop.facing || 'East'}
-💰 *Asking Price*: ₹${(prop.price / 100000).toFixed(1)} Lakhs
+💰 *Asking Price*: ₹${(prop.final_price / 100000).toFixed(1)} Lakhs
 
 📝 *Highlights*: ${
     prop.description ||
@@ -236,7 +254,8 @@ export const matchDroppedLeadsToProperty = async (propertyId: number): Promise<n
       company_id: prop.company_id,
       status: 'DROPPED',
       exit_reason: 'NO_MATCHING_INVENTORY'
-    }
+    },
+    include: { preferred_locations: true },
   });
 
   const matchedLeadIds: number[] = [];
@@ -245,22 +264,21 @@ export const matchDroppedLeadsToProperty = async (propertyId: number): Promise<n
     let locationMatch = false;
     let budgetMatch = false;
 
-    // 1. Location Match
-    if (lead.preferred_location && prop.location) {
-      const prefLoc = lead.preferred_location.toLowerCase();
+    // 1. Location Match — any of the lead's preferred locations (§ Phase 2)
+    const dropLocationCandidates = getLeadLocationCandidates(lead);
+    if (dropLocationCandidates.length > 0 && prop.location) {
       const propLoc = prop.location.toLowerCase();
-
-      if (prefLoc.includes(propLoc) || propLoc.includes(prefLoc)) {
-        locationMatch = true;
-      } else {
+      locationMatch = dropLocationCandidates.some((candidate) => {
+        const prefLoc = candidate.toLowerCase();
+        if (prefLoc.includes(propLoc) || propLoc.includes(prefLoc)) return true;
         const prefWords = prefLoc.split(/[\s,/]+/);
-        locationMatch = prefWords.some((w: string) => w.length > 3 && propLoc.includes(w));
-      }
+        return prefWords.some((w: string) => w.length > 3 && propLoc.includes(w));
+      });
     }
 
     // 2. Budget Overlap (allow 15% flex)
     if (lead.budget_max && lead.budget_max > 0) {
-      if (prop.price <= lead.budget_max * 1.15) {
+      if (prop.final_price <= lead.budget_max * 1.15) {
         budgetMatch = true;
       }
     }

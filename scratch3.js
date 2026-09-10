@@ -1,33 +1,22 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
-async function main() {
+
+async function run() {
   try {
-    const res = await prisma.booking.findMany({
-      where: {
-        customer: {
-          origin_lead: {
-            OR: [
-              { created_by_id: 1 },
-              { assigned_to_id: 1 },
-              {
-                site_visits: {
-                  some: {
-                    OR: [
-                      { telecaller_id: 1 },
-                      { project_manager_id: 1 },
-                      { assigned_agent_id: 1 }
-                    ]
-                  }
-                }
-              }
-            ]
-          }
-        }
+    await prisma.auditEvent.create({
+      data: {
+        actor_id: 10,
+        action: 'SECURITY_ALERT',
+        entity_type: 'AUTH_FAILED',
+        entity_id: 10,
+        new_value: `Invalid password attempt`
       }
     });
-    console.log('success');
-  } catch(e) {
-    console.error('failed:', e.message);
+    console.log('Success!');
+  } catch (e) {
+    console.error('ERROR:', e);
+  } finally {
+    await prisma.$disconnect();
   }
 }
-main().catch(console.error).finally(() => prisma.$disconnect());
+run();
