@@ -8,7 +8,7 @@ const skipRateLimitInTests = (req: any) =>
 
 export const apiRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 300,
+  max: 30000,
   skip: skipRateLimitInTests,
   message: { error: 'Too many API requests, please try again later', code: 'RATE_LIMIT_EXCEEDED' },
   standardHeaders: true,
