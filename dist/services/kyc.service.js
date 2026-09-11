@@ -96,7 +96,7 @@ class KycService {
         if (newStatus !== cust.kyc_status) {
             await tx.customer.update({
                 where: { id: customerId },
-                data: { kyc_status: newStatus }
+                data: { kyc_status: newStatus },
             });
             cust.kyc_status = newStatus;
         }
@@ -111,10 +111,10 @@ class KycService {
                     company_id: companyId,
                     crms_customer_id: customerId,
                     kyc_status: newStatus,
-                    masked_pan: maskedPan
+                    masked_pan: maskedPan,
                 }),
-                status: 'CREATED'
-            }
+                status: 'CREATED',
+            },
         });
         return cust;
     }

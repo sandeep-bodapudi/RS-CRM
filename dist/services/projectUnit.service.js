@@ -76,7 +76,13 @@ class ProjectUnitService {
         if (areaErrors.length > 0) {
             throw { status: 400, message: areaErrors.map((e) => e.message).join(' ') };
         }
-        return { fields: out, warnings: [...warnings, ...areaIssues.filter((i) => i.severity === 'warning').map((i) => i.message)] };
+        return {
+            fields: out,
+            warnings: [
+                ...warnings,
+                ...areaIssues.filter((i) => i.severity === 'warning').map((i) => i.message),
+            ],
+        };
     }
     static toCreateData(data) {
         const { fields: areaFields } = this.resolveAreaFields(data);
@@ -152,7 +158,12 @@ class ProjectUnitService {
             ];
         }
         const [units, total] = await Promise.all([
-            p.projectUnit.findMany({ where, take, skip, orderBy: [{ tower: 'asc' }, { floor: 'asc' }, { unit_number: 'asc' }] }),
+            p.projectUnit.findMany({
+                where,
+                take,
+                skip,
+                orderBy: [{ tower: 'asc' }, { floor: 'asc' }, { unit_number: 'asc' }],
+            }),
             p.projectUnit.count({ where }),
         ]);
         return { units, total };
@@ -161,7 +172,17 @@ class ProjectUnitService {
         const unit = await p.projectUnit.findUnique({
             where: { id: unitId },
             include: {
-                project: { select: { id: true, name: true, project_code: true, location: true, assigned_pm_id: true, company_id: true, branch_id: true } },
+                project: {
+                    select: {
+                        id: true,
+                        name: true,
+                        project_code: true,
+                        location: true,
+                        assigned_pm_id: true,
+                        company_id: true,
+                        branch_id: true,
+                    },
+                },
                 price_lines: { orderBy: { sort_order: 'asc' } },
                 features: true,
                 images: { orderBy: { sort_order: 'asc' } },
@@ -172,7 +193,10 @@ class ProjectUnitService {
             throw { status: 404, message: 'Unit not found' };
         // Scope via the parent project, matching every other unit operation.
         const scope = await (0, dataScope_1.buildProjectScope)(user);
-        const inScope = await p.project.findFirst({ where: { id: unit.project_id, ...scope }, select: { id: true } });
+        const inScope = await p.project.findFirst({
+            where: { id: unit.project_id, ...scope },
+            select: { id: true },
+        });
         if (!inScope)
             throw { status: 404, message: 'Unit not found' };
         return unit;
@@ -271,16 +295,28 @@ class ProjectUnitService {
             throw { status: 403, message: 'Forbidden: Missing projects.update permission' };
         }
         if (['RESERVED', 'BOOKED'].includes(status)) {
-            throw { status: 409, message: `${status} is set automatically when a booking is created — it cannot be set manually.` };
+            throw {
+                status: 409,
+                message: `${status} is set automatically when a booking is created — it cannot be set manually.`,
+            };
         }
         if (status === 'SOLD' && unit.sales_status !== 'BOOKED') {
-            throw { status: 409, message: 'A unit can only be marked SOLD from BOOKED (on final payment/registration).' };
+            throw {
+                status: 409,
+                message: 'A unit can only be marked SOLD from BOOKED (on final payment/registration).',
+            };
         }
         if (unit.locked_by_booking_id && !['SOLD'].includes(status)) {
-            throw { status: 409, message: 'This unit is locked by an active booking. Cancel the booking first.' };
+            throw {
+                status: 409,
+                message: 'This unit is locked by an active booking. Cancel the booking first.',
+            };
         }
         return p.$transaction(async (tx) => {
-            const updated = await tx.projectUnit.update({ where: { id: unitId }, data: { sales_status: status } });
+            const updated = await tx.projectUnit.update({
+                where: { id: unitId },
+                data: { sales_status: status },
+            });
             await tx.auditEvent.create({
                 data: {
                     actor_id: user.employeeId || 1,
@@ -308,7 +344,7 @@ class ProjectUnitService {
             where: { id: unitId },
             data: {
                 override_price: overridePrice,
-                override_reason: overridePrice != null ? reason ?? null : null,
+                override_reason: overridePrice != null ? (reason ?? null) : null,
                 overridden_by_id: overridePrice != null ? user.employeeId : null,
                 overridden_at: overridePrice != null ? new Date() : null,
             },
@@ -338,17 +374,26 @@ class ProjectUnitService {
             throw { status: 403, message: 'Forbidden: Missing projects.update permission' };
         }
         if (['RESERVED', 'BOOKED', 'SOLD'].includes(unit.sales_status)) {
-            throw { status: 409, message: `Cannot delete: unit is ${unit.sales_status}. Resolve the booking first.` };
+            throw {
+                status: 409,
+                message: `Cannot delete: unit is ${unit.sales_status}. Resolve the booking first.`,
+            };
         }
         const [bookingCount, interestCount] = await Promise.all([
             p.booking.count({ where: { project_unit_id: unitId } }),
             p.leadPropertyInterest.count({ where: { project_unit_id: unitId } }),
         ]);
         if (bookingCount > 0) {
-            throw { status: 409, message: 'Cannot delete: this unit has booking history. Change its status instead.' };
+            throw {
+                status: 409,
+                message: 'Cannot delete: this unit has booking history. Change its status instead.',
+            };
         }
         if (interestCount > 0) {
-            throw { status: 409, message: 'Cannot delete: leads have shown interest in this unit. Change its status instead.' };
+            throw {
+                status: 409,
+                message: 'Cannot delete: leads have shown interest in this unit. Change its status instead.',
+            };
         }
         await p.projectUnit.delete({ where: { id: unitId } });
         return { deleted: true };
@@ -363,7 +408,9 @@ class ProjectUnitService {
         if (!(0, authorization_1.can)(user, shared_1.Permissions.PROJECTS_UPDATE, project)) {
             throw { status: 403, message: 'Forbidden: Missing projects.update permission' };
         }
-        return p.inventoryFeature.create({ data: { project_unit_id: unitId, label, charge_amount: chargeAmount ?? null } });
+        return p.inventoryFeature.create({
+            data: { project_unit_id: unitId, label, charge_amount: chargeAmount ?? null },
+        });
     }
     static async removeFeature(user, unitId, featureId) {
         const unit = await p.projectUnit.findUnique({ where: { id: unitId } });
@@ -373,7 +420,9 @@ class ProjectUnitService {
         if (!(0, authorization_1.can)(user, shared_1.Permissions.PROJECTS_UPDATE, project)) {
             throw { status: 403, message: 'Forbidden: Missing projects.update permission' };
         }
-        const feature = await p.inventoryFeature.findFirst({ where: { id: featureId, project_unit_id: unitId } });
+        const feature = await p.inventoryFeature.findFirst({
+            where: { id: featureId, project_unit_id: unitId },
+        });
         if (!feature)
             throw { status: 404, message: 'Feature not found' };
         await p.inventoryFeature.delete({ where: { id: featureId } });
@@ -392,7 +441,10 @@ class ProjectUnitService {
         // AuditEvent.actor_id has no FK relation (see schema.prisma) — resolve
         // names with a single batched lookup rather than one query per row.
         const actorIds = [...new Set(events.map((e) => e.actor_id))];
-        const actors = await p.employee.findMany({ where: { id: { in: actorIds } }, select: { id: true, full_name: true } });
+        const actors = await p.employee.findMany({
+            where: { id: { in: actorIds } },
+            select: { id: true, full_name: true },
+        });
         const nameById = new Map(actors.map((a) => [a.id, a.full_name]));
         return events.map((e) => ({ ...e, actor_name: nameById.get(e.actor_id) || null }));
     }

@@ -71,10 +71,20 @@ function resolvePropertyPricingFields(data) {
     if (data.plot_width_ft != null)
         out.plot_width_ft = data.plot_width_ft;
     for (const key of [
-        'carpet_area_sqft', 'built_up_area_sqft', 'super_built_up_area_sqft',
-        'ground_floor_area_sqft', 'first_floor_area_sqft', 'total_floors', 'construction_year',
-        'price_basis', 'view', 'road_width_ft', 'base_rate', 'base_rate_unit',
-        'discount_amount', 'discount_reason',
+        'carpet_area_sqft',
+        'built_up_area_sqft',
+        'super_built_up_area_sqft',
+        'ground_floor_area_sqft',
+        'first_floor_area_sqft',
+        'total_floors',
+        'construction_year',
+        'price_basis',
+        'view',
+        'road_width_ft',
+        'base_rate',
+        'base_rate_unit',
+        'discount_amount',
+        'discount_reason',
     ]) {
         if (data[key] !== undefined)
             out[key] = data[key];
@@ -212,7 +222,7 @@ class PropertyService {
                 },
                 publications: true,
                 _count: {
-                    select: { interested_leads: true }
+                    select: { interested_leads: true },
                 },
             },
             orderBy: { created_at: 'desc' },
@@ -317,7 +327,7 @@ class PropertyService {
         let project = null;
         if (data.project_id) {
             project = await p.project.findFirst({
-                where: { id: data.project_id, company_id: companyId }
+                where: { id: data.project_id, company_id: companyId },
             });
             if (!project) {
                 throw { status: 400, message: 'Invalid or unauthorized project reference' };
@@ -328,7 +338,7 @@ class PropertyService {
         if (data.assigned_pm_id) {
             // Explicit PM assignment
             const pm = await p.employee.findFirst({
-                where: { id: data.assigned_pm_id, company_id: companyId, status: 'ACTIVE' }
+                where: { id: data.assigned_pm_id, company_id: companyId, status: 'ACTIVE' },
             });
             if (!pm) {
                 throw { status: 400, message: 'Invalid or unauthorized project manager assigned' };
@@ -343,7 +353,7 @@ class PropertyService {
             // Find PMs assigned to this city
             const assignments = await p.pMLocationAssignment.findMany({
                 where: { location: data.city, company_id: companyId },
-                select: { pm_id: true }
+                select: { pm_id: true },
             });
             if (assignments.length === 1) {
                 finalPmId = assignments[0].pm_id;
@@ -354,7 +364,7 @@ class PropertyService {
                 const loads = await p.property.groupBy({
                     by: ['assigned_pm_id'],
                     where: { assigned_pm_id: { in: pmIds }, status: 'PENDING_VERIFICATION' },
-                    _count: { assigned_pm_id: true }
+                    _count: { assigned_pm_id: true },
                 });
                 // Initialize all PMs with 0 load
                 const loadMap = new Map();
@@ -375,7 +385,8 @@ class PropertyService {
                 finalPmId = selectedPmId;
             }
         }
-        return await p.$transaction(async (tx) => {
+        return await p
+            .$transaction(async (tx) => {
             const baseSlug = (0, slugify_1.slugify)(`${data.title} ${data.location} ${data.category}`);
             const slug = await (0, slugify_1.generateUniqueSlug)(baseSlug, companyId, async (s, cId) => {
                 const existing = await tx.property.findFirst({ where: { slug: s, company_id: cId } });
@@ -403,12 +414,20 @@ class PropertyService {
                     possession_status: data.possession_status || null,
                     pricing: data.pricing ? { create: data.pricing } : undefined,
                     plot_details: data.plot_details ? { create: data.plot_details } : undefined,
-                    apartment_details: data.apartment_details ? { create: data.apartment_details } : undefined,
+                    apartment_details: data.apartment_details
+                        ? { create: data.apartment_details }
+                        : undefined,
                     villa_details: data.villa_details ? { create: data.villa_details } : undefined,
                     house_details: data.house_details ? { create: data.house_details } : undefined,
-                    commercial_shop_details: data.commercial_shop_details ? { create: data.commercial_shop_details } : undefined,
-                    commercial_office_details: data.commercial_office_details ? { create: data.commercial_office_details } : undefined,
-                    farm_land_details: data.farm_land_details ? { create: data.farm_land_details } : undefined,
+                    commercial_shop_details: data.commercial_shop_details
+                        ? { create: data.commercial_shop_details }
+                        : undefined,
+                    commercial_office_details: data.commercial_office_details
+                        ? { create: data.commercial_office_details }
+                        : undefined,
+                    farm_land_details: data.farm_land_details
+                        ? { create: data.farm_land_details }
+                        : undefined,
                     assigned_pm_id: finalPmId,
                     status: 'PENDING_VERIFICATION',
                     created_by_id: employeeId,
@@ -443,12 +462,12 @@ class PropertyService {
                         roles: {
                             some: {
                                 role: {
-                                    name: shared_1.Roles.MD
-                                }
-                            }
-                        }
+                                    name: shared_1.Roles.MD,
+                                },
+                            },
+                        },
                     },
-                    select: { id: true }
+                    select: { id: true },
                 });
                 if (mdEmployees.length > 0) {
                     await tx.notification.createMany({
@@ -456,8 +475,8 @@ class PropertyService {
                             employee_id: md.id,
                             type: 'SYSTEM_ALERT',
                             title: 'Property Requires PM Assignment',
-                            message: `Property ${propertyCode} (${data.title}) was created without an assigned PM. Location: ${data.city || 'Unknown'}`
-                        }))
+                            message: `Property ${propertyCode} (${data.title}) was created without an assigned PM. Location: ${data.city || 'Unknown'}`,
+                        })),
                     });
                     // Web push to MDs (outside transaction)
                     for (const md of mdEmployees) {
@@ -465,7 +484,7 @@ class PropertyService {
                             type: 'SYSTEM_ALERT',
                             title: 'Property Requires PM Assignment',
                             message: `Property ${propertyCode} (${data.title}) needs a PM assignment.`,
-                        }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] PM assign notify:', err));
+                        }, { skipDbNotification: true }).catch((err) => logger_1.logger.error('[WebPush] PM assign notify:', err));
                     }
                 }
             }
@@ -475,10 +494,11 @@ class PropertyService {
                     type: 'PROPERTY_ASSIGNED',
                     title: `Property Assigned: ${propertyCode}`,
                     message: `Property "${data.title}" (${propertyCode}) has been assigned to you.`,
-                }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] Create property PM notify:', err));
+                }, { skipDbNotification: true }).catch((err) => logger_1.logger.error('[WebPush] Create property PM notify:', err));
             }
             return property;
-        }).then(async (property) => {
+        })
+            .then(async (property) => {
             // Outside the create transaction, same as ProjectUnitService.createUnit:
             // manual lines + the initial price computation both do their own reads
             // and writes, and recalculateProperty already wraps its own in a
@@ -515,7 +535,9 @@ class PropertyService {
             // never there throws (Prisma P2025), so this must be conditional on
             // the row actually existing.
             select: {
-                id: true, status: true, assigned_pm_id: true,
+                id: true,
+                status: true,
+                assigned_pm_id: true,
                 pricing: { select: { property_id: true } },
                 plot_details: { select: { property_id: true } },
                 apartment_details: { select: { property_id: true } },
@@ -531,14 +553,14 @@ class PropertyService {
         // Validate project_id cross-company reference if provided
         if (data.project_id) {
             const project = await p.project.findFirst({
-                where: { id: data.project_id, company_id: companyId }
+                where: { id: data.project_id, company_id: companyId },
             });
             if (!project)
                 throw { status: 400, message: 'Invalid or unauthorized project reference' };
         }
         if (data.assigned_pm_id && data.assigned_pm_id !== property.assigned_pm_id) {
             const pm = await p.employee.findFirst({
-                where: { id: data.assigned_pm_id, company_id: companyId }
+                where: { id: data.assigned_pm_id, company_id: companyId },
             });
             if (!pm)
                 throw { status: 400, message: 'Invalid assigned_pm_id or does not belong to your company' };
@@ -546,11 +568,28 @@ class PropertyService {
         // Explicitly exclude workflow fields
         const safeData = {};
         const safeKeys = [
-            'title', 'description', 'brand_type', 'category', 'area_sqft',
-            'location', 'address', 'bedrooms', 'bathrooms', 'facing', 'amenities',
-            'possession_status', 'assigned_pm_id', 'project_id',
+            'title',
+            'description',
+            'brand_type',
+            'category',
+            'area_sqft',
+            'location',
+            'address',
+            'bedrooms',
+            'bathrooms',
+            'facing',
+            'amenities',
+            'possession_status',
+            'assigned_pm_id',
+            'project_id',
             // WR-2: Structured location fields
-            'state', 'city', 'locality', 'pincode', 'latitude', 'longitude', 'listing_type'
+            'state',
+            'city',
+            'locality',
+            'pincode',
+            'latitude',
+            'longitude',
+            'listing_type',
         ];
         for (const key of safeKeys) {
             if (data[key] !== undefined) {
@@ -587,7 +626,7 @@ class PropertyService {
         });
         if (updatedProperty.status === 'LIVE') {
             Promise.resolve().then(() => __importStar(require('./lead.service'))).then(({ LeadService }) => {
-                LeadService.triggerLeadRecoveryForProperty(updatedProperty.id).catch(err => logger_1.logger.error(`Error triggering lead recovery for property ${updatedProperty.id}:`, err));
+                LeadService.triggerLeadRecoveryForProperty(updatedProperty.id).catch((err) => logger_1.logger.error(`Error triggering lead recovery for property ${updatedProperty.id}:`, err));
             });
         }
         // Notify if PM changed via the edit form
@@ -710,7 +749,7 @@ class PropertyService {
                             type: 'SYSTEM_ALERT',
                             title: 'Property Ready for DM Polish',
                             message: `Property ${updated.property_code} (${updated.title}) is ready for your polish.`,
-                        }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] DM polish notify:', err));
+                        }, { skipDbNotification: true }).catch((err) => logger_1.logger.error('[WebPush] DM polish notify:', err));
                     }
                 }
             }
@@ -723,14 +762,22 @@ class PropertyService {
      * Requires PROPERTIES_VERIFY permission — same gate as the verify action itself.
      */
     static async confirmLocationByPM(user, propertyId) {
-        const property = await p.property.findFirst({ where: { id: propertyId, company_id: user.companyId } });
+        const property = await p.property.findFirst({
+            where: { id: propertyId, company_id: user.companyId },
+        });
         if (!property)
             throw { status: 404, message: 'Property not found' };
         if (!(0, authorization_1.can)(user, shared_2.Permissions.PROPERTIES_VERIFY, property)) {
-            throw { status: 403, message: 'Forbidden: Only the assigned PM (or MD/Admin) can confirm location for this property' };
+            throw {
+                status: 403,
+                message: 'Forbidden: Only the assigned PM (or MD/Admin) can confirm location for this property',
+            };
         }
         if (property.status !== 'PENDING_VERIFICATION') {
-            throw { status: 409, message: 'Location confirmation is only applicable while the property is in PENDING_VERIFICATION status' };
+            throw {
+                status: 409,
+                message: 'Location confirmation is only applicable while the property is in PENDING_VERIFICATION status',
+            };
         }
         return await p.property.update({
             where: { id: propertyId },
@@ -753,7 +800,9 @@ class PropertyService {
      * company, since the schema has no "who rejected it" field to target one.
      */
     static async resubmitProperty(user, propertyId, data) {
-        const property = await p.property.findFirst({ where: { id: propertyId, company_id: user.companyId } });
+        const property = await p.property.findFirst({
+            where: { id: propertyId, company_id: user.companyId },
+        });
         if (!property)
             throw { status: 404, message: 'Property not found' };
         if (!(0, authorization_1.can)(user, shared_2.Permissions.PROPERTIES_VERIFY, property)) {
@@ -787,7 +836,11 @@ class PropertyService {
                 },
             });
             const mdEmployees = await tx.employee.findMany({
-                where: { company_id: user.companyId, status: 'ACTIVE', roles: { some: { role: { name: shared_1.Roles.MD } } } },
+                where: {
+                    company_id: user.companyId,
+                    status: 'ACTIVE',
+                    roles: { some: { role: { name: shared_1.Roles.MD } } },
+                },
                 select: { id: true },
             });
             if (mdEmployees.length > 0) {
@@ -805,14 +858,16 @@ class PropertyService {
                         type: 'SYSTEM_ALERT',
                         title: 'Property Resubmitted for Review',
                         message: `Property ${property.property_code} (${property.title}) is back in the verification pipeline.`,
-                    }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] Resubmit notify:', err));
+                    }, { skipDbNotification: true }).catch((err) => logger_1.logger.error('[WebPush] Resubmit notify:', err));
                 }
             }
             return updated;
         });
     }
     static async dmPolishProperty(user, propertyId, data) {
-        const property = await p.property.findFirst({ where: { id: propertyId, company_id: user.companyId } });
+        const property = await p.property.findFirst({
+            where: { id: propertyId, company_id: user.companyId },
+        });
         if (!property)
             throw { status: 404, message: 'Property not found' };
         if (!(0, authorization_1.can)(user, shared_2.Permissions.PROPERTIES_DM_POLISH, property)) {
@@ -873,7 +928,7 @@ class PropertyService {
                         type: 'SYSTEM_ALERT',
                         title: 'Property Ready for MD Approval',
                         message: `Property ${updated.property_code} (${updated.title}) is ready for your final approval.`,
-                    }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] DM polish notify:', err));
+                    }, { skipDbNotification: true }).catch((err) => logger_1.logger.error('[WebPush] DM polish notify:', err));
                 }
             }
             return updated;
@@ -885,7 +940,9 @@ class PropertyService {
      * Requires PROPERTIES_DM_POLISH permission (same gate as the standard polish path).
      */
     static async dmVerifyAsIsProperty(user, propertyId, data) {
-        const property = await p.property.findFirst({ where: { id: propertyId, company_id: user.companyId } });
+        const property = await p.property.findFirst({
+            where: { id: propertyId, company_id: user.companyId },
+        });
         if (!property)
             throw { status: 404, message: 'Property not found' };
         if (!(0, authorization_1.can)(user, shared_2.Permissions.PROPERTIES_DM_POLISH, property)) {
@@ -943,14 +1000,16 @@ class PropertyService {
                         type: 'SYSTEM_ALERT',
                         title: 'Property Ready for MD Approval',
                         message: `Property ${updated.property_code} (${updated.title}) is ready for your final approval (verified as-is).`,
-                    }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] DM verify-as-is notify:', err));
+                    }, { skipDbNotification: true }).catch((err) => logger_1.logger.error('[WebPush] DM verify-as-is notify:', err));
                 }
             }
             return updated;
         });
     }
     static async mdApproveProperty(user, propertyId, data) {
-        const property = await p.property.findFirst({ where: { id: propertyId, company_id: user.companyId } });
+        const property = await p.property.findFirst({
+            where: { id: propertyId, company_id: user.companyId },
+        });
         if (!property)
             throw { status: 404, message: 'Property not found' };
         if (!(0, authorization_1.can)(user, shared_2.Permissions.PROPERTIES_MD_APPROVE, property)) {
@@ -1001,7 +1060,8 @@ class PropertyService {
                     data: {
                         employee_id: updated.assigned_pm_id,
                         type: data.approved ? 'PROPERTY_LIVE' : 'PROPERTY_REJECTED',
-                        title: data.approved ? `Property ${updated.property_code} — Approved & Live`
+                        title: data.approved
+                            ? `Property ${updated.property_code} — Approved & Live`
                             : `Property ${updated.property_code} — Rejected`,
                         message: data.approved
                             ? `Property "${updated.title}" has been approved by MD and is now LIVE.`
@@ -1011,12 +1071,13 @@ class PropertyService {
                 // Web push to assigned PM (outside transaction)
                 (0, notifyEmployee_1.notifyEmployee)(updated.assigned_pm_id, {
                     type: data.approved ? 'PROPERTY_LIVE' : 'PROPERTY_REJECTED',
-                    title: data.approved ? `Property ${updated.property_code} — Approved & Live`
+                    title: data.approved
+                        ? `Property ${updated.property_code} — Approved & Live`
                         : `Property ${updated.property_code} — Rejected`,
                     message: data.approved
                         ? `Property "${updated.title}" has been approved by MD and is now LIVE.`
                         : `Property "${updated.title}" was rejected by MD.${data.comments ? ` Reason: ${data.comments}` : ''}`,
-                }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] MD approve PM notify:', err));
+                }, { skipDbNotification: true }).catch((err) => logger_1.logger.error('[WebPush] MD approve PM notify:', err));
             }
             // Notify all MDs about the property approval/rejection
             const mdEmployees = await tx.employee.findMany({
@@ -1032,8 +1093,7 @@ class PropertyService {
                     data: mdEmployees.map((md) => ({
                         employee_id: md.id,
                         type: 'SYSTEM_ALERT',
-                        title: data.approved ? 'Property Approved & Live'
-                            : 'Property Rejected',
+                        title: data.approved ? 'Property Approved & Live' : 'Property Rejected',
                         message: data.approved
                             ? `Property ${updated.property_code} (${updated.title}) has been approved and is now LIVE.`
                             : `Property ${updated.property_code} (${updated.title}) was rejected.${data.comments ? ` Comments: ${data.comments}` : ''}`,
@@ -1047,25 +1107,26 @@ class PropertyService {
                         message: data.approved
                             ? `Property ${updated.property_code} (${updated.title}) is now LIVE.`
                             : `Property ${updated.property_code} (${updated.title}) was rejected.`,
-                    }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] MD approve notify:', err));
+                    }, { skipDbNotification: true }).catch((err) => logger_1.logger.error('[WebPush] MD approve notify:', err));
                 }
             }
             // Web push to assigned PM (outside transaction)
             if (updated.assigned_pm_id) {
                 (0, notifyEmployee_1.notifyEmployee)(updated.assigned_pm_id, {
                     type: data.approved ? 'PROPERTY_LIVE' : 'PROPERTY_REJECTED',
-                    title: data.approved ? `Property ${updated.property_code} — Approved & Live`
+                    title: data.approved
+                        ? `Property ${updated.property_code} — Approved & Live`
                         : `Property ${updated.property_code} — Rejected`,
                     message: data.approved
                         ? `Property "${updated.title}" has been approved by MD and is now LIVE.`
                         : `Property "${updated.title}" was rejected by MD.${data.comments ? ` Reason: ${data.comments}` : ''}`,
-                }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] MD approve PM notify:', err));
+                }, { skipDbNotification: true }).catch((err) => logger_1.logger.error('[WebPush] MD approve PM notify:', err));
             }
             return updated;
         });
         if (result.status === 'LIVE') {
             Promise.resolve().then(() => __importStar(require('./lead.service'))).then(({ LeadService }) => {
-                LeadService.triggerLeadRecoveryForProperty(result.id).catch(err => logger_1.logger.error(`Error triggering lead recovery for property ${result.id}:`, err));
+                LeadService.triggerLeadRecoveryForProperty(result.id).catch((err) => logger_1.logger.error(`Error triggering lead recovery for property ${result.id}:`, err));
             });
         }
         return result;
@@ -1075,7 +1136,9 @@ class PropertyService {
      * one-off), with a required reason and a full audit trail. Clearing the
      * override (null) reverts to whatever the engine computes. */
     static async overridePrice(user, propertyId, overridePrice, reason) {
-        const property = await p.property.findFirst({ where: { id: propertyId, company_id: user.companyId } });
+        const property = await p.property.findFirst({
+            where: { id: propertyId, company_id: user.companyId },
+        });
         if (!property)
             throw { status: 404, message: 'Property not found or unauthorized' };
         if (!(0, authorization_1.can)(user, shared_2.Permissions.PROPERTIES_UPDATE, property)) {
@@ -1086,7 +1149,7 @@ class PropertyService {
             where: { id: propertyId },
             data: {
                 override_price: overridePrice,
-                override_reason: overridePrice != null ? reason ?? null : null,
+                override_reason: overridePrice != null ? (reason ?? null) : null,
                 overridden_by_id: overridePrice != null ? user.employeeId : null,
                 overridden_at: overridePrice != null ? new Date() : null,
             },
@@ -1174,7 +1237,7 @@ class PropertyService {
         // New PM must belong to the PROPERTY's own company, not necessarily the
         // acting user's — same reasoning as reassignProject.
         const newPm = await p.employee.findFirst({
-            where: { id: newPmId, company_id: property.company_id, status: 'ACTIVE' }
+            where: { id: newPmId, company_id: property.company_id, status: 'ACTIVE' },
         });
         if (!newPm)
             throw { status: 400, message: 'New assignee not found or unauthorized' };
@@ -1182,7 +1245,7 @@ class PropertyService {
         return await p.$transaction(async (tx) => {
             const updated = await tx.property.update({
                 where: { id: propertyId },
-                data: { assigned_pm_id: newPmId }
+                data: { assigned_pm_id: newPmId },
             });
             await tx.auditEvent.create({
                 data: {
@@ -1192,8 +1255,8 @@ class PropertyService {
                     entity_id: propertyId,
                     old_value: oldPmId ? oldPmId.toString() : 'UNASSIGNED',
                     new_value: newPmId.toString(),
-                    reason: reason
-                }
+                    reason: reason,
+                },
             });
             return updated;
         });

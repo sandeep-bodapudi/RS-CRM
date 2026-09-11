@@ -33,7 +33,7 @@ class WorkflowEngine {
         if (!workflow) {
             return {
                 allowed: false,
-                reason: `No workflow registered for domain ${req.domain}`
+                reason: `No workflow registered for domain ${req.domain}`,
             };
         }
         return workflow.canTransition(req);

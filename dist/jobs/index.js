@@ -14,7 +14,7 @@ class JobManager {
         this.jobs.push(config);
     }
     startAll() {
-        this.jobs.forEach(job => {
+        this.jobs.forEach((job) => {
             if (process.env[job.envDisableKey] === 'true') {
                 logger_1.logger.info(`[Jobs] Skipping ${job.name} (Disabled via ${job.envDisableKey})`);
                 return;
@@ -42,7 +42,7 @@ class JobManager {
     }
     // Used for manual execution & testing idempotency
     async trigger(name) {
-        const job = this.jobs.find(j => j.name === name);
+        const job = this.jobs.find((j) => j.name === name);
         if (!job)
             throw new Error(`Job ${name} not found`);
         logger_1.logger.info(`[Jobs] Manually triggering ${job.name}...`);

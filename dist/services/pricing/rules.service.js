@@ -39,7 +39,9 @@ class PricingRulesService {
         if (!(0, authorization_1.can)(user, shared_1.Permissions.PROJECTS_UPDATE, project)) {
             throw { status: 403, message: 'Forbidden: Missing projects.update permission' };
         }
-        const rule = await p.projectPricingRule.findFirst({ where: { id: ruleId, project_id: projectId } });
+        const rule = await p.projectPricingRule.findFirst({
+            where: { id: ruleId, project_id: projectId },
+        });
         if (!rule)
             throw { status: 404, message: 'Pricing rule not found' };
         return p.projectPricingRule.update({ where: { id: ruleId }, data });
@@ -49,7 +51,9 @@ class PricingRulesService {
         if (!(0, authorization_1.can)(user, shared_1.Permissions.PROJECTS_UPDATE, project)) {
             throw { status: 403, message: 'Forbidden: Missing projects.update permission' };
         }
-        const rule = await p.projectPricingRule.findFirst({ where: { id: ruleId, project_id: projectId } });
+        const rule = await p.projectPricingRule.findFirst({
+            where: { id: ruleId, project_id: projectId },
+        });
         if (!rule)
             throw { status: 404, message: 'Pricing rule not found' };
         // Soft-deactivate rather than hard delete: PriceLine rows reference rules by

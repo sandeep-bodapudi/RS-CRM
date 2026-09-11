@@ -98,7 +98,9 @@ router.post('/:id/pricing/recalculate', auth_1.authenticateToken, (0, authz_1.re
     try {
         const projectId = parseInt(req.params.id, 10);
         const result = await pricing_service_1.PricingService.applyRecalculateProject(req.user, projectId);
-        return res.status(200).json({ message: `Recalculated ${result.updated_count} unit(s)`, ...result });
+        return res
+            .status(200)
+            .json({ message: `Recalculated ${result.updated_count} unit(s)`, ...result });
     }
     catch (error) {
         logger_1.logger.error('Apply recalculation error:', error);

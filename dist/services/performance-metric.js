@@ -90,17 +90,17 @@ function calculatePerformanceScore(inputs) {
         uninformedAbsentEvents: inputs.uninformedAbsentEvents,
         uninformedAbsentPenalty: inputs.uninformedAbsentEvents * exports.PERFORMANCE_WEIGHTS.uninformedAbsentPenalty,
     };
-    const rawScore = exports.PERFORMANCE_BASE_SCORE
-        + breakdown.taskBoost
-        + breakdown.reportBoost
-        + breakdown.presentBoost
-        + breakdown.propertyBookingBoost
-        + breakdown.targetExceededBoost
-        - breakdown.latePenalty
-        - breakdown.halfDayPenalty
-        - breakdown.belowTargetPenalty
-        - breakdown.overduePenalty
-        - breakdown.uninformedAbsentPenalty;
+    const rawScore = exports.PERFORMANCE_BASE_SCORE +
+        breakdown.taskBoost +
+        breakdown.reportBoost +
+        breakdown.presentBoost +
+        breakdown.propertyBookingBoost +
+        breakdown.targetExceededBoost -
+        breakdown.latePenalty -
+        breakdown.halfDayPenalty -
+        breakdown.belowTargetPenalty -
+        breakdown.overduePenalty -
+        breakdown.uninformedAbsentPenalty;
     return {
         score: roundPerformanceScore(rawScore),
         breakdown,

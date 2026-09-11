@@ -23,11 +23,11 @@ router.get('/', auth_1.authenticateToken, (0, authz_1.requireAuthz)(shared_1.Per
                     some: {
                         role: {
                             name: {
-                                equals: roleQuery
-                            }
-                        }
-                    }
-                }
+                                equals: roleQuery,
+                            },
+                        },
+                    },
+                },
             };
             if (whereClause.AND) {
                 whereClause.AND.push(roleCondition);

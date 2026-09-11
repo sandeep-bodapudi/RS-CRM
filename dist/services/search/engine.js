@@ -88,7 +88,12 @@ function unknown(reason, requestedValue) {
     return { satisfaction: UNKNOWN_SATISFACTION, status: 'UNKNOWN', reason, requestedValue };
 }
 function notApplicable(reason, requestedValue) {
-    return { satisfaction: NOT_APPLICABLE_SATISFACTION, status: 'NOT_APPLICABLE', reason, requestedValue };
+    return {
+        satisfaction: NOT_APPLICABLE_SATISFACTION,
+        status: 'NOT_APPLICABLE',
+        reason,
+        requestedValue,
+    };
 }
 function getFieldValue(property, field) {
     return property[field];
@@ -200,13 +205,19 @@ function evaluateParking(property, req) {
     const sentinel = sentinelEvaluation('Parking', raw, req.value);
     if (sentinel)
         return sentinel;
-    const hasParking = raw === true || (Array.isArray(property.amenities) && property.amenities.some((a) => a.toLowerCase() === 'parking'));
+    const hasParking = raw === true ||
+        (Array.isArray(property.amenities) &&
+            property.amenities.some((a) => a.toLowerCase() === 'parking'));
     const requested = req.value;
     if (requested === true) {
-        return hasParking ? match('Parking is available', true, true) : mismatch('Parking is not available', true, false);
+        return hasParking
+            ? match('Parking is available', true, true)
+            : mismatch('Parking is not available', true, false);
     }
     if (requested === false) {
-        return hasParking ? mismatch('Parking is available', false, true) : match('Parking is not available (matches)', false, false);
+        return hasParking
+            ? mismatch('Parking is available', false, true)
+            : match('Parking is not available (matches)', false, false);
     }
     return unknown('Parking requirement is not understood', req.value);
 }
@@ -246,7 +257,9 @@ function evaluateAmenities(property, req) {
     if (raw.length === 0) {
         return mismatch('None of the required amenities are available', req.value, []);
     }
-    const needed = Array.isArray(req.value) ? req.value.map(String) : [String(req.value)];
+    const needed = Array.isArray(req.value)
+        ? req.value.map(String)
+        : [String(req.value)];
     const have = raw.map((a) => a.toLowerCase());
     const found = needed.filter((n) => have.includes(n.toLowerCase()));
     if (found.length === needed.length) {
@@ -294,7 +307,9 @@ function checkCandidateEligibility(property, requirements) {
         const evalResult = evaluateField(property, req);
         if (evalResult.status === 'MISMATCH')
             return false;
-        if (evalResult.status === 'UNKNOWN' || evalResult.status === 'MISSING' || evalResult.status === 'NOT_APPLICABLE') {
+        if (evalResult.status === 'UNKNOWN' ||
+            evalResult.status === 'MISSING' ||
+            evalResult.status === 'NOT_APPLICABLE') {
             return false;
         }
     }

@@ -22,7 +22,7 @@ exports.Roles = {
     AGENT: 'Agent',
     DIGITAL_MARKETING_EXECUTIVE: 'digital marketing executive',
     SALES_MANAGER: 'Sales manager',
-    CHANNEL_PARTNER_MANAGER: 'Channel partner manager'
+    CHANNEL_PARTNER_MANAGER: 'Channel partner manager',
 };
 // Permanent 2-Letter Department Codes for Employee IDs: RRH-{DEPT_2DIGIT}-{NUMBER_3DIGIT}
 // Employee IDs remain static and permanent for life even when promoted!
@@ -433,7 +433,7 @@ exports.RolePermissionsMatrix = {
         exports.Permissions.EXPENSES_CREATE,
         exports.Permissions.EXPENSES_READ_OWN,
         exports.Permissions.CUSTOMERS_CONVERT,
-    ]
+    ],
 };
 // Employee Code Regex: e.g. RRH-EX-001 (MD), RRH-EX-002 (Admin), RRH-HR-001 (HR), RRH-SL-001 (Sales/Telecaller), DEV-SM-001
 exports.EMPLOYEE_CODE_REGEX = /^(RRH|DEV|SON)-[A-Z]{2,5}-\d{3,5}$/;

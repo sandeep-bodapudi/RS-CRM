@@ -37,7 +37,10 @@ router.get('/status', auth_1.authenticateToken, async (req, res) => {
 });
 router.post('/register-options', auth_1.authenticateToken, async (req, res) => {
     try {
-        const employee = await p.employee.findUnique({ where: { id: req.user.employeeId }, select: { full_name: true, employee_code: true } });
+        const employee = await p.employee.findUnique({
+            where: { id: req.user.employeeId },
+            select: { full_name: true, employee_code: true },
+        });
         if (!employee)
             return res.status(404).json({ error: 'Employee not found' });
         const options = await webauthn_service_1.WebAuthnService.startRegistration(req.user.employeeId, employee.full_name || employee.employee_code);
@@ -84,7 +87,10 @@ router.post('/unlock-options', rateLimiter_1.appLockRateLimiter, async (req, res
         const employeeId = parseInt(req.body?.employeeId, 10);
         if (!employeeId)
             return res.status(400).json({ error: 'Missing employeeId' });
-        const employee = await p.employee.findFirst({ where: { id: employeeId, status: 'ACTIVE' }, select: { id: true } });
+        const employee = await p.employee.findFirst({
+            where: { id: employeeId, status: 'ACTIVE' },
+            select: { id: true },
+        });
         if (!employee)
             return res.status(404).json({ error: 'No active app-lock device for this account' });
         const options = await webauthn_service_1.WebAuthnService.startAuthentication(employeeId);

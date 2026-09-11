@@ -55,7 +55,10 @@ class BookingService {
         // from client/caller input — a caller-supplied company_id would let a user
         // (or a buggy internal caller) create a booking, and lock a property, under
         // a company they don't belong to.
-        const scopedDto = { ...dto, company_id: user.companyId };
+        const scopedDto = {
+            ...dto,
+            company_id: user.companyId,
+        };
         if (tx) {
             return BookingService.claimAndCreate(tx, user, scopedDto);
         }
@@ -109,7 +112,9 @@ class BookingService {
                 company: { connect: { id: dto.company_id } },
                 customer: { connect: { id: dto.customer_id } },
                 ...(0, reference_1.inventoryConnect)(ref),
-                ...(assignedEmployeeId ? { assigned_employee: { connect: { id: assignedEmployeeId } } } : {}),
+                ...(assignedEmployeeId
+                    ? { assigned_employee: { connect: { id: assignedEmployeeId } } }
+                    : {}),
                 agreed_price: Number(dto.agreed_price),
                 booking_amount: Number(dto.booking_amount),
                 balance_amount: balance,
@@ -223,12 +228,12 @@ class BookingService {
                     where: { id: opp.id },
                     data: {
                         expected_value: booking.agreed_price,
-                        probability: 100
+                        probability: 100,
                     },
                 });
                 await tx.lead.update({
                     where: { id: opp.lead_id },
-                    data: { status: 'BOOKED' }
+                    data: { status: 'BOOKED' },
                 });
             }
             // Phase 9 Packet 5 — golden rule audit trail for the confirmation decision.
@@ -269,7 +274,7 @@ class BookingService {
                         entity_id: id,
                         reason: 'Contributed to a Lead/Opportunity that converted to a CONFIRMED Booking.',
                         created_at: new Date(),
-                    }
+                    },
                 });
             }
             return updated;
@@ -291,7 +296,10 @@ class BookingService {
         });
         // Cancelled bookings don't directly manipulate Opportunity.stage since it no longer exists.
         // Instead we transition the lead status.
-        const opp = await p.opportunity.findFirst({ where: { booking_id: id }, include: { lead: true } });
+        const opp = await p.opportunity.findFirst({
+            where: { booking_id: id },
+            include: { lead: true },
+        });
         if (opp && opp.lead && opp.lead.status !== 'DROPPED') {
             await workflowEngine_1.WorkflowEngine.transitionLead(p, opp.lead_id, 'DROPPED', { actor: user, entity: { ...opp.lead, exit_reason: reason } }, { exit_reason: reason });
         }
@@ -333,7 +341,10 @@ class BookingService {
             if (!customerId)
                 throw new lead_service_1.AppError(400, 'customer_id or new_customer is required');
             // 2. Inventory lock (same logic as createBooking)
-            const ref = (0, reference_1.resolveInventoryRef)({ property_id: dto.property_id, project_unit_id: dto.project_unit_id });
+            const ref = (0, reference_1.resolveInventoryRef)({
+                property_id: dto.property_id,
+                project_unit_id: dto.project_unit_id,
+            });
             const locked = await (0, reference_1.lockInventoryRow)(tx, ref);
             if (locked.company_id !== user.companyId) {
                 throw new lead_service_1.AppError(404, `${locked.label} not found`);
@@ -353,7 +364,9 @@ class BookingService {
                     company: { connect: { id: user.companyId } },
                     customer: { connect: { id: customerId } },
                     ...(0, reference_1.inventoryConnect)(ref),
-                    ...(dto.assigned_employee_id ? { assigned_employee: { connect: { id: dto.assigned_employee_id } } } : {}),
+                    ...(dto.assigned_employee_id
+                        ? { assigned_employee: { connect: { id: dto.assigned_employee_id } } }
+                        : {}),
                     agreed_price: Number(dto.agreed_price),
                     booking_amount: Number(dto.booking_amount),
                     balance_amount: balance,
@@ -420,7 +433,9 @@ class BookingService {
             data: {
                 ...formData,
                 receipt_date: formData.receipt_date ? new Date(formData.receipt_date) : undefined,
-                legacy_booking_date: formData.legacy_booking_date ? new Date(formData.legacy_booking_date) : undefined,
+                legacy_booking_date: formData.legacy_booking_date
+                    ? new Date(formData.legacy_booking_date)
+                    : undefined,
                 form_status: 'SUBMITTED',
                 form_submitted_at: now,
                 form_submitted_by_id: user.employeeId ?? null,
@@ -452,7 +467,16 @@ class BookingService {
                 form_status: 'SUBMITTED',
             },
             include: {
-                customer: { select: { id: true, first_name: true, last_name: true, phone: true, pan_number: true, aadhaar_number: true } },
+                customer: {
+                    select: {
+                        id: true,
+                        first_name: true,
+                        last_name: true,
+                        phone: true,
+                        pan_number: true,
+                        aadhaar_number: true,
+                    },
+                },
                 property: { select: { id: true, title: true, status: true } },
                 project_unit: { select: { id: true, unit_number: true } },
                 form_submitted_by: { select: { id: true, full_name: true, employee_code: true } },

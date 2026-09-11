@@ -28,7 +28,12 @@ class WebsiteSavedItemsService {
         return delegate.upsert({
             where: data.property_id
                 ? { account_id_property_id: { account_id: accountId, property_id: data.property_id } }
-                : { account_id_project_unit_id: { account_id: accountId, project_unit_id: data.project_unit_id } },
+                : {
+                    account_id_project_unit_id: {
+                        account_id: accountId,
+                        project_unit_id: data.project_unit_id,
+                    },
+                },
             create: {
                 account_id: accountId,
                 property_id: data.property_id ?? null,

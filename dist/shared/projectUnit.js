@@ -8,14 +8,56 @@ const zod_1 = require("zod");
 // so, unlike PropertyCreateSchema, there is no address/location here at all — a
 // unit always inherits its project's address. See services/projectUnit.service.ts.
 exports.UnitTypeEnum = zod_1.z.enum(['PLOT', 'FLAT', 'VILLA', 'HOUSE', 'COMMERCIAL', 'OTHER']);
-exports.AreaUnitEnum = zod_1.z.enum(['SQFT', 'SQYD', 'SQM', 'ACRE', 'GUNTA', 'CENT', 'ANKANAM', 'HECTARE']);
-exports.PriceBasisEnum = zod_1.z.enum(['CARPET', 'BUILT_UP', 'SUPER_BUILT_UP', 'PLOT_AREA', 'LUMPSUM']);
-exports.SalesStatusEnum = zod_1.z.enum(['AVAILABLE', 'HOLD', 'RESERVED', 'BOOKED', 'SOLD', 'BLOCKED', 'UNAVAILABLE']);
-exports.ChargeCalcMethodEnum = zod_1.z.enum(['FIXED', 'PER_SQFT', 'PER_SQYD', 'PERCENT_OF_BASE', 'QTY_X_RATE']);
+exports.AreaUnitEnum = zod_1.z.enum([
+    'SQFT',
+    'SQYD',
+    'SQM',
+    'ACRE',
+    'GUNTA',
+    'CENT',
+    'ANKANAM',
+    'HECTARE',
+]);
+exports.PriceBasisEnum = zod_1.z.enum([
+    'CARPET',
+    'BUILT_UP',
+    'SUPER_BUILT_UP',
+    'PLOT_AREA',
+    'LUMPSUM',
+]);
+exports.SalesStatusEnum = zod_1.z.enum([
+    'AVAILABLE',
+    'HOLD',
+    'RESERVED',
+    'BOOKED',
+    'SOLD',
+    'BLOCKED',
+    'UNAVAILABLE',
+]);
+exports.ChargeCalcMethodEnum = zod_1.z.enum([
+    'FIXED',
+    'PER_SQFT',
+    'PER_SQYD',
+    'PERCENT_OF_BASE',
+    'QTY_X_RATE',
+]);
 exports.PricingRuleKindEnum = zod_1.z.enum(['BASE_RATE', 'PREMIUM', 'CHARGE', 'DISCOUNT', 'TAX']);
 exports.ChargeCategoryEnum = zod_1.z.enum([
-    'FACING', 'FLOOR', 'CORNER', 'ROAD', 'PARK', 'VIEW', 'BHK', 'AMENITY',
-    'PARKING', 'INFRA', 'MAINTENANCE', 'LEGAL', 'CLUB', 'TAX', 'OTHER',
+    'FACING',
+    'FLOOR',
+    'CORNER',
+    'ROAD',
+    'PARK',
+    'VIEW',
+    'BHK',
+    'AMENITY',
+    'PARKING',
+    'INFRA',
+    'MAINTENANCE',
+    'LEGAL',
+    'CLUB',
+    'TAX',
+    'OTHER',
 ]);
 exports.ProjectUnitCreateSchema = zod_1.z.object({
     unit_number: zod_1.z.string().min(1, 'Unit number is required'),
@@ -70,7 +112,11 @@ exports.ProjectUnitCreateSchema = zod_1.z.object({
     discount_amount: zod_1.z.number().optional().nullable(),
     discount_reason: zod_1.z.string().optional().nullable(),
     manual_lines: zod_1.z
-        .array(zod_1.z.object({ label: zod_1.z.string().min(1), category: exports.ChargeCategoryEnum.optional(), amount: zod_1.z.number() }))
+        .array(zod_1.z.object({
+        label: zod_1.z.string().min(1),
+        category: exports.ChargeCategoryEnum.optional(),
+        amount: zod_1.z.number(),
+    }))
         .optional(),
     selected_optional_rule_ids: zod_1.z.array(zod_1.z.number().int()).optional(),
     sales_status: exports.SalesStatusEnum.optional(),
@@ -90,10 +136,16 @@ exports.ChangeUnitStatusSchema = zod_1.z.object({
     sales_status: exports.SalesStatusEnum,
     reason: zod_1.z.string().optional(),
 });
-exports.OverrideUnitPriceSchema = zod_1.z.object({
+exports.OverrideUnitPriceSchema = zod_1.z
+    .object({
     override_price: zod_1.z.number().positive().nullable(),
-    override_reason: zod_1.z.string().min(3, 'A reason is required when overriding the calculated price').optional().nullable(),
-}).refine((data) => data.override_price === null || !!data.override_reason, {
+    override_reason: zod_1.z
+        .string()
+        .min(3, 'A reason is required when overriding the calculated price')
+        .optional()
+        .nullable(),
+})
+    .refine((data) => data.override_price === null || !!data.override_reason, {
     message: 'A reason is required when setting an override price',
     path: ['override_reason'],
 });

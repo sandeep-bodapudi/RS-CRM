@@ -83,7 +83,10 @@ router.post('/login', (0, validate_1.validateRequestBody)(exports.KioskLoginSche
                 action: 'KIOSK_LOGIN',
                 entity_type: 'KIOSK_CREDENTIAL',
                 entity_id: matchedCred.id,
-                new_value: JSON.stringify({ branch_name: matchedCred.branch.name, label: matchedCred.label }),
+                new_value: JSON.stringify({
+                    branch_name: matchedCred.branch.name,
+                    label: matchedCred.label,
+                }),
             },
         });
         return res.status(200).json({
@@ -136,7 +139,13 @@ router.post('/', auth_1.authenticateToken, (0, auth_1.requireRole)([shared_1.Rol
                 action: 'KIOSK_CREDENTIAL_CREATED',
                 entity_type: 'KIOSK_CREDENTIAL',
                 entity_id: cred.id,
-                new_value: JSON.stringify({ branch_id, branch_name: branchName, label, username, company_id: companyId }),
+                new_value: JSON.stringify({
+                    branch_id,
+                    branch_name: branchName,
+                    label,
+                    username,
+                    company_id: companyId,
+                }),
             },
         });
         return res.status(201).json({
@@ -265,12 +274,12 @@ router.get('/', auth_1.authenticateToken, (0, auth_1.requireRole)([shared_1.Role
             orderBy: { created_at: 'desc' },
         });
         // Fetch branch names for all credentials in one query
-        const branchIds = credentials.map(c => c.branch_id);
+        const branchIds = credentials.map((c) => c.branch_id);
         const branches = await p.branch.findMany({
             where: { id: { in: branchIds } },
             select: { id: true, name: true },
         });
-        const branchMap = new Map(branches.map(b => [b.id, b.name]));
+        const branchMap = new Map(branches.map((b) => [b.id, b.name]));
         return res.status(200).json({
             credentials: credentials.map((c) => ({
                 id: c.id,

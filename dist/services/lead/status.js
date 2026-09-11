@@ -14,13 +14,13 @@ const notifyEmployee_1 = require("../../utils/notifyEmployee");
 const logger_1 = require("../../utils/logger");
 const p = prisma_1.prisma;
 async function reassignLead(user, leadId, assigneeId, reason) {
-    const lead = await p.lead.findFirst({ where: { id: leadId, } });
+    const lead = await p.lead.findFirst({ where: { id: leadId } });
     if (!lead)
         throw new errors_1.AppError(404, 'Lead not found');
     if (!(0, authorization_1.can)(user, shared_1.Permissions.LEADS_ASSIGN, lead)) {
         throw new errors_1.AppError(403, 'Forbidden: Insufficient privileges or cross-company reassignment');
     }
-    const assignee = await p.employee.findFirst({ where: { id: assigneeId, } });
+    const assignee = await p.employee.findFirst({ where: { id: assigneeId } });
     if (!assignee)
         throw new errors_1.AppError(404, 'Assignee employee not found');
     return await p.$transaction(async (tx) => {
@@ -64,7 +64,7 @@ async function reassignLead(user, leadId, assigneeId, reason) {
         type: 'TARGET_ASSIGNED',
         title: 'Lead Assigned to You',
         message: `Lead ${lead.lead_code} (${lead.customer_name}) has been assigned to you.`,
-    }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] Lead reassign:', err));
+    }, { skipDbNotification: true }).catch((err) => logger_1.logger.error('[WebPush] Lead reassign:', err));
 }
 exports.reassignLead = reassignLead;
 async function updateLeadStatus(user, leadId, newStatus, notes, guardFields) {
@@ -127,7 +127,7 @@ async function updateLeadStatus(user, leadId, newStatus, notes, guardFields) {
     if (_guardFields.demo_scheduled_at) {
         entityContext.pending_demo = {
             scheduled_at: _guardFields.demo_scheduled_at,
-            handler_id: _guardFields.demo_handler_id
+            handler_id: _guardFields.demo_handler_id,
         };
     }
     if (_guardFields.qualification) {
@@ -147,7 +147,9 @@ async function updateLeadStatus(user, leadId, newStatus, notes, guardFields) {
     // Always pull activities — the CALL_LOGGED guard (§1 row 2) needs them
     entityContext.activities = await p.leadActivity.findMany({ where: { lead_id: leadId } });
     // SITE_VISIT_* guards need the linked visits AND their property outcomes
-    if (newStatus === 'SITE_VISIT_SCHEDULED' || newStatus === 'SITE_VISIT_COMPLETED' || newStatus === 'DROPPED') {
+    if (newStatus === 'SITE_VISIT_SCHEDULED' ||
+        newStatus === 'SITE_VISIT_COMPLETED' ||
+        newStatus === 'DROPPED') {
         entityContext.site_visits = await p.siteVisitBooking.findMany({ where: { lead_id: leadId } });
         if (newStatus === 'DROPPED') {
             // Pull SiteVisitProperty outcomes for the DROPPED-from-SITE_VISIT_COMPLETED guard
@@ -212,7 +214,10 @@ async function updateLeadStatus(user, leadId, newStatus, notes, guardFields) {
     if (isDrop && (lead.status === 'ASSIGNED' || lead.status === 'CONTACTED')) {
         const exitReason = guardFields?.exit_reason;
         const lowerNotes = (notes || '').toLowerCase();
-        if (exitReason === 'OTHER' && (lowerNotes.includes('unreachable') || lowerNotes.includes('not answering') || lowerNotes.includes('no response'))) {
+        if (exitReason === 'OTHER' &&
+            (lowerNotes.includes('unreachable') ||
+                lowerNotes.includes('not answering') ||
+                lowerNotes.includes('no response'))) {
             const callLogs = (entityContext.activities || []).filter((a) => a.activity_type === 'CALL_LOGGED');
             const distinctDays = new Set(callLogs.map((a) => new Date(a.created_at).toISOString().split('T')[0]));
             if (distinctDays.size < 5) {
@@ -232,7 +237,9 @@ async function updateLeadStatus(user, leadId, newStatus, notes, guardFields) {
             updateData.exited_from_status = lead.status; // snapshot per §1
         }
         // Create Demo record when entering DEMO_SCHEDULED instead of updating Lead fields
-        if (newStatus === 'DEMO_SCHEDULED' && _guardFields.demo_scheduled_at && _guardFields.demo_handler_id) {
+        if (newStatus === 'DEMO_SCHEDULED' &&
+            _guardFields.demo_scheduled_at &&
+            _guardFields.demo_handler_id) {
             const demoRecord = await tx.demo.create({
                 data: {
                     lead_id: leadId,
@@ -256,7 +263,7 @@ async function updateLeadStatus(user, leadId, newStatus, notes, guardFields) {
                 type: 'DEMO_SCHEDULED',
                 title: `Demo Scheduled: ${lead.customer_name}`,
                 message: `A demo for ${lead.customer_name} (${lead.lead_code}) has been scheduled for ${new Date(_guardFields.demo_scheduled_at).toLocaleString()}.`,
-            }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] Demo scheduled:', err));
+            }, { skipDbNotification: true }).catch((err) => logger_1.logger.error('[WebPush] Demo scheduled:', err));
         }
         // Persist qualification fields when entering QUALIFIED
         if (newStatus === 'QUALIFIED' && guardFields?.qualification) {
@@ -292,7 +299,8 @@ async function updateLeadStatus(user, leadId, newStatus, notes, guardFields) {
                 updateData.preferred_location = q.preferred_location;
             }
         }
-        if ((newStatus === 'QUALIFIED' || newStatus === 'DEMO_COMPLETED') && guardFields?.qualification?.preferred_locations !== undefined) {
+        if ((newStatus === 'QUALIFIED' || newStatus === 'DEMO_COMPLETED') &&
+            guardFields?.qualification?.preferred_locations !== undefined) {
             await (0, shared_2.syncLeadPreferredLocations)(tx, leadId, guardFields.qualification.preferred_locations);
         }
         const updated = await workflowEngine_1.WorkflowEngine.transitionLead(tx, leadId, newStatus, { actor: user, entity: entityContext }, updateData);
@@ -351,7 +359,7 @@ async function updateLeadStatus(user, leadId, newStatus, notes, guardFields) {
                 finalUpdated = await workflowEngine_1.WorkflowEngine.transitionLead(tx, leadId, 'ASSIGNED', { actor: user, entity: { ...entityContext, status: 'RECOVERED_TO_POOL' } }, {
                     assigned_to_id: bestAssignee.employeeId,
                     assigned_at: new Date(),
-                    assignment_type: 'PERFORMANCE_WEIGHTED'
+                    assignment_type: 'PERFORMANCE_WEIGHTED',
                 });
                 await tx.leadActivity.create({
                     data: {
@@ -384,7 +392,7 @@ async function updateLeadStatus(user, leadId, newStatus, notes, guardFields) {
             message: isDrop
                 ? `${finalLead.customer_name} was dropped from ${lead.status}.`
                 : `${finalLead.customer_name} moved from ${lead.status} to ${newStatus}${notes ? `. ${notes}` : ''}`,
-        }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] Lead status:', err));
+        }, { skipDbNotification: true }).catch((err) => logger_1.logger.error('[WebPush] Lead status:', err));
     }
     return finalLead;
 }
@@ -409,17 +417,17 @@ async function bulkUploadLeads(user, rawLeads) {
         errors: [],
     };
     // Pre-fetch existing phones and emails to detect duplicates efficiently
-    const phones = rawLeads.map(l => l.phone).filter(Boolean);
-    const emails = rawLeads.map(l => l.email).filter(Boolean);
+    const phones = rawLeads.map((l) => l.phone).filter(Boolean);
+    const emails = rawLeads.map((l) => l.email).filter(Boolean);
     const existingLeads = await p.lead.findMany({
         where: {
             company_id: user.companyId,
             OR: [
                 ...(phones.length > 0 ? [{ phone: { in: phones } }] : []),
                 ...(emails.length > 0 ? [{ email: { in: emails } }] : []),
-            ]
+            ],
         },
-        select: { id: true, phone: true, email: true, status: true }
+        select: { id: true, phone: true, email: true, status: true },
     });
     const existingPhonesMap = new Map();
     const existingEmailsMap = new Map();
@@ -439,10 +447,14 @@ async function bulkUploadLeads(user, rawLeads) {
             try {
                 if (!item.customer_name || !item.phone) {
                     results.failed_rows++;
-                    results.errors.push({ row: currentRow, reason: 'Missing required fields: customer_name or phone' });
+                    results.errors.push({
+                        row: currentRow,
+                        reason: 'Missing required fields: customer_name or phone',
+                    });
                     continue;
                 }
-                const existingLead = existingPhonesMap.get(item.phone) || (item.email ? existingEmailsMap.get(item.email) : undefined);
+                const existingLead = existingPhonesMap.get(item.phone) ||
+                    (item.email ? existingEmailsMap.get(item.email) : undefined);
                 if (existingLead) {
                     if (existingLead.status === 'DROPPED') {
                         await updateLeadStatus(user, existingLead.id, 'RECOVERED_TO_POOL');
@@ -450,7 +462,9 @@ async function bulkUploadLeads(user, rawLeads) {
                     }
                     else {
                         results.duplicates++;
-                        const duplicateReason = existingPhonesMap.has(item.phone) ? `Duplicate phone number: ${item.phone}` : `Duplicate email: ${item.email}`;
+                        const duplicateReason = existingPhonesMap.has(item.phone)
+                            ? `Duplicate phone number: ${item.phone}`
+                            : `Duplicate email: ${item.email}`;
                         results.errors.push({ row: currentRow, reason: duplicateReason });
                     }
                     continue;
@@ -508,7 +522,10 @@ async function bulkUploadLeads(user, rawLeads) {
             }
             catch (error) {
                 results.failed_rows++;
-                results.errors.push({ row: currentRow, reason: error.message || 'Database error during insertion' });
+                results.errors.push({
+                    row: currentRow,
+                    reason: error.message || 'Database error during insertion',
+                });
             }
         }
     }

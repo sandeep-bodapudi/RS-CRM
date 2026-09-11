@@ -175,14 +175,23 @@ router.post('/:id/submit-for-review', auth_1.authenticateToken, (0, authz_1.requ
         if (!project)
             return res.status(404).json({ error: 'Project not found' });
         if (!['DRAFT', 'REJECTED'].includes(project.status)) {
-            return res.status(400).json({ error: `Cannot submit: project is already ${project.status}` });
+            return res
+                .status(400)
+                .json({ error: `Cannot submit: project is already ${project.status}` });
         }
         const updated = await p.project.update({
             where: { id: projectId },
-            data: { status: 'PENDING_VERIFICATION', verified_by_id: null, verified_at: null, verification_notes: null },
+            data: {
+                status: 'PENDING_VERIFICATION',
+                verified_by_id: null,
+                verified_at: null,
+                verification_notes: null,
+            },
         });
         logger_1.logger.info(`Project ${projectId} submitted for review by employee ${req.user.employeeId}`);
-        return res.status(200).json({ message: 'Project submitted for MD review.', project: updated });
+        return res
+            .status(200)
+            .json({ message: 'Project submitted for MD review.', project: updated });
     }
     catch (error) {
         logger_1.logger.error('Submit project for review error:', error);
@@ -204,12 +213,19 @@ router.post('/:id/verify', auth_1.authenticateToken, (0, authz_1.requireAuthz)(s
         if (!project)
             return res.status(404).json({ error: 'Project not found' });
         if (project.status !== 'PENDING_VERIFICATION') {
-            return res.status(400).json({ error: `Project is not pending verification (current: ${project.status})` });
+            return res
+                .status(400)
+                .json({ error: `Project is not pending verification (current: ${project.status})` });
         }
         const newStatus = action === 'APPROVE' ? 'VERIFIED' : 'REJECTED';
         const updated = await p.project.update({
             where: { id: projectId },
-            data: { status: newStatus, verified_by_id: req.user.employeeId, verified_at: new Date(), verification_notes: notes || null },
+            data: {
+                status: newStatus,
+                verified_by_id: req.user.employeeId,
+                verified_at: new Date(),
+                verification_notes: notes || null,
+            },
         });
         logger_1.logger.info(`Project ${projectId} ${newStatus} by MD employee ${req.user.employeeId}`);
         const msg = action === 'APPROVE'

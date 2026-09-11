@@ -167,7 +167,9 @@ router.patch('/permissions/:roleName', auth_1.authenticateToken, (0, auth_1.requ
     }
     catch (error) {
         logger_1.logger.error('[Admin] Role permissions update failed:', error);
-        return res.status(500).json({ error: 'Failed to update role permissions', detail: error?.message });
+        return res
+            .status(500)
+            .json({ error: 'Failed to update role permissions', detail: error?.message });
     }
 });
 // DELETE /api/v1/admin/permissions/:roleName/reset — Reset a role's permissions to defaults

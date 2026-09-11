@@ -38,7 +38,7 @@ async function reassignVisit(user, visitId, toEmployeeId, reason) {
     if (!visit)
         throw { status: 404, message: 'Site visit booking not found' };
     const targetWithRoles = await p.employee.findFirst({
-        where: { id: toEmployeeId, },
+        where: { id: toEmployeeId },
         include: { roles: { include: { role: true } } },
     });
     if (!targetWithRoles)
@@ -48,7 +48,10 @@ async function reassignVisit(user, visitId, toEmployeeId, reason) {
         roles: (targetWithRoles.roles || []).map((er) => er.role?.name).filter(Boolean),
     };
     if (!siteVisit_policy_1.SiteVisitPolicy.canReassignTarget(user, target)) {
-        throw { status: 403, message: 'Forbidden: only PROJECT_MANAGER or AGENT may be reassignment targets' };
+        throw {
+            status: 403,
+            message: 'Forbidden: only PROJECT_MANAGER or AGENT may be reassignment targets',
+        };
     }
     // Ping-pong prevention: Cannot route to someone who has already routed it away.
     const previousReassignment = await p.siteVisitReassignment.findFirst({
@@ -58,10 +61,17 @@ async function reassignVisit(user, visitId, toEmployeeId, reason) {
         },
     });
     if (previousReassignment) {
-        throw { status: 409, message: 'Cannot route to this employee. They have already declined or routed this visit.' };
+        throw {
+            status: 409,
+            message: 'Cannot route to this employee. They have already declined or routed this visit.',
+        };
     }
     const transition = workflowEngine_1.WorkflowEngine.canTransition({
-        domain: types_1.WorkflowDomain.SITE_VISIT, currentState: visit.status, action: 'REASSIGN', actor: user, entity: visit,
+        domain: types_1.WorkflowDomain.SITE_VISIT,
+        currentState: visit.status,
+        action: 'REASSIGN',
+        actor: user,
+        entity: visit,
     });
     if (!transition.allowed) {
         throw { status: 409, message: transition.reason || 'Invalid state transition' };
@@ -69,7 +79,12 @@ async function reassignVisit(user, visitId, toEmployeeId, reason) {
     return await p.$transaction(async (tx) => {
         // Log the reassignment hop (reason visibility restricted per §2).
         await tx.siteVisitReassignment.create({
-            data: { visit_id: visitId, from_employee_id: visit.project_manager_id ?? user.employeeId, to_employee_id: toEmployeeId, reason },
+            data: {
+                visit_id: visitId,
+                from_employee_id: visit.project_manager_id ?? user.employeeId,
+                to_employee_id: toEmployeeId,
+                reason,
+            },
         });
         const updated = await tx.siteVisitBooking.update({
             where: { id: visitId },
@@ -96,7 +111,7 @@ async function reassignVisit(user, visitId, toEmployeeId, reason) {
             type: 'TARGET_ASSIGNED',
             title: 'Site Visit Reassigned to You',
             message: `Site visit ${visit.booking_code} has been reassigned to you for acceptance.`,
-        }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] Site visit reassign:', err));
+        }, { skipDbNotification: true }).catch((err) => logger_1.logger.error('[WebPush] Site visit reassign:', err));
         return updated;
     });
 }
@@ -110,14 +125,18 @@ async function escalateVisit(user, visitId, reason) {
     if (!visit)
         throw { status: 404, message: 'Site visit booking not found' };
     const transition = workflowEngine_1.WorkflowEngine.canTransition({
-        domain: types_1.WorkflowDomain.SITE_VISIT, currentState: visit.status, action: 'ESCALATE', actor: user, entity: visit,
+        domain: types_1.WorkflowDomain.SITE_VISIT,
+        currentState: visit.status,
+        action: 'ESCALATE',
+        actor: user,
+        entity: visit,
     });
     if (!transition.allowed) {
         throw { status: 409, message: transition.reason || 'Invalid state transition' };
     }
     return await p.$transaction(async (tx) => {
         const md = await tx.employee.findFirst({
-            where: { roles: { some: { role: { name: shared_1.Roles.MARKETING_DIRECTOR } } }, },
+            where: { roles: { some: { role: { name: shared_1.Roles.MARKETING_DIRECTOR } } } },
         });
         const updated = await tx.siteVisitBooking.update({
             where: { id: visitId },
@@ -145,7 +164,7 @@ async function escalateVisit(user, visitId, reason) {
                 type: 'SYSTEM_ALERT',
                 title: 'Site Visit Escalated',
                 message: `Site visit ${visit.booking_code} escalated — no PM/Agent available.`,
-            }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] Site visit escalate:', err));
+            }, { skipDbNotification: true }).catch((err) => logger_1.logger.error('[WebPush] Site visit escalate:', err));
         }
         return updated;
     });
@@ -184,7 +203,7 @@ async function rescheduleVisit(user, visitId, data) {
                 type: 'SYSTEM_ALERT',
                 title: 'Cancellation Superseded',
                 message: `The cancellation for site visit ${visit.booking_code} was superseded by a reschedule request.`,
-            }
+            },
         });
     }
     const extra = {};
@@ -215,12 +234,19 @@ async function pmReconfirm(user, visitId, release) {
     }
     if (release) {
         // Reset to the authoritative project PM for the (possibly new) property.
-        const props = await p.siteVisitProperty.findMany({ where: { visit_id: visitId }, include: { property: true } });
+        const props = await p.siteVisitProperty.findMany({
+            where: { visit_id: visitId },
+            include: { property: true },
+        });
         const projectId = props[0]?.property?.project_id ?? visit.project_id;
         const project = projectId ? await p.project.findFirst({ where: { id: projectId } }) : null;
         const authoritativePm = project?.assigned_pm_id ?? null;
         const transition = workflowEngine_1.WorkflowEngine.canTransition({
-            domain: types_1.WorkflowDomain.SITE_VISIT, currentState: visit.status, action: 'PM_RELEASE', actor: user, entity: visit,
+            domain: types_1.WorkflowDomain.SITE_VISIT,
+            currentState: visit.status,
+            action: 'PM_RELEASE',
+            actor: user,
+            entity: visit,
         });
         if (!transition.allowed)
             throw { status: 409, message: transition.reason || 'Invalid state transition' };
@@ -231,7 +257,8 @@ async function pmReconfirm(user, visitId, release) {
             });
             await tx.leadActivity.create({
                 data: {
-                    lead: { connect: { id: visit.lead_id } }, actor: { connect: { id: user.employeeId } },
+                    lead: { connect: { id: visit.lead_id } },
+                    actor: { connect: { id: user.employeeId } },
                     activity_type: 'SITE_VISIT_RESCHEDULE_REQUESTED',
                     notes: `PM released reschedule for ${visit.booking_code}; reset to project PM for acceptance.`,
                 },
@@ -286,7 +313,10 @@ async function completeVisit(user, visitId, outcomes, feedback_notes, proof_phot
     const provided = new Set(outcomes.map((o) => o.property_id));
     for (const pid of linked) {
         if (!provided.has(pid)) {
-            throw { status: 400, message: `Outcome required for every linked property. Missing property ${pid}.` };
+            throw {
+                status: 400,
+                message: `Outcome required for every linked property. Missing property ${pid}.`,
+            };
         }
     }
     for (const o of outcomes) {
@@ -295,7 +325,11 @@ async function completeVisit(user, visitId, outcomes, feedback_notes, proof_phot
         }
     }
     const transition = workflowEngine_1.WorkflowEngine.canTransition({
-        domain: types_1.WorkflowDomain.SITE_VISIT, currentState: visit.status, action: 'COMPLETE', actor: user, entity: visit,
+        domain: types_1.WorkflowDomain.SITE_VISIT,
+        currentState: visit.status,
+        action: 'COMPLETE',
+        actor: user,
+        entity: visit,
     });
     if (!transition.allowed) {
         throw { status: 409, message: transition.reason || 'Invalid state transition' };
@@ -311,12 +345,22 @@ async function completeVisit(user, visitId, outcomes, feedback_notes, proof_phot
             await tx.siteVisitProperty.upsert({
                 where: { visit_id_property_id: { visit_id: visitId, property_id: o.property_id } },
                 update: { outcome: o.outcome, outcome_reason: o.outcome_reason ?? null },
-                create: { visit_id: visitId, property_id: o.property_id, outcome: o.outcome, outcome_reason: o.outcome_reason ?? null },
+                create: {
+                    visit_id: visitId,
+                    property_id: o.property_id,
+                    outcome: o.outcome,
+                    outcome_reason: o.outcome_reason ?? null,
+                },
             });
         }
         const updated = await tx.siteVisitBooking.update({
             where: { id: visitId },
-            data: { status: 'COMPLETED', feedback_notes, proof_photo_url: proof_photo_url || null, completed_at: new Date() },
+            data: {
+                status: 'COMPLETED',
+                feedback_notes,
+                proof_photo_url: proof_photo_url || null,
+                completed_at: new Date(),
+            },
         });
         await tx.leadActivity.create({
             data: {
@@ -330,7 +374,11 @@ async function completeVisit(user, visitId, outcomes, feedback_notes, proof_phot
         // The Lead status move is driven by the lead workflow; the service that
         // owns the lead transition will enforce it. Here we record the outcome
         // branch so the caller (route) can advance the Lead accordingly.
-        updated._outcomeBranch = allNotInterested ? 'DROP' : (anyInterested ? 'NEGOTIATE' : 'NEGOTIATE');
+        updated._outcomeBranch = allNotInterested
+            ? 'DROP'
+            : anyInterested
+                ? 'NEGOTIATE'
+                : 'NEGOTIATE';
         // § Phase 7 — a completed visit always has someone who actually ran it
         // (agent takes priority over PM when both are set, matching how the
         // notification below picks a name); only request feedback when there

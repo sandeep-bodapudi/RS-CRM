@@ -177,7 +177,9 @@ function computeBasePrice(unit, rules, warnings) {
     // 2. A per-unit base rate, else the project's BASE_RATE rule.
     const baseRule = rules.find((r) => r.kind === 'BASE_RATE' && ruleMatchesUnit(r, unit));
     const rate = unit.base_rate ?? baseRule?.rate ?? 0;
-    const method = unit.base_rate_unit ?? baseRule?.calc_method ?? (unit.price_basis === 'PLOT_AREA' ? 'PER_SQYD' : 'PER_SQFT');
+    const method = unit.base_rate_unit ??
+        baseRule?.calc_method ??
+        (unit.price_basis === 'PLOT_AREA' ? 'PER_SQYD' : 'PER_SQFT');
     const areaBasis = baseRule?.area_basis ?? unit.price_basis;
     if (!rate) {
         warnings.push('No base rate configured for this unit — base price is 0.');
@@ -306,6 +308,8 @@ function computePrice(unit, rules = []) {
 exports.computePrice = computePrice;
 /** final_price is the override when one is set, else the computed figure. */
 function resolveFinalPrice(calculatedPrice, overridePrice) {
-    return overridePrice != null && overridePrice > 0 ? (0, measurement_1.round)(overridePrice, 2) : (0, measurement_1.round)(calculatedPrice, 2);
+    return overridePrice != null && overridePrice > 0
+        ? (0, measurement_1.round)(overridePrice, 2)
+        : (0, measurement_1.round)(calculatedPrice, 2);
 }
 exports.resolveFinalPrice = resolveFinalPrice;

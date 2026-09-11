@@ -25,7 +25,11 @@ router.get('/all-team-tasks', auth_1.authenticateToken, (0, authz_1.requireAuthz
                 target_date: { lt: now },
                 assignee: { company_id: companyId },
             },
-            include: { assignee: { select: { id: true, employee_code: true, full_name: true, company_id: true } } },
+            include: {
+                assignee: {
+                    select: { id: true, employee_code: true, full_name: true, company_id: true },
+                },
+            },
         });
         for (const t of newlyOverdue) {
             await p.task.update({
@@ -93,28 +97,36 @@ router.post('/', auth_1.authenticateToken, (0, authz_1.requireAuthz)(shared_1.Pe
         const { title, description, assignee_id, priority, deadline, lead_id, opportunity_id } = req.body;
         const creatorId = req.user.employeeId;
         // Validate Assignee Company Isolation
-        const assignee = await p.employee.findFirst({ where: { id: assignee_id, company_id: req.user.companyId } });
+        const assignee = await p.employee.findFirst({
+            where: { id: assignee_id, company_id: req.user.companyId },
+        });
         if (!assignee) {
             return res.status(400).json({ error: 'Assignee not found or outside your company.' });
         }
         // Validate Lead Access if lead_id is provided
         if (lead_id) {
-            const existingLead = await p.lead.findFirst({ where: { id: lead_id, } });
+            const existingLead = await p.lead.findFirst({ where: { id: lead_id } });
             if (!existingLead) {
                 return res.status(404).json({ error: 'Lead not found.' });
             }
             if (!(0, authorization_1.can)(req.user, shared_1.Permissions.LEADS_UPDATE, existingLead)) {
-                return res.status(403).json({ error: 'Forbidden: You do not have permission to attach tasks to this lead.' });
+                return res
+                    .status(403)
+                    .json({ error: 'Forbidden: You do not have permission to attach tasks to this lead.' });
             }
         }
         // Validate Opportunity Access if opportunity_id is provided
         if (opportunity_id) {
-            const existingOpp = await p.opportunity.findFirst({ where: { id: opportunity_id, company_id: req.user.companyId } });
+            const existingOpp = await p.opportunity.findFirst({
+                where: { id: opportunity_id, company_id: req.user.companyId },
+            });
             if (!existingOpp) {
                 return res.status(404).json({ error: 'Opportunity not found.' });
             }
             if (lead_id && existingOpp.lead_id !== lead_id) {
-                return res.status(400).json({ error: 'Opportunity does not belong to the specified Lead.' });
+                return res
+                    .status(400)
+                    .json({ error: 'Opportunity does not belong to the specified Lead.' });
             }
         }
         const task = await p.task.create({
@@ -196,8 +208,8 @@ router.patch('/:id/status', auth_1.authenticateToken, (0, authz_1.requireAuthz)(
         const { status } = req.body;
         const employeeId = req.user.employeeId;
         const existingTask = await p.task.findFirst({
-            where: { id: taskId, },
-            include: { assignee: { select: { company_id: true } } }
+            where: { id: taskId },
+            include: { assignee: { select: { company_id: true } } },
         });
         if (!existingTask) {
             return res.status(404).json({ error: 'Task not found' });

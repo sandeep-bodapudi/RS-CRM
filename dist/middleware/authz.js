@@ -29,7 +29,9 @@ const requireAuthz = (action, getResource) => {
             // 2. Fall back to static token-based authorization
             const isAuthorized = (0, authorization_1.can)(req.user, action, resource);
             if (!isAuthorized) {
-                return res.status(403).json({ error: 'Forbidden: Insufficient access or out of scope', code: 'FORBIDDEN' });
+                return res
+                    .status(403)
+                    .json({ error: 'Forbidden: Insufficient access or out of scope', code: 'FORBIDDEN' });
             }
             if (resource) {
                 req.authorizedResource = resource;

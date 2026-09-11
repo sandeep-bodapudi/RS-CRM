@@ -11,7 +11,15 @@ const projectUnit_1 = require("./projectUnit");
 // into the pricing engine as a rule, see services/amenity.service.ts and
 // pricing.service.ts's getEffectiveRules), or OPTIONAL (available, but no
 // automatic charge — a buyer opts in, not modelled as a pricing rule here).
-exports.AmenityCategoryEnum = zod_1.z.enum(['SECURITY', 'RECREATION', 'CONVENIENCE', 'ENVIRONMENT', 'SPORTS', 'UTILITY', 'OTHER']);
+exports.AmenityCategoryEnum = zod_1.z.enum([
+    'SECURITY',
+    'RECREATION',
+    'CONVENIENCE',
+    'ENVIRONMENT',
+    'SPORTS',
+    'UTILITY',
+    'OTHER',
+]);
 exports.AmenityAvailabilityEnum = zod_1.z.enum(['INCLUDED', 'OPTIONAL', 'CHARGEABLE']);
 exports.AmenityApplicabilityEnum = zod_1.z.enum(['ALL_UNITS', 'SELECTED_UNITS', 'BY_UNIT_TYPE']);
 exports.AmenityCreateSchema = zod_1.z.object({
@@ -35,7 +43,8 @@ exports.ProjectAmenityUpsertSchema = zod_1.z
     notes: zod_1.z.string().optional().nullable(),
     sort_order: zod_1.z.number().int().optional(),
 })
-    .refine((data) => data.availability !== 'CHARGEABLE' || (!!data.charge_calc_method && data.charge_amount != null), {
+    .refine((data) => data.availability !== 'CHARGEABLE' ||
+    (!!data.charge_calc_method && data.charge_amount != null), {
     message: 'A calculation method and amount are required for a chargeable amenity',
     path: ['charge_amount'],
 })

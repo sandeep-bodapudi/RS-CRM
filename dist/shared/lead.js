@@ -108,14 +108,19 @@ exports.PublicLeadCreateSchema = zod_1.z.object({
     property_type_preference: zod_1.z.string().optional(),
     preferred_location: zod_1.z.string().optional(),
     preferred_locations: zod_1.z.array(zod_1.z.string().trim().min(1)).max(10).optional(),
-    enquiry_type: zod_1.z.enum(['appraisal', 'call', 'project', 'property', 'consultation', 'other']).optional(),
-    preferred_contact_time: zod_1.z.enum(['immediate', 'business_hours', 'after_hours', 'anytime']).optional(),
+    enquiry_type: zod_1.z
+        .enum(['appraisal', 'call', 'project', 'property', 'consultation', 'other'])
+        .optional(),
+    preferred_contact_time: zod_1.z
+        .enum(['immediate', 'business_hours', 'after_hours', 'anytime'])
+        .optional(),
     property_ids: zod_1.z.array(zod_1.z.number().int().positive()).max(10).optional(),
     project_id: zod_1.z.number().int().positive().optional().nullable(),
     budget_max: zod_1.z.number().positive('Budget must be a positive number').optional().nullable(),
     notes: zod_1.z.string().optional(),
 });
-exports.LeadStatusUpdateSchema = zod_1.z.object({
+exports.LeadStatusUpdateSchema = zod_1.z
+    .object({
     status: zod_1.z.enum([
         'NEW',
         'ASSIGNED',
@@ -140,14 +145,18 @@ exports.LeadStatusUpdateSchema = zod_1.z.object({
     exit_reason_detail: zod_1.z.string().trim().min(1).max(500).optional(),
     demo_scheduled_at: zod_1.z.string().datetime().optional(), // required when status -> DEMO_SCHEDULED
     demo_handler_id: zod_1.z.number().int().positive().optional(), // required when status -> DEMO_SCHEDULED
-    qualification: zod_1.z.object({
+    qualification: zod_1.z
+        .object({
         budget_min: zod_1.z.number().nonnegative().optional(),
         budget_max: zod_1.z.number().nonnegative().optional(),
         property_type_preference: zod_1.z.string().optional(),
         preferred_location: zod_1.z.string().optional(),
         preferred_locations: zod_1.z.array(zod_1.z.string().trim().min(1)).max(10).optional(),
-    }).partial().optional(),
-}).superRefine((data, ctx) => {
+    })
+        .partial()
+        .optional(),
+})
+    .superRefine((data, ctx) => {
     if (data.exit_reason === 'OTHER' && !data.exit_reason_detail) {
         ctx.addIssue({
             code: zod_1.z.ZodIssueCode.custom,

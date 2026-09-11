@@ -147,7 +147,7 @@ exports.loadingFactor = loadingFactor;
 /** Carpet < built-up < super built-up is a physical fact, not a preference. */
 function validateFlatAreas(areas) {
     const issues = [];
-    const { carpet_area_sqft: carpet, built_up_area_sqft: builtUp, super_built_up_area_sqft: sbua } = areas;
+    const { carpet_area_sqft: carpet, built_up_area_sqft: builtUp, super_built_up_area_sqft: sbua, } = areas;
     if (carpet && builtUp && carpet >= builtUp) {
         issues.push({
             field: 'built_up_area_sqft',

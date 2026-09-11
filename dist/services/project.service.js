@@ -25,11 +25,31 @@ const p = prisma_1.prisma;
 function mapCommonProjectFields(data) {
     const out = {};
     const passthroughKeys = [
-        'project_type', 'developer_name', 'state', 'district', 'city', 'mandal', 'village',
-        'locality', 'address', 'pincode', 'latitude', 'longitude', 'maps_link',
-        'total_area_value', 'towers_count', 'blocks_count', 'floors_count',
-        'rera_status', 'approval_authority', 'approval_number', 'lp_number',
-        'default_price_basis', 'default_area_unit', 'total_area_unit', 'cover_image_url',
+        'project_type',
+        'developer_name',
+        'state',
+        'district',
+        'city',
+        'mandal',
+        'village',
+        'locality',
+        'address',
+        'pincode',
+        'latitude',
+        'longitude',
+        'maps_link',
+        'total_area_value',
+        'towers_count',
+        'blocks_count',
+        'floors_count',
+        'rera_status',
+        'approval_authority',
+        'approval_number',
+        'lp_number',
+        'default_price_basis',
+        'default_area_unit',
+        'total_area_unit',
+        'cover_image_url',
     ];
     for (const key of passthroughKeys) {
         if (data[key] !== undefined)
@@ -80,9 +100,9 @@ class ProjectService {
                         property_code: true,
                         title: true,
                         status: true,
-                    }
-                }
-            }
+                    },
+                },
+            },
         });
         if (!project)
             throw { status: 404, message: 'Project not found or unauthorized' };
@@ -93,7 +113,7 @@ class ProjectService {
         const branchId = user.branchId || null;
         if (data.assigned_pm_id) {
             const pm = await p.employee.findFirst({
-                where: { id: data.assigned_pm_id, company_id: companyId }
+                where: { id: data.assigned_pm_id, company_id: companyId },
             });
             if (!pm)
                 throw { status: 400, message: 'Invalid assigned_pm_id or does not belong to your company' };
@@ -143,7 +163,7 @@ class ProjectService {
                         type: 'PROJECT_ASSIGNED',
                         title: `New Project Assigned: ${projectCode}`,
                         message: `Project "${data.name}" (${projectCode}) has been created and assigned to you.`,
-                    }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] Create project PM notify:', err));
+                    }, { skipDbNotification: true }).catch((err) => logger_1.logger.error('[WebPush] Create project PM notify:', err));
                 }
                 return project;
             }
@@ -168,23 +188,38 @@ class ProjectService {
             where: {
                 id: projectId,
                 ...whereCondition,
-            }
+            },
         });
         if (!project)
             throw { status: 404, message: 'Project not found or unauthorized' };
         // Core fields are locked while a project is PENDING_VERIFICATION (awaiting MD review).
         // PM can still update media, documents, and images via separate endpoints.
-        const CORE_LOCKED_FIELDS = ['name', 'description', 'location', 'total_area', 'total_units',
-            'launch_date', 'project_phase', 'rera_number', 'assigned_pm_id', 'project_type', 'developer_name', 'status'];
+        const CORE_LOCKED_FIELDS = [
+            'name',
+            'description',
+            'location',
+            'total_area',
+            'total_units',
+            'launch_date',
+            'project_phase',
+            'rera_number',
+            'assigned_pm_id',
+            'project_type',
+            'developer_name',
+            'status',
+        ];
         if (project.status === 'PENDING_VERIFICATION') {
             const attemptedCoreChange = CORE_LOCKED_FIELDS.some((f) => data[f] !== undefined);
             if (attemptedCoreChange) {
-                throw { status: 409, message: 'Core project details are locked while pending MD verification. Only media and documents may be updated.' };
+                throw {
+                    status: 409,
+                    message: 'Core project details are locked while pending MD verification. Only media and documents may be updated.',
+                };
             }
         }
         if (data.assigned_pm_id && data.assigned_pm_id !== project.assigned_pm_id) {
             const pm = await p.employee.findFirst({
-                where: { id: data.assigned_pm_id, company_id: user.companyId }
+                where: { id: data.assigned_pm_id, company_id: user.companyId },
             });
             if (!pm)
                 throw { status: 400, message: 'Invalid assigned_pm_id or does not belong to your company' };
@@ -272,7 +307,7 @@ class ProjectService {
                         type: 'PROJECT_ASSIGNED',
                         title: `Project Assigned to You: ${updated.project_code}`,
                         message: `Project "${updated.name}" (${updated.project_code}) has been assigned to you.`,
-                    }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] Project PM changed new PM:', err));
+                    }, { skipDbNotification: true }).catch((err) => logger_1.logger.error('[WebPush] Project PM changed new PM:', err));
                 }
                 // Notify the old PM (if exists)
                 if (oldPmId) {
@@ -289,7 +324,7 @@ class ProjectService {
                         type: 'PROJECT_REASSIGNED',
                         title: `Project Reassigned: ${updated.project_code}`,
                         message: `Project "${updated.name}" (${updated.project_code}) has been reassigned from you.`,
-                    }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] Project PM changed old PM:', err));
+                    }, { skipDbNotification: true }).catch((err) => logger_1.logger.error('[WebPush] Project PM changed old PM:', err));
                 }
                 return updated;
             });
@@ -308,7 +343,7 @@ class ProjectService {
             where: {
                 id: projectId,
                 ...whereCondition,
-            }
+            },
         });
         if (!project)
             throw { status: 404, message: 'Project not found or unauthorized' };
@@ -340,7 +375,10 @@ class ProjectService {
         // blocks cancellation. BLOCKED/UNAVAILABLE units have already been
         // administratively taken off the table and do not block.
         const activeUnitCount = await p.projectUnit.count({
-            where: { project_id: projectId, sales_status: { in: ['AVAILABLE', 'HOLD', 'RESERVED', 'BOOKED', 'SOLD'] } },
+            where: {
+                project_id: projectId,
+                sales_status: { in: ['AVAILABLE', 'HOLD', 'RESERVED', 'BOOKED', 'SOLD'] },
+            },
         });
         if (activePropertyCount > 0 || activeUnitCount > 0) {
             throw {
@@ -395,7 +433,7 @@ class ProjectService {
         // The new PM must belong to the PROJECT's own company, not necessarily the
         // acting user's — same reasoning as the 2.20 company-inheritance fix.
         const newPm = await p.employee.findFirst({
-            where: { id: newPmId, company_id: project.company_id, status: 'ACTIVE' }
+            where: { id: newPmId, company_id: project.company_id, status: 'ACTIVE' },
         });
         if (!newPm)
             throw { status: 400, message: 'New assignee not found or unauthorized' };
@@ -403,7 +441,7 @@ class ProjectService {
         return await p.$transaction(async (tx) => {
             const updated = await tx.project.update({
                 where: { id: projectId },
-                data: { assigned_pm_id: newPmId }
+                data: { assigned_pm_id: newPmId },
             });
             await tx.auditEvent.create({
                 data: {
@@ -413,8 +451,8 @@ class ProjectService {
                     entity_id: projectId,
                     old_value: oldPmId ? oldPmId.toString() : 'UNASSIGNED',
                     new_value: newPmId.toString(),
-                    reason: reason
-                }
+                    reason: reason,
+                },
             });
             // Notify the new PM that they've been assigned a project
             await tx.notification.create({
@@ -430,7 +468,7 @@ class ProjectService {
                 type: 'PROJECT_ASSIGNED',
                 title: `Project Assigned to You: ${updated.project_code}`,
                 message: `Project "${updated.name}" (${updated.project_code}) has been assigned to you${reason ? `. Reason: ${reason}` : ''}.`,
-            }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] ReassignProject new PM:', err));
+            }, { skipDbNotification: true }).catch((err) => logger_1.logger.error('[WebPush] ReassignProject new PM:', err));
             // Notify the old PM (if exists) that the project was reassigned away
             if (oldPmId && oldPmId !== newPmId) {
                 await tx.notification.create({
@@ -446,14 +484,14 @@ class ProjectService {
                     type: 'PROJECT_REASSIGNED',
                     title: `Project Reassigned: ${updated.project_code}`,
                     message: `Project "${updated.name}" (${updated.project_code}) has been reassigned from you.`,
-                }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] Project reassign old PM:', err));
+                }, { skipDbNotification: true }).catch((err) => logger_1.logger.error('[WebPush] Project reassign old PM:', err));
             }
             // Web push to new PM (outside transaction)
             (0, notifyEmployee_1.notifyEmployee)(newPmId, {
                 type: 'PROJECT_ASSIGNED',
                 title: `Project Assigned to You: ${updated.project_code}`,
                 message: `Project "${updated.name}" (${updated.project_code}) has been assigned to you${reason ? `. Reason: ${reason}` : ''}.`,
-            }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] Project reassign new PM:', err));
+            }, { skipDbNotification: true }).catch((err) => logger_1.logger.error('[WebPush] Project reassign new PM:', err));
             return updated;
         });
     }
@@ -499,7 +537,14 @@ class ProjectService {
                 regions: {
                     include: {
                         property: {
-                            select: { id: true, property_code: true, title: true, status: true, final_price: true, category: true },
+                            select: {
+                                id: true,
+                                property_code: true,
+                                title: true,
+                                status: true,
+                                final_price: true,
+                                category: true,
+                            },
                         },
                     },
                 },
@@ -511,7 +556,9 @@ class ProjectService {
         if (!(0, authorization_1.can)(user, shared_1.Permissions.PROJECTS_UPDATE, project)) {
             throw { status: 403, message: 'Forbidden: Missing projects.update permission' };
         }
-        const image = await p.projectLayoutImage.findFirst({ where: { id: imageId, project_id: projectId } });
+        const image = await p.projectLayoutImage.findFirst({
+            where: { id: imageId, project_id: projectId },
+        });
         if (!image)
             throw { status: 404, message: 'Layout image not found' };
         await p.projectLayoutImage.delete({ where: { id: imageId } });
@@ -530,7 +577,9 @@ class ProjectService {
         if (!(0, authorization_1.can)(user, shared_1.Permissions.PROJECTS_UPDATE, project)) {
             throw { status: 403, message: 'Forbidden: Missing projects.update permission' };
         }
-        const image = await p.projectLayoutImage.findFirst({ where: { id: imageId, project_id: projectId } });
+        const image = await p.projectLayoutImage.findFirst({
+            where: { id: imageId, project_id: projectId },
+        });
         if (!image)
             throw { status: 404, message: 'Layout image not found' };
         const failed = [];
@@ -542,11 +591,18 @@ class ProjectService {
                     if (!(region.x >= 0 && region.x <= 1) || !(region.y >= 0 && region.y <= 1)) {
                         throw new Error('x and y must be fractional coordinates between 0 and 1');
                     }
-                    const unit = await tx.property.findFirst({ where: { id: region.property_id, project_id: projectId } });
+                    const unit = await tx.property.findFirst({
+                        where: { id: region.property_id, project_id: projectId },
+                    });
                     if (!unit)
                         throw new Error(`Property ${region.property_id} is not a unit of this project`);
                     await tx.propertyLayoutRegion.upsert({
-                        where: { layout_image_id_property_id: { layout_image_id: imageId, property_id: region.property_id } },
+                        where: {
+                            layout_image_id_property_id: {
+                                layout_image_id: imageId,
+                                property_id: region.property_id,
+                            },
+                        },
                         update: { x: region.x, y: region.y },
                         create: {
                             layout_image_id: imageId,
@@ -587,7 +643,13 @@ class ProjectService {
         const { processedBuffer, filename } = await (0, storage_service_1.processImageBuffer)(file.buffer);
         const url = await (0, storage_service_1.getStorageService)('projects-media').upload(processedBuffer, filename, 'image/webp');
         const media = await p.projectMedia.create({
-            data: { project_id: projectId, kind: kind, url, title: title || null, uploaded_by_id: user.employeeId },
+            data: {
+                project_id: projectId,
+                kind: kind,
+                url,
+                title: title || null,
+                uploaded_by_id: user.employeeId,
+            },
         });
         if (kind === 'COVER') {
             await p.project.update({ where: { id: projectId }, data: { cover_image_url: url } });
@@ -630,7 +692,13 @@ class ProjectService {
         const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
         const url = await (0, storage_service_1.getStorageService)('projects-documents').upload(file.buffer, filename, file.mimetype);
         return await p.projectDocument.create({
-            data: { project_id: projectId, kind: kind, url, title: title || file.originalname, uploaded_by_id: user.employeeId },
+            data: {
+                project_id: projectId,
+                kind: kind,
+                url,
+                title: title || file.originalname,
+                uploaded_by_id: user.employeeId,
+            },
         });
     }
     static async listDocuments(user, projectId) {
@@ -645,7 +713,9 @@ class ProjectService {
         if (!(0, authorization_1.can)(user, shared_1.Permissions.PROJECTS_UPDATE, project)) {
             throw { status: 403, message: 'Forbidden: Missing projects.update permission' };
         }
-        const doc = await p.projectDocument.findFirst({ where: { id: documentId, project_id: projectId } });
+        const doc = await p.projectDocument.findFirst({
+            where: { id: documentId, project_id: projectId },
+        });
         if (!doc)
             throw { status: 404, message: 'Document not found' };
         await p.projectDocument.delete({ where: { id: documentId } });
@@ -665,7 +735,10 @@ class ProjectService {
             orderBy: { created_at: 'desc' },
         });
         const actorIds = [...new Set(events.map((e) => e.actor_id))];
-        const actors = await p.employee.findMany({ where: { id: { in: actorIds } }, select: { id: true, full_name: true } });
+        const actors = await p.employee.findMany({
+            where: { id: { in: actorIds } },
+            select: { id: true, full_name: true },
+        });
         const nameById = new Map(actors.map((a) => [a.id, a.full_name]));
         return events.map((e) => ({ ...e, actor_name: nameById.get(e.actor_id) || null }));
     }

@@ -54,7 +54,15 @@ async function listDemos(user, filters) {
             },
             interested_properties: {
                 include: {
-                    property: { select: { id: true, property_code: true, title: true, location: true, final_price: true } },
+                    property: {
+                        select: {
+                            id: true,
+                            property_code: true,
+                            title: true,
+                            location: true,
+                            final_price: true,
+                        },
+                    },
                 },
             },
         },
@@ -93,7 +101,15 @@ async function getDemo(user, demoId) {
             },
             interested_properties: {
                 include: {
-                    property: { select: { id: true, property_code: true, title: true, location: true, final_price: true } },
+                    property: {
+                        select: {
+                            id: true,
+                            property_code: true,
+                            title: true,
+                            location: true,
+                            final_price: true,
+                        },
+                    },
                 },
             },
         },
@@ -203,7 +219,7 @@ async function completeDemo(user, demoId, notes) {
     // Update lead status to DEMO_COMPLETED
     await p.lead.update({
         where: { id: demo.lead_id },
-        data: { status: 'DEMO_COMPLETED' }
+        data: { status: 'DEMO_COMPLETED' },
     });
     // Add notes to timeline
     await p.leadActivity.create({
@@ -212,7 +228,7 @@ async function completeDemo(user, demoId, notes) {
             actor_id: user.employeeId,
             activity_type: 'DEMO_COMPLETED',
             notes: notes || 'Demo completed successfully.',
-        }
+        },
     });
     return demo;
 }
@@ -229,12 +245,12 @@ async function cancelDemo(user, demoId, notes) {
     }
     // Delete the demo record
     await p.demo.delete({
-        where: { id: demoId }
+        where: { id: demoId },
     });
     // Revert Lead status to QUALIFIED
     await p.lead.update({
         where: { id: demo.lead_id },
-        data: { status: 'QUALIFIED' }
+        data: { status: 'QUALIFIED' },
     });
     // Add notes to timeline
     await p.leadActivity.create({
@@ -243,7 +259,7 @@ async function cancelDemo(user, demoId, notes) {
             actor_id: user.employeeId,
             activity_type: 'STATUS_CHANGED',
             notes: `Demo cancelled by handler. ${notes ? 'Reason: ' + notes : ''}`,
-        }
+        },
     });
     // Notify telecaller
     await p.notification.create({
@@ -286,7 +302,9 @@ async function reassignDemo(user, demoId, newHandlerId, reason) {
             lead_id: demo.lead_id,
             actor_id: user.employeeId,
             activity_type: 'DEMO_REASSIGNED',
-            notes: reason ? `Demo reassigned from ${demo.handler?.full_name || 'unknown'} to ${newHandler.full_name}. Reason: ${reason}` : `Demo reassigned from ${demo.handler?.full_name || 'unknown'} to ${newHandler.full_name}.`,
+            notes: reason
+                ? `Demo reassigned from ${demo.handler?.full_name || 'unknown'} to ${newHandler.full_name}. Reason: ${reason}`
+                : `Demo reassigned from ${demo.handler?.full_name || 'unknown'} to ${newHandler.full_name}.`,
         },
     });
     // Notify new handler

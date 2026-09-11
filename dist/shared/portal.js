@@ -34,8 +34,14 @@ exports.KYC_STATUSES = Object.values(exports.KycStatus);
  * Raw PAN/Aadhaar NEVER cross the CRM ↔ Portal boundary (Packet 3C §3.4).
  */
 exports.CustomerKycWriteSchema = zod_1.z.object({
-    pan_number: zod_1.z.string().regex(/^[A-Z0-9]{10}$/, 'PAN must be 10 alphanumeric characters').optional(),
-    aadhaar_number: zod_1.z.string().regex(/^\d{12}$/, 'Aadhaar must be 12 digits').optional(),
+    pan_number: zod_1.z
+        .string()
+        .regex(/^[A-Z0-9]{10}$/, 'PAN must be 10 alphanumeric characters')
+        .optional(),
+    aadhaar_number: zod_1.z
+        .string()
+        .regex(/^\d{12}$/, 'Aadhaar must be 12 digits')
+        .optional(),
 });
 /**
  * Outbound CRM → Portal KYC status push payload (Packet 3C §3).
@@ -59,7 +65,8 @@ exports.KycStatusChangedSchema = zod_1.z.object({
  * exclusively in CRM. Raw PAN/Aadhaar/bank/document data is NEVER part of
  * this contract (Packet 3C §3.4 / §4.2).
  */
-exports.KycCallbackSchema = zod_1.z.object({
+exports.KycCallbackSchema = zod_1.z
+    .object({
     idempotency_key: zod_1.z.string().min(1),
     event_type: zod_1.z.literal('CUSTOMER_KYC_STATUS_CHANGED'),
     status: zod_1.z.literal('submitted'),
@@ -67,7 +74,8 @@ exports.KycCallbackSchema = zod_1.z.object({
     company_id: zod_1.z.number().int().positive(),
     crms_customer_id: zod_1.z.number().int().positive(),
     crms_booking_id: zod_1.z.number().int().positive().optional().nullable(),
-}).strict();
+})
+    .strict();
 // ─────────────────────────────────────────────────────────────
 // PAYMENT SYNCHRONIZATION — Phase 11 Packet 3F
 // ─────────────────────────────────────────────────────────────
@@ -97,7 +105,8 @@ exports.PaymentStatusChangedSchema = zod_1.z.object({
  * References the outbound PAYMENT_STATUS_CHANGED IntegrationEvent via its
  * idempotency key; it NEVER creates a new IntegrationEvent.
  */
-exports.PaymentCallbackSchema = zod_1.z.object({
+exports.PaymentCallbackSchema = zod_1.z
+    .object({
     idempotency_key: zod_1.z.string().min(1),
     event_type: zod_1.z.literal(exports.PAYMENT_EVENT_TYPE),
     status: zod_1.z.enum(['completed', 'failed']),
@@ -107,7 +116,8 @@ exports.PaymentCallbackSchema = zod_1.z.object({
     payment_id: zod_1.z.number().int().positive(),
     portal_payment_id: zod_1.z.string().optional().nullable(),
     message: zod_1.z.string().optional().nullable(),
-}).strict();
+})
+    .strict();
 // ─────────────────────────────────────────────────────────────
 // INSTALLMENT / FINANCIAL STATUS SYNC — Phase 11 Packet 3H
 // ─────────────────────────────────────────────────────────────
@@ -152,17 +162,20 @@ exports.CustomerNotificationType = {
  * The Portal may only READ; it can never create/update/delete notifications.
  * company_id + crms_customer_id are tenant/customer-scoped (both required).
  */
-exports.CustomerNotificationReadSchema = zod_1.z.object({
+exports.CustomerNotificationReadSchema = zod_1.z
+    .object({
     company_id: zod_1.z.number().int().positive(),
     crms_customer_id: zod_1.z.number().int().positive(),
     page: zod_1.z.number().int().positive().default(1),
     limit: zod_1.z.number().int().positive().max(100).default(20),
-}).strict();
+})
+    .strict();
 /**
  * Single customer-notification item returned by the read API (Packet 3E).
  * Carries ONLY low-sensitivity fields — never raw PAN/Aadhaar/bank/salary.
  */
-exports.CustomerNotificationResponseSchema = zod_1.z.object({
+exports.CustomerNotificationResponseSchema = zod_1.z
+    .object({
     id: zod_1.z.number().int().positive(),
     type: zod_1.z.string().min(1),
     title: zod_1.z.string().min(1),
@@ -170,7 +183,8 @@ exports.CustomerNotificationResponseSchema = zod_1.z.object({
     is_read: zod_1.z.boolean(),
     booking_id: zod_1.z.number().int().positive().nullable(),
     created_at: zod_1.z.string().datetime(),
-}).strict();
+})
+    .strict();
 // ─────────────────────────────────────────────────────────────
 // PORTAL / INTEGRATION METRICS — Phase 11 Packet 3G
 // ─────────────────────────────────────────────────────────────
@@ -185,22 +199,37 @@ exports.CustomerNotificationResponseSchema = zod_1.z.object({
  * - Authenticated via a user JWT + ADMIN_SYSTEM_METRICS — NEVER the Portal
  *   service token (the Portal must not read cross-tenant aggregate data).
  */
-exports.IntegrationMetricsQuerySchema = zod_1.z.object({
-    from: zod_1.z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'from must be YYYY-MM-DD (IST)').optional(),
-    to: zod_1.z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'to must be YYYY-MM-DD (IST)').optional(),
+exports.IntegrationMetricsQuerySchema = zod_1.z
+    .object({
+    from: zod_1.z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/, 'from must be YYYY-MM-DD (IST)')
+        .optional(),
+    to: zod_1.z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/, 'to must be YYYY-MM-DD (IST)')
+        .optional(),
     includeTimeseries: zod_1.z.enum(['true', 'false']).optional(),
-}).strict();
+})
+    .strict();
 /**
  * Response shape for the metrics endpoint. Aggregates ONLY — no raw
  * IntegrationEvent payloads, PAN/Aadhaar, bank data, or other sensitive
  * information ever crosses this contract (3A–3G sensitive-data policy).
  */
-exports.IntegrationMetricsResponseSchema = zod_1.z.object({
+exports.IntegrationMetricsResponseSchema = zod_1.z
+    .object({
     generated_at: zod_1.z.string().datetime(),
     company_id: zod_1.z.number().int().positive(),
     range: zod_1.z.object({
-        from: zod_1.z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
-        to: zod_1.z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+        from: zod_1.z
+            .string()
+            .regex(/^\d{4}-\d{2}-\d{2}$/)
+            .nullable(),
+        to: zod_1.z
+            .string()
+            .regex(/^\d{4}-\d{2}-\d{2}$/)
+            .nullable(),
     }),
     handoffs: zod_1.z.object({
         total: zod_1.z.number().int().nonnegative(),
@@ -228,7 +257,10 @@ exports.IntegrationMetricsResponseSchema = zod_1.z.object({
         total: zod_1.z.number().int().nonnegative(),
         byType: zod_1.z.record(zod_1.z.number().int().nonnegative()),
     }),
-    timeseries: zod_1.z.object({
+    timeseries: zod_1.z
+        .object({
         days: zod_1.z.array(zod_1.z.record(zod_1.z.any())),
-    }).optional(),
-}).strict();
+    })
+        .optional(),
+})
+    .strict();

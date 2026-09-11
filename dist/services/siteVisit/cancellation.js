@@ -43,7 +43,7 @@ async function holdVisit(user, visitId) {
                 type: 'SYSTEM_ALERT',
                 title: 'Site Visit On Hold',
                 message: `Site visit ${visit.booking_code} is on hold. The telecaller could not reach the customer for reconfirmation.`,
-            }
+            },
         });
     }
     return result;
@@ -58,13 +58,19 @@ async function initiateCancellation(user, visitId) {
     if (!visit)
         throw { status: 404, message: 'Site visit booking not found' };
     if (!siteVisit_policy_1.SiteVisitPolicy.canHoldOrInitiateCancel(user, visit)) {
-        throw { status: 403, message: 'Forbidden: Only the assigned telecaller can initiate cancellation cross-check.' };
+        throw {
+            status: 403,
+            message: 'Forbidden: Only the assigned telecaller can initiate cancellation cross-check.',
+        };
     }
     // 1-hour-before-visit retry check
     const now = new Date();
     const oneHourBefore = new Date(visit.scheduled_date.getTime() - 60 * 60 * 1000);
     if (now < oneHourBefore) {
-        throw { status: 400, message: 'Cannot initiate cancellation cross-check until 1 hour before the scheduled visit.' };
+        throw {
+            status: 400,
+            message: 'Cannot initiate cancellation cross-check until 1 hour before the scheduled visit.',
+        };
     }
     const result = await (0, shared_2.applyTransition)(user, visitId, 'INITIATE_CANCEL', {}, 'SITE_VISIT_REQUESTED', `Site visit ${visit.booking_code} cancellation initiated (PM cross-check pending).`);
     if (visit.project_manager_id) {
@@ -74,7 +80,7 @@ async function initiateCancellation(user, visitId) {
                 type: 'ACTION_REQUIRED',
                 title: 'Cross-Check: Cancellation Pending',
                 message: `Telecaller cannot reach customer for ${visit.booking_code}. Have they responded to you? Please confirm or reject cancellation.`,
-            }
+            },
         });
     }
     return result;
@@ -99,7 +105,7 @@ async function rejectCancellation(user, visitId) {
                 type: 'SYSTEM_ALERT',
                 title: 'Cancellation Rejected by PM',
                 message: `PM indicates the customer for ${visit.booking_code} has responded. Visit is active again.`,
-            }
+            },
         });
     }
     return result;
@@ -114,7 +120,10 @@ async function confirmCancellation(user, visitId, reason) {
     if (!visit)
         throw { status: 404, message: 'Site visit booking not found' };
     if (!siteVisit_policy_1.SiteVisitPolicy.canConfirmCancel(user, visit)) {
-        throw { status: 403, message: 'Forbidden: Only the assigned PM can confirm this cancellation.' };
+        throw {
+            status: 403,
+            message: 'Forbidden: Only the assigned PM can confirm this cancellation.',
+        };
     }
     if (!reason || reason.trim() === '') {
         throw { status: 400, message: 'A cancellation reason must be provided.' };
@@ -122,7 +131,7 @@ async function confirmCancellation(user, visitId, reason) {
     // Pass cancellation details in the extra update payload
     const result = await (0, shared_2.applyTransition)(user, visitId, 'CONFIRM_CANCEL', {
         cancellation_reason: reason,
-        cancellation_confirmed_by_pm_id: user.employeeId
+        cancellation_confirmed_by_pm_id: user.employeeId,
     }, 'SITE_VISIT_COMPLETED', `Site visit ${visit.booking_code} cancellation confirmed by PM. Reason: ${reason}`);
     // No-Show Flagging (2 No-shows)
     const normalizedReason = reason.toLowerCase().replace(/[\s-]/g, '');
@@ -130,7 +139,7 @@ async function confirmCancellation(user, visitId, reason) {
         // Find telecaller's reporting manager
         const telecaller = await p.employee.findUnique({
             where: { id: visit.lead.assigned_to_id },
-            select: { reporting_manager_id: true }
+            select: { reporting_manager_id: true },
         });
         if (telecaller && telecaller.reporting_manager_id) {
             // Count previous no-shows
@@ -138,8 +147,8 @@ async function confirmCancellation(user, visitId, reason) {
                 where: {
                     lead_id: visit.lead_id,
                     status: 'CANCELLED',
-                    cancellation_reason: { contains: 'show' }
-                }
+                    cancellation_reason: { contains: 'show' },
+                },
             });
             // This count includes the current one since applyTransition just updated it
             if (previousNoShows >= 2) {
@@ -149,7 +158,7 @@ async function confirmCancellation(user, visitId, reason) {
                         type: 'SYSTEM_ALERT',
                         title: 'Customer No-Show Cap Exceeded',
                         message: `Customer ${visit.lead.customer_name} has hit the 2 No-Show cap. Please review this lead with the assigned telecaller.`,
-                    }
+                    },
                 });
             }
         }

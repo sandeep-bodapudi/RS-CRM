@@ -27,12 +27,12 @@ async function getLeads(user, take = 20, skip = 0) {
         },
         orderBy: { created_at: 'desc' },
     });
-    return leads.map(lead => {
+    return leads.map((lead) => {
         const canView = lead_policy_1.LeadPolicy.canView(user, lead);
         return {
             ...lead,
             introduced_by: canView ? lead.introduced_by : null, // RBAC enforcement for introduced_by
-            can_edit: lead_policy_1.LeadPolicy.canMutate(user, lead)
+            can_edit: lead_policy_1.LeadPolicy.canMutate(user, lead),
         };
     });
 }
@@ -60,7 +60,7 @@ async function getLeadById(user, leadId) {
                 include: { actor: { select: { id: true, employee_code: true, full_name: true } } },
             },
             preferred_locations: { orderBy: { sort_order: 'asc' } },
-        }
+        },
     });
     if (!lead) {
         // AppError (not a plain Error) so routes/leads.ts's handleServiceError
@@ -73,7 +73,7 @@ async function getLeadById(user, leadId) {
     return {
         ...lead,
         introduced_by: canView ? lead.introduced_by : null,
-        can_edit: lead_policy_1.LeadPolicy.canMutate(user, lead)
+        can_edit: lead_policy_1.LeadPolicy.canMutate(user, lead),
     };
 }
 exports.getLeadById = getLeadById;
@@ -93,7 +93,20 @@ async function getDistributionMonitor(companyId) {
         by: ['assigned_to_id'],
         where: {
             assigned_to_id: { in: telecallers.map((t) => t.id) },
-            status: { in: ['NEW', 'ASSIGNED', 'CONTACTED', 'QUALIFIED', 'DEMO_SCHEDULED', 'DEMO_COMPLETED', 'SITE_VISIT_SCHEDULED', 'SITE_VISIT_COMPLETED', 'NEGOTIATION', 'BOOKING_INITIATED'] },
+            status: {
+                in: [
+                    'NEW',
+                    'ASSIGNED',
+                    'CONTACTED',
+                    'QUALIFIED',
+                    'DEMO_SCHEDULED',
+                    'DEMO_COMPLETED',
+                    'SITE_VISIT_SCHEDULED',
+                    'SITE_VISIT_COMPLETED',
+                    'NEGOTIATION',
+                    'BOOKING_INITIATED',
+                ],
+            },
         },
         _count: { _all: true },
     });
@@ -132,7 +145,7 @@ async function getDistributionMonitor(companyId) {
 }
 exports.getDistributionMonitor = getDistributionMonitor;
 async function getMatches(user, leadId) {
-    const lead = await p.lead.findFirst({ where: { id: leadId, } });
+    const lead = await p.lead.findFirst({ where: { id: leadId } });
     if (!lead)
         throw new errors_1.AppError(404, 'Lead not found');
     if (!(0, authorization_1.can)(user, shared_1.Permissions.LEADS_READ, lead)) {
@@ -147,7 +160,7 @@ async function getMatches(user, leadId) {
 }
 exports.getMatches = getMatches;
 async function getLeadTasks(user, leadId) {
-    const lead = await p.lead.findFirst({ where: { id: leadId, } });
+    const lead = await p.lead.findFirst({ where: { id: leadId } });
     if (!lead)
         throw new errors_1.AppError(404, 'Lead not found');
     if (!(0, authorization_1.can)(user, shared_1.Permissions.LEADS_READ, lead)) {
@@ -162,7 +175,7 @@ async function getLeadTasks(user, leadId) {
 }
 exports.getLeadTasks = getLeadTasks;
 async function getPropertyInterests(user, leadId) {
-    const lead = await p.lead.findFirst({ where: { id: leadId, } });
+    const lead = await p.lead.findFirst({ where: { id: leadId } });
     if (!lead)
         throw new errors_1.AppError(404, 'Lead not found');
     if (!(0, authorization_1.can)(user, shared_1.Permissions.LEADS_READ, lead)) {
@@ -179,12 +192,12 @@ async function getPropertyInterests(user, leadId) {
                     location: true,
                     final_price: true,
                     status: true,
-                    assigned_pm: { select: { id: true, full_name: true } }
-                }
+                    assigned_pm: { select: { id: true, full_name: true } },
+                },
             },
-            creator: { select: { id: true, full_name: true } }
+            creator: { select: { id: true, full_name: true } },
         },
-        orderBy: { created_at: 'desc' }
+        orderBy: { created_at: 'desc' },
     });
     return interests;
 }

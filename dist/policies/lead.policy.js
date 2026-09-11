@@ -34,8 +34,7 @@ class LeadPolicy {
             return true;
         }
         // Telecallers/Agents: Assigned access only
-        return (lead.assigned_to_id === user.employeeId ||
-            lead.created_by_id === user.employeeId);
+        return lead.assigned_to_id === user.employeeId || lead.created_by_id === user.employeeId;
     }
     /**
      * Determines if the user is permitted to mutate (update status/properties) the lead.

@@ -41,10 +41,7 @@ async function createLead(user, dto, opts) {
     const existingLead = await p.lead.findFirst({
         where: {
             company_id: user.companyId,
-            OR: [
-                { phone: dto.phone },
-                ...(dto.email ? [{ email: dto.email }] : [])
-            ]
+            OR: [{ phone: dto.phone }, ...(dto.email ? [{ email: dto.email }] : [])],
         },
         include: {
             assigned_to: { select: { id: true, full_name: true, employee_code: true } },
@@ -52,9 +49,9 @@ async function createLead(user, dto, opts) {
                 where: { status: { in: ['CANCELLED'] } },
                 include: { property: { select: { title: true, status: true } } },
                 orderBy: { created_at: 'desc' },
-                take: 1
-            }
-        }
+                take: 1,
+            },
+        },
     });
     if (existingLead) {
         const isDropped = existingLead.status === 'DROPPED' || existingLead.status === 'CANCELLED';
@@ -67,8 +64,8 @@ async function createLead(user, dto, opts) {
                     lead_id: existingLead.id,
                     actor_id: user.employeeId || existingLead.assigned_to_id || 1,
                     activity_type: 'NOTE_ADDED',
-                    notes: `Duplicate entry attempt via ${sourceName}. Customer re-inquired.`
-                }
+                    notes: `Duplicate entry attempt via ${sourceName}. Customer re-inquired.`,
+                },
             });
             if (existingLead.assigned_to_id) {
                 await p.notification.create({
@@ -76,15 +73,15 @@ async function createLead(user, dto, opts) {
                         employee_id: existingLead.assigned_to_id,
                         type: 'SYSTEM_ALERT',
                         title: 'Active Lead Re-Inquiry',
-                        message: `Your active lead ${existingLead.lead_code} (${existingLead.customer_name}) submitted a new inquiry via ${sourceName}.`
-                    }
+                        message: `Your active lead ${existingLead.lead_code} (${existingLead.customer_name}) submitted a new inquiry via ${sourceName}.`,
+                    },
                 });
                 // Web push to assigned employee (outside transaction)
                 (0, notifyEmployee_1.notifyEmployee)(existingLead.assigned_to_id, {
                     type: 'SYSTEM_ALERT',
                     title: 'Active Lead Re-Inquiry',
                     message: `Your lead ${existingLead.lead_code} (${existingLead.customer_name}) submitted a new inquiry.`,
-                }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] Lead re-inquiry notify:', err));
+                }, { skipDbNotification: true }).catch((err) => logger_1.logger.error('[WebPush] Lead re-inquiry notify:', err));
             }
             return { lead: existingLead };
         }
@@ -101,16 +98,16 @@ async function createLead(user, dto, opts) {
                         assigned_to_id: null,
                         assigned_at: null,
                         exit_reason: null,
-                        exited_from_status: null
-                    }
+                        exited_from_status: null,
+                    },
                 });
                 await p.leadActivity.create({
                     data: {
                         lead_id: existingLead.id,
                         actor_id: user.employeeId || 1,
                         activity_type: 'LEAD_RECOVERED',
-                        notes: `Lead automatically recovered to POOL due to new inquiry via ${dto.source}.`
-                    }
+                        notes: `Lead automatically recovered to POOL due to new inquiry via ${dto.source}.`,
+                    },
                 });
                 return { lead: recovered };
             }
@@ -127,10 +124,12 @@ async function createLead(user, dto, opts) {
                     preferred_location: existingLead.preferred_location,
                     property_type_preference: existingLead.property_type_preference,
                     previous_owner: existingLead.assigned_to?.full_name || 'Unassigned',
-                    previous_site_visit: existingLead.site_visits?.[0] ? {
-                        property_title: existingLead.site_visits[0].property?.title,
-                        property_status: existingLead.site_visits[0].property?.status
-                    } : null
+                    previous_site_visit: existingLead.site_visits?.[0]
+                        ? {
+                            property_title: existingLead.site_visits[0].property?.title,
+                            property_status: existingLead.site_visits[0].property?.status,
+                        }
+                        : null,
                 };
                 // We stringify the JSON payload in the message so the frontend can parse it.
                 // Or we can throw a custom object. AppError only takes string message.
@@ -138,7 +137,7 @@ async function createLead(user, dto, opts) {
                 throw new errors_1.AppError(409, JSON.stringify({
                     code: 'RECOVERABLE_LEAD',
                     message: `Lead ${existingLead.lead_code} previously existed and was ${existingLead.status}.`,
-                    existingLead: historicalContext
+                    existingLead: historicalContext,
                 }));
             }
         }
@@ -148,7 +147,7 @@ async function createLead(user, dto, opts) {
     let assignedToId = null;
     let assignmentType = null;
     let status = 'NEW';
-    let ownershipType = isPublicSubmission ? 'POOL' : (dto.ownership_type || 'POOL');
+    let ownershipType = isPublicSubmission ? 'POOL' : dto.ownership_type || 'POOL';
     let bestAssignee = null;
     if (isChannelPartner) {
         // Phase-19 audit #9: a CPM lead traces back to an external agent who
@@ -187,7 +186,7 @@ async function createLead(user, dto, opts) {
     let validReferralEmployeeId = null;
     if (dto.source === 'REFERRAL' && dto.referral_employee_id) {
         const refEmp = await p.employee.findFirst({
-            where: { id: dto.referral_employee_id, }
+            where: { id: dto.referral_employee_id },
         });
         if (!refEmp) {
             throw new errors_1.AppError(400, 'Invalid or cross-company referral employee.');
@@ -229,12 +228,12 @@ async function createLead(user, dto, opts) {
                 utm_campaign: dto.utm_campaign || null,
                 lead_score: leadScore,
                 sla_breach_at: slaBreachAt,
-                referral_person_name: dto.source === 'REFERRAL' ? (dto.referral_person_name || null) : null,
+                referral_person_name: dto.source === 'REFERRAL' ? dto.referral_person_name || null : null,
                 referral_employee_id: validReferralEmployeeId,
                 external_agent_name: isChannelPartner ? dto.external_agent_name : null,
                 external_agent_phone: isChannelPartner ? dto.external_agent_phone : null,
                 external_agent_associate_id: isChannelPartner ? dto.external_agent_associate_id : null,
-                external_agent_company: isChannelPartner ? (dto.external_agent_company || null) : null,
+                external_agent_company: isChannelPartner ? dto.external_agent_company || null : null,
             },
         });
         if (dto.preferred_locations && dto.preferred_locations.length > 0) {
@@ -270,7 +269,7 @@ async function createLead(user, dto, opts) {
                 type: 'TARGET_ASSIGNED',
                 title: 'New Lead Auto-Assigned',
                 message: `New Lead ${lead.customer_name} (${lead.phone}) has been assigned to you.`,
-            }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] Lead auto-assign notify:', err));
+            }, { skipDbNotification: true }).catch((err) => logger_1.logger.error('[WebPush] Lead auto-assign notify:', err));
         }
         return { lead, assignedTo: bestAssignee };
     });

@@ -15,7 +15,7 @@ async function listVisits(user, filters) {
     const whereCondition = siteVisit_policy_1.SiteVisitPolicy.canList(user);
     if (filters.escalated) {
         whereCondition.status = {
-            in: ['PENDING_ACCEPTANCE', 'ESCALATED_TO_MARKETING_DIRECTOR']
+            in: ['PENDING_ACCEPTANCE', 'ESCALATED_TO_MARKETING_DIRECTOR'],
         };
         whereCondition.OR = [
             { status: 'ESCALATED_TO_MARKETING_DIRECTOR' },
@@ -23,10 +23,10 @@ async function listVisits(user, filters) {
                 escalation: {
                     OR: [
                         { marketing_director_notified_at: { not: null } },
-                        { managing_director_notified_at: { not: null } }
-                    ]
-                }
-            }
+                        { managing_director_notified_at: { not: null } },
+                    ],
+                },
+            },
         ];
     }
     else if (filters.status) {
@@ -38,7 +38,16 @@ async function listVisits(user, filters) {
     const visits = await p.siteVisitBooking.findMany({
         where: whereCondition,
         include: {
-            lead: { select: { id: true, lead_code: true, customer_name: true, phone: true, preferred_location: true, company_id: true } },
+            lead: {
+                select: {
+                    id: true,
+                    lead_code: true,
+                    customer_name: true,
+                    phone: true,
+                    preferred_location: true,
+                    company_id: true,
+                },
+            },
             telecaller: { select: { id: true, employee_code: true, full_name: true, phone: true } },
             project_manager: { select: { id: true, employee_code: true, full_name: true, phone: true } },
             assigned_agent: { select: { id: true, employee_code: true, full_name: true, phone: true } },
@@ -83,15 +92,18 @@ async function listVisits(user, filters) {
 exports.listVisits = listVisits;
 /** bookVisit: create the booking (REQUESTED) + property links, auto-route to PENDING_ACCEPTANCE. */
 async function bookVisit(user, data) {
-    const lead = await p.lead.findFirst({ where: { id: data.lead_id, } });
+    const lead = await p.lead.findFirst({ where: { id: data.lead_id } });
     if (!lead) {
         throw { status: 404, message: 'Lead not found' };
     }
     if (!(0, authorization_1.can)(user, shared_1.Permissions.SITE_VISITS_CREATE, lead)) {
-        throw { status: 403, message: 'Forbidden: Missing site_visits.create permission or Lead is not in your company' };
+        throw {
+            status: 403,
+            message: 'Forbidden: Missing site_visits.create permission or Lead is not in your company',
+        };
     }
     if (data.opportunity_id) {
-        const opportunity = await p.opportunity.findFirst({ where: { id: data.opportunity_id, } });
+        const opportunity = await p.opportunity.findFirst({ where: { id: data.opportunity_id } });
         if (!opportunity) {
             throw { status: 404, message: 'Opportunity not found' };
         }
@@ -104,16 +116,23 @@ async function bookVisit(user, data) {
     }
     const propertyIds = Array.isArray(data.property_ids)
         ? data.property_ids
-        : (data.property_id ? [data.property_id] : []);
+        : data.property_id
+            ? [data.property_id]
+            : [];
     if (propertyIds.length > 0) {
-        const props = await p.property.findMany({ where: { id: { in: propertyIds }, company_id: user.companyId } });
+        const props = await p.property.findMany({
+            where: { id: { in: propertyIds }, company_id: user.companyId },
+        });
         if (props.length !== propertyIds.length) {
             throw { status: 404, message: 'One or more properties not found' };
         }
         // §2 constraint: same project.
         const projects = new Set(props.map((pr) => pr.project_id).filter(Boolean));
         if (projects.size > 1) {
-            throw { status: 400, message: '§2: All properties in a single site visit must belong to the same project.' };
+            throw {
+                status: 400,
+                message: '§2: All properties in a single site visit must belong to the same project.',
+            };
         }
     }
     const { projectId, pmId } = await (0, shared_2.resolveVisitProject)(data, user.companyId || 1);
@@ -156,15 +175,18 @@ async function bookVisit(user, data) {
         }
         const updatedBooking = await tx.siteVisitBooking.update({
             where: { id: booking.id },
-            data: { status: route.nextState, project_manager_id: pmId ?? undefined },
+            data: {
+                status: route.nextState,
+                project_manager_id: pmId ?? undefined,
+            },
             include: {
                 lead: true,
                 property: true,
                 project: true,
                 telecaller: true,
                 project_manager: true,
-                assigned_agent: true
-            }
+                assigned_agent: true,
+            },
         });
         // Activity log
         await tx.leadActivity.create({
@@ -191,19 +213,19 @@ async function bookVisit(user, data) {
                 type: 'TARGET_ASSIGNED',
                 title: 'New Site Visit to Accept',
                 message: `Site visit ${updatedBooking.booking_code} requires your acceptance.`,
-            }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] Site visit route PM:', err));
+            }, { skipDbNotification: true }).catch((err) => logger_1.logger.error('[WebPush] Site visit route PM:', err));
         }
         else {
             // Immediate Escalation Fallback for unmapped PM
             await tx.siteVisitEscalation.create({
                 data: {
                     site_visit_booking_id: booking.id,
-                    marketing_director_notified_at: new Date()
-                }
+                    marketing_director_notified_at: new Date(),
+                },
             });
             const marketingDirectors = await tx.employee.findMany({
                 where: { roles: { some: { role: { name: shared_1.Roles.MARKETING_DIRECTOR } } }, status: 'ACTIVE' },
-                select: { id: true }
+                select: { id: true },
             });
             if (marketingDirectors.length > 0) {
                 await tx.notification.createMany({
@@ -212,7 +234,7 @@ async function bookVisit(user, data) {
                         type: 'SYSTEM_ALERT',
                         title: 'Unassigned Site Visit',
                         message: `Site visit ${updatedBooking.booking_code} has no active project PM. Please reassign manually.`,
-                    }))
+                    })),
                 });
                 // Web push to marketing directors (outside transaction)
                 for (const md of marketingDirectors) {
@@ -220,7 +242,7 @@ async function bookVisit(user, data) {
                         type: 'SYSTEM_ALERT',
                         title: 'Unassigned Site Visit',
                         message: `Site visit ${updatedBooking.booking_code} has no active project PM — please reassign.`,
-                    }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] Site visit escalation MD:', err));
+                    }, { skipDbNotification: true }).catch((err) => logger_1.logger.error('[WebPush] Site visit escalation MD:', err));
                 }
             }
         }

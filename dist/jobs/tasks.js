@@ -69,7 +69,12 @@ async function leadsInactiveSince(cutoff) {
         const lastActivity = lead.activities[0]?.created_at ?? lead.created_at;
         return lastActivity < cutoff;
     })
-        .map(({ id, lead_code, customer_name, assigned_to_id }) => ({ id, lead_code, customer_name, assigned_to_id }));
+        .map(({ id, lead_code, customer_name, assigned_to_id }) => ({
+        id,
+        lead_code,
+        customer_name,
+        assigned_to_id,
+    }));
 }
 // 1. Lead follow-up reminders — an active lead with no logged activity in 2+
 // days gets a reminder nudge sent to whoever it's assigned to. Runs daily by
@@ -123,14 +128,24 @@ const staleLeadFlaggingJob = async () => {
             continue;
         const assignee = await prisma_1.prisma.employee.findUnique({
             where: { id: lead.assigned_to_id },
-            select: { id: true, full_name: true, employee_code: true, reporting_manager_id: true, company_id: true },
+            select: {
+                id: true,
+                full_name: true,
+                employee_code: true,
+                reporting_manager_id: true,
+                company_id: true,
+            },
         });
         if (!assignee)
             continue;
         let recipientId = assignee.reporting_manager_id;
         if (!recipientId) {
             const md = await prisma_1.prisma.employee.findFirst({
-                where: { company_id: assignee.company_id, status: 'ACTIVE', roles: { some: { role: { name: shared_1.Roles.MD } } } },
+                where: {
+                    company_id: assignee.company_id,
+                    status: 'ACTIVE',
+                    roles: { some: { role: { name: shared_1.Roles.MD } } },
+                },
                 select: { id: true },
             });
             recipientId = md?.id ?? null;
@@ -197,7 +212,9 @@ const dailyAttendanceRollupJob = async (referenceDate = new Date()) => {
     // ---- Part 1: force-checkout anyone still checked in ----
     const openLogs = await prisma_1.prisma.attendanceLog.findMany({
         where: { check_out_at: null, check_in_at: { lt: midnightInstant } },
-        include: { employee: { select: { id: true, company_id: true, full_name: true, employee_code: true } } },
+        include: {
+            employee: { select: { id: true, company_id: true, full_name: true, employee_code: true } },
+        },
     });
     if (openLogs.length === 0) {
         logger_1.logger.info('No open check-ins to close.');
@@ -216,7 +233,10 @@ const dailyAttendanceRollupJob = async (referenceDate = new Date()) => {
                 await prisma_1.prisma.$transaction([
                     prisma_1.prisma.attendanceLog.update({
                         where: { id: log.id },
-                        data: { check_out_at: midnightInstant, working_duration_minutes: Math.max(0, durationMinutes) },
+                        data: {
+                            check_out_at: midnightInstant,
+                            working_duration_minutes: Math.max(0, durationMinutes),
+                        },
                     }),
                     prisma_1.prisma.auditEvent.create({
                         data: {
@@ -270,7 +290,10 @@ const dailyAttendanceRollupJob = async (referenceDate = new Date()) => {
             });
             const [loggedIds, approvedLeaveIds] = await Promise.all([
                 prisma_1.prisma.attendanceLog.findMany({
-                    where: { employee_id: { in: staff.map((s) => s.id) }, check_in_at: { gte: yesterdayStart, lt: midnightInstant } },
+                    where: {
+                        employee_id: { in: staff.map((s) => s.id) },
+                        check_in_at: { gte: yesterdayStart, lt: midnightInstant },
+                    },
                     select: { employee_id: true },
                 }),
                 prisma_1.prisma.attendanceProposal.findMany({
@@ -283,7 +306,10 @@ const dailyAttendanceRollupJob = async (referenceDate = new Date()) => {
                     select: { employee_id: true },
                 }),
             ]);
-            const excusedIds = new Set([...loggedIds.map((l) => l.employee_id), ...approvedLeaveIds.map((p) => p.employee_id)]);
+            const excusedIds = new Set([
+                ...loggedIds.map((l) => l.employee_id),
+                ...approvedLeaveIds.map((p) => p.employee_id),
+            ]);
             let absentees = staff.filter((s) => !excusedIds.has(s.id));
             if (absentees.length === 0)
                 continue;
@@ -418,7 +444,19 @@ const backupVerificationJob = async () => {
     try {
         // Password via env var (MYSQL_PWD), not a CLI arg — a CLI arg would be
         // visible to anyone who can list processes on the host.
-        await execFileAsync('mysqldump', ['--host', host, '--port', port, '--user', user, '--single-transaction', '--quick', database, '--result-file', outFile], { env: { ...process.env, MYSQL_PWD: password }, timeout: 5 * 60 * 1000 });
+        await execFileAsync('mysqldump', [
+            '--host',
+            host,
+            '--port',
+            port,
+            '--user',
+            user,
+            '--single-transaction',
+            '--quick',
+            database,
+            '--result-file',
+            outFile,
+        ], { env: { ...process.env, MYSQL_PWD: password }, timeout: 5 * 60 * 1000 });
         const stats = fs.statSync(outFile);
         if (stats.size < MIN_VALID_BACKUP_BYTES) {
             throw new Error(`Backup file is only ${stats.size} bytes — export likely failed partway through.`);
@@ -441,7 +479,7 @@ const backupVerificationJob = async () => {
         const isMissingBinary = err?.code === 'ENOENT';
         const reason = isMissingBinary
             ? 'mysqldump is not installed / not on PATH in this environment — this job cannot run here at all.'
-            : (err?.message || String(err));
+            : err?.message || String(err);
         logger_1.logger.error(`[Jobs] Backup verification FAILED: ${reason}`);
         await notifyAllCompanyMDs('⚠️ Nightly backup verification failed', reason).catch(() => { });
     }
@@ -682,7 +720,10 @@ const inventoryLockAndHoldExpirySweepJob = async () => {
             return false;
         await tx.booking.update({
             where: { id: booking.id },
-            data: { status: 'CANCELLED', notes: `${booking.notes ? booking.notes + ' | ' : ''}Auto-cancelled: hold expired without confirmation.` },
+            data: {
+                status: 'CANCELLED',
+                notes: `${booking.notes ? booking.notes + ' | ' : ''}Auto-cancelled: hold expired without confirmation.`,
+            },
         });
         return true;
     };
@@ -690,7 +731,10 @@ const inventoryLockAndHoldExpirySweepJob = async () => {
         await prisma_1.prisma.$transaction(async (tx) => {
             if (await cancelStaleBookingIfPending(tx, row.locked_by_booking_id))
                 cancelledBookings++;
-            await tx.property.update({ where: { id: row.id }, data: { status: 'LIVE', locked_until: null, locked_by_booking_id: null } });
+            await tx.property.update({
+                where: { id: row.id },
+                data: { status: 'LIVE', locked_until: null, locked_by_booking_id: null },
+            });
         });
         releasedLocks++;
     }
@@ -698,7 +742,10 @@ const inventoryLockAndHoldExpirySweepJob = async () => {
         await prisma_1.prisma.$transaction(async (tx) => {
             if (await cancelStaleBookingIfPending(tx, row.locked_by_booking_id))
                 cancelledBookings++;
-            await tx.projectUnit.update({ where: { id: row.id }, data: { sales_status: 'AVAILABLE', locked_until: null, locked_by_booking_id: null } });
+            await tx.projectUnit.update({
+                where: { id: row.id },
+                data: { sales_status: 'AVAILABLE', locked_until: null, locked_by_booking_id: null },
+            });
         });
         releasedLocks++;
     }

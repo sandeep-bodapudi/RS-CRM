@@ -37,7 +37,9 @@ router.put('/:id/amenities/:amenityId', auth_1.authenticateToken, (0, authz_1.re
         const projectId = parseInt(req.params.id, 10);
         const amenityId = parseInt(req.params.amenityId, 10);
         const projectAmenity = await amenity_service_1.AmenityService.setProjectAmenity(req.user, projectId, amenityId, req.body);
-        return res.status(200).json({ message: 'Amenity configuration saved', amenity: projectAmenity });
+        return res
+            .status(200)
+            .json({ message: 'Amenity configuration saved', amenity: projectAmenity });
     }
     catch (error) {
         logger_1.logger.error('Set project amenity error:', error);

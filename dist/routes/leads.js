@@ -40,7 +40,9 @@ const router = (0, express_1.Router)();
 // Helper to catch and route AppErrors to HTTP responses
 const handleServiceError = (error, res) => {
     if (error instanceof lead_service_1.AppError || error.name === 'AppError' || error.statusCode) {
-        return res.status(error.statusCode || 400).json({ error: error.message, code: error.code });
+        return res
+            .status(error.statusCode || 400)
+            .json({ error: error.message, code: error.code });
     }
     logger_1.logger.error('Unhandled route error:', error);
     return res.status(500).json({ error: 'Internal Server Error' });
@@ -138,8 +140,14 @@ router.post('/:id/assign', auth_1.authenticateToken, (0, authz_1.requireAuthz)(s
 router.patch('/:id/status', auth_1.authenticateToken, (0, authz_1.requireAuthz)(shared_1.Permissions.LEADS_UPDATE), (0, validate_1.validateRequestBody)(shared_1.LeadStatusUpdateSchema), async (req, res) => {
     try {
         const leadId = parseInt(req.params.id, 10);
-        const { status, notes, exit_reason, exit_reason_detail, demo_scheduled_at, demo_handler_id, qualification } = req.body;
-        const updated = await lead_service_1.LeadService.updateLeadStatus(req.user, leadId, status, notes, { exit_reason, exit_reason_detail, demo_scheduled_at, demo_handler_id, qualification });
+        const { status, notes, exit_reason, exit_reason_detail, demo_scheduled_at, demo_handler_id, qualification, } = req.body;
+        const updated = await lead_service_1.LeadService.updateLeadStatus(req.user, leadId, status, notes, {
+            exit_reason,
+            exit_reason_detail,
+            demo_scheduled_at,
+            demo_handler_id,
+            qualification,
+        });
         return res.status(200).json({
             message: `Lead ${updated.lead_code} status updated to ${status}`,
             lead: updated,
@@ -165,14 +173,18 @@ router.patch('/:id', auth_1.authenticateToken, (0, authz_1.requireAuthz)(shared_
                 data: {
                     budget_min: updateData.budget_min !== undefined ? updateData.budget_min : undefined,
                     budget_max: updateData.budget_max !== undefined ? updateData.budget_max : undefined,
-                    property_type_preference: updateData.property_type_preference !== undefined ? updateData.property_type_preference : undefined,
+                    property_type_preference: updateData.property_type_preference !== undefined
+                        ? updateData.property_type_preference
+                        : undefined,
                     // Full multi-location list (§ Phase 2) wins over the legacy single
                     // field when both are sent — its first entry becomes the primary.
                     preferred_location: updateData.preferred_locations && updateData.preferred_locations.length > 0
                         ? updateData.preferred_locations[0]
-                        : (updateData.preferred_location !== undefined ? updateData.preferred_location : undefined),
+                        : updateData.preferred_location !== undefined
+                            ? updateData.preferred_location
+                            : undefined,
                     notes: updateData.notes !== undefined ? updateData.notes : undefined,
-                }
+                },
             });
             if (updateData.preferred_locations !== undefined) {
                 await (0, shared_2.syncLeadPreferredLocations)(tx, leadId, updateData.preferred_locations || []);
@@ -187,7 +199,7 @@ router.patch('/:id', auth_1.authenticateToken, (0, authz_1.requireAuthz)(shared_
                     actor_id: req.user.employeeId,
                     activity_type: 'QUALIFIED',
                     notes: 'Lead qualification details updated manually.',
-                }
+                },
             });
         }
         return res.status(200).json({
@@ -315,7 +327,7 @@ router.post('/:id/recover-manual', auth_1.authenticateToken, (0, authz_1.require
         const recovered = await lead_service_1.LeadService.recoverManualLead(req.user, leadId);
         return res.status(200).json({
             message: 'Lead manually recovered successfully',
-            lead: recovered
+            lead: recovered,
         });
     }
     catch (error) {
@@ -330,7 +342,7 @@ async (req, res) => {
         const freshLead = await lead_service_1.LeadService.recoverFreshLead(req.user, leadId);
         return res.status(201).json({
             message: 'Fresh lead created successfully from history',
-            lead: freshLead
+            lead: freshLead,
         });
     }
     catch (error) {

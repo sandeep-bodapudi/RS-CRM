@@ -30,14 +30,19 @@ async function resolveVisitProject(data, companyId) {
     let projectId = data.project_id ?? null;
     const propertyIds = data.property_ids && Array.isArray(data.property_ids)
         ? data.property_ids
-        : (data.property_id ? [data.property_id] : []);
+        : data.property_id
+            ? [data.property_id]
+            : [];
     if (propertyIds.length > 0) {
         const properties = await p.property.findMany({
             where: { id: { in: propertyIds }, company_id: companyId },
         });
         const projects = new Set(properties.map((pr) => pr.project_id).filter(Boolean));
         if (projects.size > 1) {
-            throw { status: 400, message: '§2: All properties in a single site visit must belong to the same project.' };
+            throw {
+                status: 400,
+                message: '§2: All properties in a single site visit must belong to the same project.',
+            };
         }
         if (projects.size === 1) {
             projectId = [...projects][0];

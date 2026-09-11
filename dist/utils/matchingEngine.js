@@ -156,9 +156,7 @@ async function resolveWhatsAppTextForProperty(lead, prop) {
     // Do NOT hardcode the production template here — this is only a
     // no-broken-experience stopgap. The real content lives in the
     // MessageTemplate table row for LEAD_QUALIFIED_PROPERTIES.
-    const brandName = prop.brand_type === 'SONTHILLU'
-        ? 'SONTHILLU RESIDENTIAL'
-        : 'RADHA REAL HOMES';
+    const brandName = prop.brand_type === 'SONTHILLU' ? 'SONTHILLU RESIDENTIAL' : 'RADHA REAL HOMES';
     return `🏡 *EXCLUSIVE PROPERTY PROPOSAL FROM ${brandName}*
 
 Dear *${lead.customer_name}*,
@@ -171,13 +169,10 @@ We found a premium property matching your exact requirements!
 🧭 *Facing*: ${prop.facing || 'East'}
 💰 *Asking Price*: ₹${(prop.final_price / 100000).toFixed(1)} Lakhs
 
-📝 *Highlights*: ${prop.description ||
-        'Prime location with high growth potential and immediate registration.'}
+📝 *Highlights*: ${prop.description || 'Prime location with high growth potential and immediate registration.'}
 
 📞 *Your Dedicated Relationship Manager*:
-${lead.assigned_to?.full_name ||
-        lead.assigned_to?.employee_code ||
-        'Radha Real Homes Advisory Desk'} (${lead.assigned_to?.phone || '+91 99000 11222'})
+${lead.assigned_to?.full_name || lead.assigned_to?.employee_code || 'Radha Real Homes Advisory Desk'} (${lead.assigned_to?.phone || '+91 99000 11222'})
 
 Reply to this message or call us directly to schedule an exclusive site visit!`;
 }
@@ -188,7 +183,7 @@ Reply to this message or call us directly to schedule an exclusive site visit!`;
  */
 const matchDroppedLeadsToProperty = async (propertyId) => {
     const prop = await p.property.findUnique({
-        where: { id: propertyId }
+        where: { id: propertyId },
     });
     if (!prop || prop.status !== 'LIVE')
         return [];
@@ -197,7 +192,7 @@ const matchDroppedLeadsToProperty = async (propertyId) => {
         where: {
             company_id: prop.company_id,
             status: 'DROPPED',
-            exit_reason: 'NO_MATCHING_INVENTORY'
+            exit_reason: 'NO_MATCHING_INVENTORY',
         },
         include: { preferred_locations: true },
     });

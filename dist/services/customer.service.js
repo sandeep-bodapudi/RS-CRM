@@ -61,7 +61,7 @@ class CustomerService {
             }
         }
         if (dto.assigned_to_id) {
-            const emp = await p.employee.findFirst({ where: { id: dto.assigned_to_id, } });
+            const emp = await p.employee.findFirst({ where: { id: dto.assigned_to_id } });
             if (!emp) {
                 throw new AppError(400, 'Assigned employee not found or cross-company assignment');
             }
@@ -156,7 +156,7 @@ class CustomerService {
         });
     }
     static async upsertFromLead(user, leadId, tx) {
-        const lead = await tx.lead.findUnique({ where: { id: leadId, } });
+        const lead = await tx.lead.findUnique({ where: { id: leadId } });
         if (!lead) {
             throw new AppError(404, 'Lead not found or access denied');
         }

@@ -30,7 +30,7 @@ router.post('/login', rateLimiter_1.loginRateLimiter, (0, validate_1.validateReq
                 roles: {
                     include: {
                         role: {
-                            include: { permissions: { include: { permission: true } } }
+                            include: { permissions: { include: { permission: true } } },
                         },
                     },
                 },
@@ -44,8 +44,8 @@ router.post('/login', rateLimiter_1.loginRateLimiter, (0, validate_1.validateReq
                     action: 'SECURITY_ALERT',
                     entity_type: 'AUTH_FAILED',
                     entity_id: 0,
-                    new_value: `Attempted login with invalid/inactive code`
-                }
+                    new_value: `Attempted login with invalid/inactive code`,
+                },
             });
             return res.status(401).json({ error: 'Invalid credentials' });
         }
@@ -57,8 +57,8 @@ router.post('/login', rateLimiter_1.loginRateLimiter, (0, validate_1.validateReq
                     action: 'SECURITY_ALERT',
                     entity_type: 'AUTH_FAILED',
                     entity_id: employee.id,
-                    new_value: `Invalid password attempt`
-                }
+                    new_value: `Invalid password attempt`,
+                },
             });
             return res.status(401).json({ error: 'Invalid credentials' });
         }
@@ -96,8 +96,8 @@ router.post('/login', rateLimiter_1.loginRateLimiter, (0, validate_1.validateReq
                 employee_id: employee.id,
                 family_token: familyToken,
                 refresh_token_hash: refreshTokenHash,
-                expires_at: new Date(Date.now() + jwt_1.REFRESH_TOKEN_TTL_MS)
-            }
+                expires_at: new Date(Date.now() + jwt_1.REFRESH_TOKEN_TTL_MS),
+            },
         });
         // Reset rate limiter on success
         const ip = req.ip || req.headers['x-forwarded-for'] || 'UNKNOWN_IP';
@@ -175,19 +175,21 @@ router.post('/change-password', auth_1.authenticateToken, (0, validate_1.validat
                 data: {
                     password_hash: newHash,
                     first_login_done: true,
-                    token_version: { increment: 1 }
+                    token_version: { increment: 1 },
                 },
             });
             await tx.authSession.updateMany({
                 where: { employee_id: employeeId, revoked: false },
-                data: { revoked: true, revocation_reason: 'PASSWORD_CHANGED' }
+                data: { revoked: true, revocation_reason: 'PASSWORD_CHANGED' },
             });
         });
         // Fetch updated employee for new token version
         const updatedEmployee = await p.employee.findUnique({
             where: { id: employeeId },
             include: {
-                roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } },
+                roles: {
+                    include: { role: { include: { permissions: { include: { permission: true } } } } },
+                },
                 permission_overrides: { include: { permission: true } },
                 company: true,
                 branch: true,
@@ -230,8 +232,8 @@ router.post('/change-password', auth_1.authenticateToken, (0, validate_1.validat
                 employee_id: updatedEmployee.id,
                 family_token: familyToken,
                 refresh_token_hash: refreshTokenHash,
-                expires_at: new Date(Date.now() + jwt_1.REFRESH_TOKEN_TTL_MS)
-            }
+                expires_at: new Date(Date.now() + jwt_1.REFRESH_TOKEN_TTL_MS),
+            },
         });
         // Set httpOnly refresh cookie
         res.cookie('refreshToken', refreshToken, {
@@ -273,7 +275,9 @@ router.get('/me', auth_1.authenticateToken, async (req, res) => {
             include: {
                 company: true,
                 branch: true,
-                roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } },
+                roles: {
+                    include: { role: { include: { permissions: { include: { permission: true } } } } },
+                },
                 permission_overrides: { include: { permission: true } },
             },
         });
@@ -345,13 +349,15 @@ router.post('/refresh', rateLimiter_1.refreshRateLimiter, (0, validate_1.validat
             jsonwebtoken_1.default.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
         }
         catch (err) {
-            return res.status(401).json({ error: 'Invalid or expired refresh token', code: 'TOKEN_EXPIRED' });
+            return res
+                .status(401)
+                .json({ error: 'Invalid or expired refresh token', code: 'TOKEN_EXPIRED' });
         }
         const refreshTokenHash = crypto_1.default.createHash('sha256').update(refreshToken).digest('hex');
         // Find session inside transaction to prevent concurrent refresh races
         const result = await p.$transaction(async (tx) => {
             const session = await tx.authSession.findFirst({
-                where: { refresh_token_hash: refreshTokenHash }
+                where: { refresh_token_hash: refreshTokenHash },
             });
             if (!session)
                 return { error: 'Invalid session', status: 401 };
@@ -361,7 +367,7 @@ router.post('/refresh', rateLimiter_1.refreshRateLimiter, (0, validate_1.validat
                 // Reuse detection!
                 await tx.authSession.updateMany({
                     where: { family_token: session.family_token },
-                    data: { revoked: true, revocation_reason: 'REFRESH_TOKEN_REUSE_DETECTED' }
+                    data: { revoked: true, revocation_reason: 'REFRESH_TOKEN_REUSE_DETECTED' },
                 });
                 await tx.auditEvent.create({
                     data: {
@@ -369,21 +375,21 @@ router.post('/refresh', rateLimiter_1.refreshRateLimiter, (0, validate_1.validat
                         action: 'SECURITY_ALERT',
                         entity_type: 'TOKEN_FAMILY_REVOKED',
                         entity_id: session.employee_id,
-                        new_value: `Refresh token reuse detected`
-                    }
+                        new_value: `Refresh token reuse detected`,
+                    },
                 });
                 return { error: 'Session compromised', status: 401 };
             }
             // Mark old token as consumed ATOMICALLY
             const updateResult = await tx.authSession.updateMany({
                 where: { id: session.id, consumed: false },
-                data: { consumed: true }
+                data: { consumed: true },
             });
             if (updateResult.count === 0) {
                 // Concurrent refresh race condition: another request just consumed it!
                 await tx.authSession.updateMany({
                     where: { family_token: session.family_token },
-                    data: { revoked: true, revocation_reason: 'REFRESH_TOKEN_REUSE_DETECTED' }
+                    data: { revoked: true, revocation_reason: 'REFRESH_TOKEN_REUSE_DETECTED' },
                 });
                 await tx.auditEvent.create({
                     data: {
@@ -391,8 +397,8 @@ router.post('/refresh', rateLimiter_1.refreshRateLimiter, (0, validate_1.validat
                         action: 'SECURITY_ALERT',
                         entity_type: 'TOKEN_FAMILY_REVOKED',
                         entity_id: session.employee_id,
-                        new_value: `Refresh token reuse detected`
-                    }
+                        new_value: `Refresh token reuse detected`,
+                    },
                 });
                 return { error: 'Session compromised', status: 401 };
             }
@@ -411,9 +417,11 @@ router.post('/refresh', rateLimiter_1.refreshRateLimiter, (0, validate_1.validat
         const employee = await p.employee.findUnique({
             where: { id: session.employee_id },
             include: {
-                roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } },
+                roles: {
+                    include: { role: { include: { permissions: { include: { permission: true } } } } },
+                },
                 permission_overrides: { include: { permission: true } },
-            }
+            },
         });
         if (!employee || employee.status !== 'ACTIVE') {
             res.clearCookie('refreshToken');
@@ -451,8 +459,8 @@ router.post('/refresh', rateLimiter_1.refreshRateLimiter, (0, validate_1.validat
                 employee_id: employee.id,
                 family_token: session.family_token,
                 refresh_token_hash: newRefreshTokenHash,
-                expires_at: new Date(Date.now() + jwt_1.REFRESH_TOKEN_TTL_MS)
-            }
+                expires_at: new Date(Date.now() + jwt_1.REFRESH_TOKEN_TTL_MS),
+            },
         });
         res.cookie('refreshToken', newRefreshToken, {
             httpOnly: true,
@@ -474,7 +482,7 @@ router.post('/logout', (0, validate_1.validateRequestBody)(EmptyBodySchema), asy
         const refreshTokenHash = crypto_1.default.createHash('sha256').update(refreshToken).digest('hex');
         await p.authSession.updateMany({
             where: { refresh_token_hash: refreshTokenHash },
-            data: { revoked: true, revocation_reason: 'LOGGED_OUT' }
+            data: { revoked: true, revocation_reason: 'LOGGED_OUT' },
         });
     }
     res.clearCookie('refreshToken', { path: '/' });

@@ -59,10 +59,7 @@ async function buildLeadScope(user) {
     const downstreamIds = await (0, hierarchy_1.getDownstreamEmployeeIds)(user.companyId, user.employeeId);
     return {
         ...baseScope,
-        OR: [
-            { assigned_to_id: { in: downstreamIds } },
-            { created_by_id: { in: downstreamIds } },
-        ],
+        OR: [{ assigned_to_id: { in: downstreamIds } }, { created_by_id: { in: downstreamIds } }],
     };
 }
 exports.buildLeadScope = buildLeadScope;
@@ -113,10 +110,7 @@ async function buildPropertyScope(user) {
     if (user.roles.includes(shared_1.Roles.PROJECT_MANAGER)) {
         return {
             ...propertyBaseScope,
-            OR: [
-                { assigned_pm_id: user.employeeId },
-                { status: 'LIVE' },
-            ],
+            OR: [{ assigned_pm_id: user.employeeId }, { status: 'LIVE' }],
         };
     }
     // 3. TELECALLER, AGENT
@@ -155,10 +149,7 @@ async function buildProjectScope(user) {
     if (user.roles.includes(shared_1.Roles.PROJECT_MANAGER)) {
         return {
             ...baseScope,
-            OR: [
-                { assigned_pm_id: user.employeeId },
-                { verification_status: 'VERIFIED' },
-            ],
+            OR: [{ assigned_pm_id: user.employeeId }, { verification_status: 'VERIFIED' }],
         };
     }
     // 5. Everyone else — only see VERIFIED projects

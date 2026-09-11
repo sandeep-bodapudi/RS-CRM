@@ -36,10 +36,10 @@ exports.LeaveProposalSchema = zod_1.z.object({
 exports.AttendanceQRPayloadSchema = zod_1.z.object({
     qrPayload: zod_1.z.string().optional(),
     qr_token: zod_1.z.string().optional(),
-    payload: zod_1.z.string().optional()
+    payload: zod_1.z.string().optional(),
 });
 exports.AttendanceHolidaySchema = zod_1.z.object({
     date: zod_1.z.string(),
     name: zod_1.z.string(),
-    description: zod_1.z.string().optional()
+    description: zod_1.z.string().optional(),
 });

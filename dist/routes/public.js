@@ -78,7 +78,7 @@ exports.PUBLIC_PROPERTY_SELECT = {
             sort_order: true,
         },
         orderBy: [{ sort_order: 'asc' }, { created_at: 'asc' }],
-    }
+    },
 };
 /** Renames the selected `final_price` column back to `price` for the public
  * JSON response — keeps the external API contract unchanged even though the
@@ -153,7 +153,14 @@ const PUBLIC_PROJECT_DETAIL_SELECT = {
  * knows how to render — avoids touching four downstream codebases for a
  * field-name difference. */
 function unitToPublicPropertyShape(unit) {
-    const categoryMap = { FLAT: 'APARTMENT', PLOT: 'PLOT', VILLA: 'VILLA', HOUSE: 'INDEPENDENT_HOUSE', COMMERCIAL: 'COMMERCIAL', OTHER: 'OTHER' };
+    const categoryMap = {
+        FLAT: 'APARTMENT',
+        PLOT: 'PLOT',
+        VILLA: 'VILLA',
+        HOUSE: 'INDEPENDENT_HOUSE',
+        COMMERCIAL: 'COMMERCIAL',
+        OTHER: 'OTHER',
+    };
     const label = [unit.tower, unit.block, unit.unit_number].filter(Boolean).join(' ') || unit.unit_code;
     return {
         id: unit.id,
@@ -193,7 +200,7 @@ router.use(publicApiKey_1.authenticatePublicKey);
 router.get('/:brand/properties', async (req, res) => {
     try {
         const { brand } = req.params;
-        const { city, locality, location, listing_type, category, price_min, price_max, bedrooms, bedrooms_min, bedrooms_max, bathrooms, area_min, area_max, sort } = req.query;
+        const { city, locality, location, listing_type, category, price_min, price_max, bedrooms, bedrooms_min, bedrooms_max, bathrooms, area_min, area_max, sort, } = req.query;
         let companyId = null;
         if (brand.toLowerCase() === 'rrh') {
             companyId = req.apiKeyContext.company_id;
@@ -311,7 +318,9 @@ router.get('/:brand/properties', async (req, res) => {
                 finalBedroomsMin = bedRoomsMin;
             }
         }
-        if (finalBedroomsMin !== undefined && bedRoomsMax !== undefined && finalBedroomsMin > bedRoomsMax) {
+        if (finalBedroomsMin !== undefined &&
+            bedRoomsMax !== undefined &&
+            finalBedroomsMin > bedRoomsMax) {
             return res.status(400).json({ error: 'effective bedrooms minimum must be <= bedrooms_max' });
         }
         if (finalBedroomsMin !== undefined || (bedRoomsMax !== undefined && bedRoomsMax >= 0)) {
@@ -332,7 +341,10 @@ router.get('/:brand/properties', async (req, res) => {
         }
         // Phase 3: Location search (tokenized OR search across city/locality)
         if (location !== undefined && typeof location === 'string' && location.trim() !== '') {
-            const tokens = location.split(',').map((t) => t.trim()).filter(Boolean);
+            const tokens = location
+                .split(',')
+                .map((t) => t.trim())
+                .filter(Boolean);
             const uniqueTokens = [];
             const seenLower = new Set();
             for (const t of tokens) {
@@ -343,16 +355,15 @@ router.get('/:brand/properties', async (req, res) => {
                 }
             }
             if (uniqueTokens.length > 2) {
-                return res.status(400).json({ error: 'Location search supports a maximum of 2 tokens (e.g., Locality, City)' });
+                return res
+                    .status(400)
+                    .json({ error: 'Location search supports a maximum of 2 tokens (e.g., Locality, City)' });
             }
             if (uniqueTokens.length > 0) {
                 whereCondition.AND = whereCondition.AND || [];
                 for (const token of uniqueTokens) {
                     whereCondition.AND.push({
-                        OR: [
-                            { city: { equals: token } },
-                            { locality: { equals: token } }
-                        ]
+                        OR: [{ city: { equals: token } }, { locality: { equals: token } }],
                     });
                 }
             }
@@ -360,7 +371,9 @@ router.get('/:brand/properties', async (req, res) => {
         if (category !== undefined && typeof category === 'string' && category.trim() !== '') {
             whereCondition.category = category.trim();
         }
-        if (listing_type !== undefined && typeof listing_type === 'string' && listing_type.trim() !== '') {
+        if (listing_type !== undefined &&
+            typeof listing_type === 'string' &&
+            listing_type.trim() !== '') {
             whereCondition.listing_type = listing_type.trim();
         }
         // WR-7: Bathrooms filter (bathrooms >= requested value)

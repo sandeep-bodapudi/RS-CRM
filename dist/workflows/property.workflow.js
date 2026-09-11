@@ -22,7 +22,7 @@ class PropertyWorkflow {
         if (!allowedActions.includes(action)) {
             return {
                 allowed: false,
-                reason: `Invalid workflow transition: Cannot perform ${action} from state ${currentState}`
+                reason: `Invalid workflow transition: Cannot perform ${action} from state ${currentState}`,
             };
         }
         // Determine next state

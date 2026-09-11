@@ -21,7 +21,10 @@ exports.refreshRateLimiter = (0, express_rate_limit_1.default)({
     windowMs: 15 * 60 * 1000,
     max: 20,
     skip: skipRateLimitInTests,
-    message: { error: 'Too many refresh attempts, please try again later', code: 'RATE_LIMIT_EXCEEDED' },
+    message: {
+        error: 'Too many refresh attempts, please try again later',
+        code: 'RATE_LIMIT_EXCEEDED',
+    },
     standardHeaders: true,
     legacyHeaders: false,
 });
@@ -29,7 +32,10 @@ exports.publicReadLimiter = (0, express_rate_limit_1.default)({
     windowMs: 60 * 1000, // 1 minute
     skip: skipRateLimitInTests,
     max: 120, // 120 public read requests per IP per minute
-    message: { error: 'Too many requests from this IP, please try again after a minute', code: 'RATE_LIMIT_EXCEEDED' },
+    message: {
+        error: 'Too many requests from this IP, please try again after a minute',
+        code: 'RATE_LIMIT_EXCEEDED',
+    },
     standardHeaders: true,
     legacyHeaders: false,
 });
@@ -37,7 +43,10 @@ exports.publicWriteLimiter = (0, express_rate_limit_1.default)({
     windowMs: 60 * 1000, // 1 minute
     skip: skipRateLimitInTests,
     max: 10, // 10 public lead submissions per IP per minute
-    message: { error: 'Too many submissions from this IP, please try again after a minute', code: 'RATE_LIMIT_EXCEEDED' },
+    message: {
+        error: 'Too many submissions from this IP, please try again after a minute',
+        code: 'RATE_LIMIT_EXCEEDED',
+    },
     standardHeaders: true,
     legacyHeaders: false,
 });
@@ -51,7 +60,10 @@ exports.appLockRateLimiter = (0, express_rate_limit_1.default)({
     windowMs: 60 * 1000,
     skip: skipRateLimitInTests,
     max: 20,
-    message: { error: 'Too many app-lock attempts, please try again after a minute', code: 'RATE_LIMIT_EXCEEDED' },
+    message: {
+        error: 'Too many app-lock attempts, please try again after a minute',
+        code: 'RATE_LIMIT_EXCEEDED',
+    },
     standardHeaders: true,
     legacyHeaders: false,
 });
@@ -64,7 +76,10 @@ exports.feedbackRateLimiter = (0, express_rate_limit_1.default)({
     windowMs: 60 * 1000,
     skip: skipRateLimitInTests,
     max: 20,
-    message: { error: 'Too many requests, please try again after a minute', code: 'RATE_LIMIT_EXCEEDED' },
+    message: {
+        error: 'Too many requests, please try again after a minute',
+        code: 'RATE_LIMIT_EXCEEDED',
+    },
     standardHeaders: true,
     legacyHeaders: false,
 });
@@ -72,7 +87,10 @@ exports.loginRateLimiter = (0, express_rate_limit_1.default)({
     windowMs: 60 * 1000, // 1 minute
     skip: skipRateLimitInTests,
     max: 5, // Limit each IP to 5 login requests per window
-    message: { error: 'Too many login attempts from this IP, please try again after a minute', code: 'RATE_LIMIT_EXCEEDED' },
+    message: {
+        error: 'Too many login attempts from this IP, please try again after a minute',
+        code: 'RATE_LIMIT_EXCEEDED',
+    },
     standardHeaders: true,
     legacyHeaders: false,
     handler: async (req, res, next, options) => {
@@ -85,15 +103,15 @@ exports.loginRateLimiter = (0, express_rate_limit_1.default)({
                     action: 'SECURITY_ALERT',
                     entity_type: 'RATE_LIMIT_EXCEEDED',
                     entity_id: 0,
-                    new_value: `Login rate limit exceeded for IP: ${ip}, targeting: ${emailOrCode}`
-                }
+                    new_value: `Login rate limit exceeded for IP: ${ip}, targeting: ${emailOrCode}`,
+                },
             });
         }
         catch (err) {
             logger_1.logger.error('Failed to log rate limit audit event', err);
         }
         res.status(options.statusCode).json(options.message);
-    }
+    },
 });
 // AI Search endpoint — conservative because each call invokes a provider (costly + slow).
 // Follows the existing express-rate-limit conventions (IP-based window, test skip).
@@ -103,5 +121,8 @@ exports.aiSearchLimiter = (0, express_rate_limit_1.default)({
     max: 10, // 10 AI search requests per IP per minute
     standardHeaders: true,
     legacyHeaders: false,
-    message: { error: 'Too many AI search requests, please try again after a minute', code: 'RATE_LIMIT_EXCEEDED' },
+    message: {
+        error: 'Too many AI search requests, please try again after a minute',
+        code: 'RATE_LIMIT_EXCEEDED',
+    },
 });

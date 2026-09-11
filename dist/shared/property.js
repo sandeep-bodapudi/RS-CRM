@@ -46,13 +46,23 @@ exports.PropertyPricePreviewSchema = zod_1.z.object({
     discount_amount: zod_1.z.number().optional().nullable(),
     discount_reason: zod_1.z.string().optional().nullable(),
     manual_lines: zod_1.z
-        .array(zod_1.z.object({ label: zod_1.z.string().min(1), category: projectUnit_1.ChargeCategoryEnum.optional(), amount: zod_1.z.number() }))
+        .array(zod_1.z.object({
+        label: zod_1.z.string().min(1),
+        category: projectUnit_1.ChargeCategoryEnum.optional(),
+        amount: zod_1.z.number(),
+    }))
         .optional(),
 });
-exports.OverridePropertyPriceSchema = zod_1.z.object({
+exports.OverridePropertyPriceSchema = zod_1.z
+    .object({
     override_price: zod_1.z.number().positive().nullable(),
-    override_reason: zod_1.z.string().min(3, 'A reason is required when overriding the calculated price').optional().nullable(),
-}).refine((data) => data.override_price === null || !!data.override_reason, {
+    override_reason: zod_1.z
+        .string()
+        .min(3, 'A reason is required when overriding the calculated price')
+        .optional()
+        .nullable(),
+})
+    .refine((data) => data.override_price === null || !!data.override_reason, {
     message: 'A reason is required when setting an override price',
     path: ['override_reason'],
 });
@@ -89,7 +99,11 @@ const PropertyPricingFields = {
     discount_amount: zod_1.z.number().optional().nullable(),
     discount_reason: zod_1.z.string().optional().nullable(),
     manual_lines: zod_1.z
-        .array(zod_1.z.object({ label: zod_1.z.string().min(1), category: projectUnit_1.ChargeCategoryEnum.optional(), amount: zod_1.z.number() }))
+        .array(zod_1.z.object({
+        label: zod_1.z.string().min(1),
+        category: projectUnit_1.ChargeCategoryEnum.optional(),
+        amount: zod_1.z.number(),
+    }))
         .optional(),
 };
 // Category-specific detail sub-objects (property details.md spec) — one real,
@@ -297,18 +311,28 @@ exports.PropertyBrand = {
     SONTHILLU: 'SONTHILLU', // Residential Villas & Apartments
     RADHA_REAL_HOMES: 'RADHA_REAL_HOMES', // Commercial Plots & Land
 };
-exports.PropertyCreateSchema = zod_1.z.object({
+exports.PropertyCreateSchema = zod_1.z
+    .object({
     title: zod_1.z.string().min(3, 'Title is required'),
     description: zod_1.z.string().optional().nullable(),
     brand_type: zod_1.z.enum(['SONTHILLU', 'RADHA_REAL_HOMES']),
     category: zod_1.z.enum([
-        'APARTMENT', 'INDEPENDENT_HOUSE', 'DUPLEX', 'INDEPENDENT_FLOOR',
-        'VILLA', 'PENTHOUSE', 'STUDIO', 'PLOT', 'FARM_HOUSE', 'AGRICULTURAL_LAND',
+        'APARTMENT',
+        'INDEPENDENT_HOUSE',
+        'DUPLEX',
+        'INDEPENDENT_FLOOR',
+        'VILLA',
+        'PENTHOUSE',
+        'STUDIO',
+        'PLOT',
+        'FARM_HOUSE',
+        'AGRICULTURAL_LAND',
         // Were missing entirely — propertyWizardShared.tsx's PROPERTY_CATEGORIES
         // has always listed these two, but the schema stripped them before they
         // ever reached the service, so a Commercial Shop/Office could never
         // actually be created.
-        'COMMERCIAL_SHOP', 'COMMERCIAL_OFFICE',
+        'COMMERCIAL_SHOP',
+        'COMMERCIAL_OFFICE',
     ]),
     area_sqft: zod_1.z.number().positive('Area in sqft is required'),
     location: zod_1.z.string().min(2, 'Location is required'),
@@ -336,7 +360,8 @@ exports.PropertyCreateSchema = zod_1.z.object({
     source: zod_1.z.enum(['INTERNAL', 'WEBSITE_SELLER']).optional(),
     ...PropertyPricingFields,
     ...CategoryDetailFields,
-}).superRefine((data, ctx) => {
+})
+    .superRefine((data, ctx) => {
     // § Phase 3: base_rate is now the sole required pricing input — it replaced
     // the removed manual `price` field as what actually drives final_price.
     if (data.base_rate == null || data.base_rate <= 0) {
@@ -353,7 +378,10 @@ exports.PropertyVerificationSchema = zod_1.z.object({
     assigned_pm_id: zod_1.z.number().int().optional(),
 });
 exports.PropertyDMUpdateSchema = zod_1.z.object({
-    digital_marketing_executive_id: zod_1.z.number().int().positive('Must select a Digital Marketing Executive'),
+    digital_marketing_executive_id: zod_1.z
+        .number()
+        .int()
+        .positive('Must select a Digital Marketing Executive'),
     seo_title: zod_1.z.string().optional(),
     seo_keywords: zod_1.z.string().optional(),
     description: zod_1.z.string().optional(),
@@ -426,9 +454,16 @@ exports.PropertyReassignSchema = zod_1.z.object({
 });
 exports.PropertyImageMetadataSchema = zod_1.z.object({
     alt_text: zod_1.z.string().optional(),
-    sort_order: zod_1.z.union([zod_1.z.string().regex(/^\d+$/).transform(Number), zod_1.z.number().int().nonnegative()]).optional(),
-    is_primary: zod_1.z.union([
-        zod_1.z.string().toLowerCase().transform(v => v === 'true'),
-        zod_1.z.boolean()
-    ]).optional(),
+    sort_order: zod_1.z
+        .union([zod_1.z.string().regex(/^\d+$/).transform(Number), zod_1.z.number().int().nonnegative()])
+        .optional(),
+    is_primary: zod_1.z
+        .union([
+        zod_1.z
+            .string()
+            .toLowerCase()
+            .transform((v) => v === 'true'),
+        zod_1.z.boolean(),
+    ])
+        .optional(),
 });

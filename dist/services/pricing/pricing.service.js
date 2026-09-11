@@ -93,7 +93,10 @@ exports.amenityToEngineRule = amenityToEngineRule;
 async function getEffectiveRules(projectId) {
     const [rules, amenities] = await Promise.all([
         p.projectPricingRule.findMany({ where: { project_id: projectId, is_active: true } }),
-        p.projectAmenity.findMany({ where: { project_id: projectId, availability: 'CHARGEABLE' }, include: { amenity: true } }),
+        p.projectAmenity.findMany({
+            where: { project_id: projectId, availability: 'CHARGEABLE' },
+            include: { amenity: true },
+        }),
     ]);
     return [...rules.map(ruleToEngineRule), ...amenities.map(amenityToEngineRule)];
 }
@@ -137,7 +140,9 @@ exports.ruleToEngineRuleProperty = ruleToEngineRuleProperty;
  * PropertyPricingRule rows. Every Property pricing entry point (create,
  * update, preview, recalculate) must go through this. */
 async function getEffectiveRulesForProperty(propertyId) {
-    const rules = await p.propertyPricingRule.findMany({ where: { property_id: propertyId, is_active: true } });
+    const rules = await p.propertyPricingRule.findMany({
+        where: { property_id: propertyId, is_active: true },
+    });
     return rules.map(ruleToEngineRuleProperty);
 }
 exports.getEffectiveRulesForProperty = getEffectiveRulesForProperty;
@@ -168,13 +173,22 @@ function baseEngineInput(row) {
 }
 /** Reads a unit's persisted optional-rule/amenity selection (see schema.prisma's doc comment on ProjectUnit.selected_optional_rule_ids). */
 function selectedRuleIdsOf(unit) {
-    return Array.isArray(unit.selected_optional_rule_ids) ? unit.selected_optional_rule_ids : [];
+    return Array.isArray(unit.selected_optional_rule_ids)
+        ? unit.selected_optional_rule_ids
+        : [];
 }
 async function manualLinesFor(kind, id) {
     const rows = await p.priceLine.findMany({
-        where: kind === 'UNIT' ? { project_unit_id: id, is_manual: true } : { property_id: id, is_manual: true },
+        where: kind === 'UNIT'
+            ? { project_unit_id: id, is_manual: true }
+            : { property_id: id, is_manual: true },
     });
-    return rows.map((r) => ({ label: r.label, category: r.category, kind: r.kind, amount: r.amount }));
+    return rows.map((r) => ({
+        label: r.label,
+        category: r.category,
+        kind: r.kind,
+        amount: r.amount,
+    }));
 }
 async function persistComputation(tx, kind, id, computation, overridePrice) {
     const idField = kind === 'UNIT' ? 'project_unit_id' : 'property_id';
@@ -392,7 +406,12 @@ class PricingService {
         ]);
         const diffs = await Promise.all(units.map(async (unit) => {
             const manual_lines = await manualLinesFor('UNIT', unit.id);
-            const input = { unit_type: unit.unit_type, ...baseEngineInput(unit), manual_lines, selected_optional_rule_ids: selectedRuleIdsOf(unit) };
+            const input = {
+                unit_type: unit.unit_type,
+                ...baseEngineInput(unit),
+                manual_lines,
+                selected_optional_rule_ids: selectedRuleIdsOf(unit),
+            };
             const computation = (0, engine_1.computePrice)(input, engineRules);
             const newFinal = (0, engine_1.resolveFinalPrice)(computation.calculated_price, unit.override_price);
             return {
@@ -418,7 +437,10 @@ class PricingService {
         const project = await p.project.findFirst({ where: { id: projectId, ...scope } });
         if (!project)
             throw { status: 404, message: 'Project not found' };
-        const units = await p.projectUnit.findMany({ where: { project_id: projectId }, select: { id: true } });
+        const units = await p.projectUnit.findMany({
+            where: { project_id: projectId },
+            select: { id: true },
+        });
         let updated = 0;
         for (const u of units) {
             await PricingService.recalculateUnit(u.id);

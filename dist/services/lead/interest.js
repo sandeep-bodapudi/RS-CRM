@@ -9,7 +9,7 @@ const errors_1 = require("./errors");
 const p = prisma_1.prisma;
 async function sendWhatsAppProposal(user, leadId, propertyId) {
     const lead = await p.lead.findFirst({
-        where: { id: leadId, },
+        where: { id: leadId },
         include: { assigned_to: true },
     });
     if (!lead)
@@ -17,7 +17,7 @@ async function sendWhatsAppProposal(user, leadId, propertyId) {
     if (!(0, authorization_1.can)(user, shared_1.Permissions.LEADS_UPDATE, lead)) {
         throw new errors_1.AppError(403, 'Forbidden: You do not have permission to propose properties to this lead');
     }
-    const property = await p.property.findFirst({ where: { id: propertyId, } });
+    const property = await p.property.findFirst({ where: { id: propertyId } });
     if (!property)
         throw new errors_1.AppError(404, 'Property not found');
     const company = await p.company.findFirst({ where: { id: user.companyId } });
@@ -25,7 +25,9 @@ async function sendWhatsAppProposal(user, leadId, propertyId) {
     // LEAD_PROPERTY_PROPOSAL), never from a hardcoded inline string. Falls back to
     // a safe situation-specific text containing the variables when no active template is configured.
     const templateKey = 'LEAD_PROPERTY_PROPOSAL';
-    const formattedPrice = property.final_price ? `${(property.final_price / 100000).toFixed(1)} Lakhs` : 'On Request';
+    const formattedPrice = property.final_price
+        ? `${(property.final_price / 100000).toFixed(1)} Lakhs`
+        : 'On Request';
     const resolved = await messageTemplate_service_1.MessageTemplateService.resolveWithFallback(templateKey, {
         customer_name: lead.customer_name ?? '',
         customer_phone: lead.phone ?? '',
@@ -33,7 +35,10 @@ async function sendWhatsAppProposal(user, leadId, propertyId) {
         property_location: property.location ?? '',
         property_price: formattedPrice,
         property_code: property.property_code ?? '',
-        pm_name: property.assigned_pm_id ? (await p.employee.findFirst({ where: { id: property.assigned_pm_id } }))?.full_name ?? 'Property Manager' : 'Property Manager',
+        pm_name: property.assigned_pm_id
+            ? ((await p.employee.findFirst({ where: { id: property.assigned_pm_id } }))?.full_name ??
+                'Property Manager')
+            : 'Property Manager',
         agent_name: lead.assigned_to?.full_name ?? lead.assigned_to?.employee_code ?? 'Advisory Desk',
         visit_date: new Date().toLocaleDateString('en-IN', {
             day: 'numeric',
@@ -61,13 +66,15 @@ async function sendWhatsAppProposal(user, leadId, propertyId) {
 }
 exports.sendWhatsAppProposal = sendWhatsAppProposal;
 async function addPropertyInterest(user, leadId, propertyId) {
-    const lead = await p.lead.findFirst({ where: { id: leadId, } });
+    const lead = await p.lead.findFirst({ where: { id: leadId } });
     if (!lead)
         throw new errors_1.AppError(404, 'Lead not found');
     if (!(0, authorization_1.can)(user, shared_1.Permissions.LEADS_UPDATE, lead)) {
         throw new errors_1.AppError(403, 'Forbidden: You do not have permission to modify this lead');
     }
-    const property = await p.property.findFirst({ where: { id: propertyId, company_id: lead.company_id } });
+    const property = await p.property.findFirst({
+        where: { id: propertyId, company_id: lead.company_id },
+    });
     if (!property) {
         throw new Error('Property not found');
     }
@@ -77,14 +84,14 @@ async function addPropertyInterest(user, leadId, propertyId) {
                 lead_id_property_id: {
                     lead_id: leadId,
                     property_id: propertyId,
-                }
+                },
             },
             update: { is_active: true },
             create: {
                 lead_id: leadId,
                 property_id: propertyId,
                 created_by: user.employeeId || 1,
-            }
+            },
         });
         await tx.leadActivity.create({
             data: {
@@ -92,14 +99,14 @@ async function addPropertyInterest(user, leadId, propertyId) {
                 actor_id: user.employeeId || 1,
                 activity_type: 'PROPERTY_INTEREST_ADDED',
                 notes: `Added interest in Property ${property.property_code} (${property.title})`,
-            }
+            },
         });
         return interest;
     });
 }
 exports.addPropertyInterest = addPropertyInterest;
 async function removePropertyInterest(user, leadId, propertyId) {
-    const lead = await p.lead.findFirst({ where: { id: leadId, } });
+    const lead = await p.lead.findFirst({ where: { id: leadId } });
     if (!lead)
         throw new errors_1.AppError(404, 'Lead not found');
     if (!(0, authorization_1.can)(user, shared_1.Permissions.LEADS_UPDATE, lead)) {
@@ -107,7 +114,7 @@ async function removePropertyInterest(user, leadId, propertyId) {
     }
     const interest = await p.leadPropertyInterest.findUnique({
         where: { lead_id_property_id: { lead_id: leadId, property_id: propertyId } },
-        include: { property: true }
+        include: { property: true },
     });
     if (!interest) {
         throw new errors_1.AppError(404, 'Property interest not found');
@@ -115,7 +122,7 @@ async function removePropertyInterest(user, leadId, propertyId) {
     return await p.$transaction(async (tx) => {
         await tx.leadPropertyInterest.update({
             where: { id: interest.id },
-            data: { is_active: false }
+            data: { is_active: false },
         });
         await tx.leadActivity.create({
             data: {
@@ -127,7 +134,7 @@ async function removePropertyInterest(user, leadId, propertyId) {
                 notes: interest.property
                     ? `Removed interest in Property ${interest.property.property_code} (${interest.property.title})`
                     : `Removed interest in unit #${interest.project_unit_id ?? 'unknown'}`,
-            }
+            },
         });
         return { success: true, message: 'Property interest removed successfully' };
     });

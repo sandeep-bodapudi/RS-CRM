@@ -58,7 +58,9 @@ class WebAuthnService {
         });
     }
     static async deleteCredential(employeeId, credentialRowId) {
-        const cred = await p.webAuthnCredential.findFirst({ where: { id: credentialRowId, employee_id: employeeId } });
+        const cred = await p.webAuthnCredential.findFirst({
+            where: { id: credentialRowId, employee_id: employeeId },
+        });
         if (!cred)
             throw { status: 404, message: 'Credential not found' };
         await p.webAuthnCredential.delete({ where: { id: cred.id } });
@@ -67,7 +69,10 @@ class WebAuthnService {
     /** Step 1 of enabling app lock: generate options for navigator.credentials.create(). */
     static async startRegistration(employeeId, employeeName) {
         const { rpID, rpName } = getRpConfig();
-        const existing = await p.webAuthnCredential.findMany({ where: { employee_id: employeeId }, select: { credential_id: true, transports: true } });
+        const existing = await p.webAuthnCredential.findMany({
+            where: { employee_id: employeeId },
+            select: { credential_id: true, transports: true },
+        });
         const options = await (0, server_1.generateRegistrationOptions)({
             rpName,
             rpID,
@@ -116,7 +121,10 @@ class WebAuthnService {
     /** Step 1 of unlocking: generate options for navigator.credentials.get(). */
     static async startAuthentication(employeeId) {
         const { rpID } = getRpConfig();
-        const credentials = await p.webAuthnCredential.findMany({ where: { employee_id: employeeId }, select: { credential_id: true, transports: true } });
+        const credentials = await p.webAuthnCredential.findMany({
+            where: { employee_id: employeeId },
+            select: { credential_id: true, transports: true },
+        });
         if (credentials.length === 0) {
             throw { status: 404, message: 'No app-lock device registered for this account.' };
         }
@@ -137,7 +145,9 @@ class WebAuthnService {
     static async finishAuthentication(employeeId, response) {
         const { rpID, origin } = getRpConfig();
         const expectedChallenge = takeChallenge(authenticationChallenges, employeeId);
-        const stored = await p.webAuthnCredential.findFirst({ where: { employee_id: employeeId, credential_id: response.id } });
+        const stored = await p.webAuthnCredential.findFirst({
+            where: { employee_id: employeeId, credential_id: response.id },
+        });
         if (!stored) {
             throw { status: 400, message: 'Unrecognized device for this account.' };
         }
@@ -156,7 +166,10 @@ class WebAuthnService {
             requireUserVerification: true,
         });
         if (!verification.verified) {
-            throw { status: 401, message: 'Could not verify — try again or use a different registered device.' };
+            throw {
+                status: 401,
+                message: 'Could not verify — try again or use a different registered device.',
+            };
         }
         // Replay-attack defense: the authenticator's own signature counter must
         // strictly increase. Persisting the new value here is what makes a

@@ -74,7 +74,7 @@ router.get('/:id/history', auth_1.authenticateToken, (0, auth_2.requirePermissio
         const demo = await prisma_1.prisma.demo.findFirst({
             where: {
                 id: demoId,
-                lead: { company_id: req.user.companyId }
+                lead: { company_id: req.user.companyId },
             },
             select: {
                 id: true,
@@ -89,7 +89,7 @@ router.get('/:id/history', auth_1.authenticateToken, (0, auth_2.requirePermissio
                         customer_name: true,
                         assigned_to: { select: { id: true, full_name: true, employee_code: true } },
                         created_by: { select: { id: true, full_name: true, employee_code: true } },
-                    }
+                    },
                 },
             },
         });
@@ -129,7 +129,7 @@ router.get('/:id/history', auth_1.authenticateToken, (0, auth_2.requirePermissio
                 accepted_at: demo.accepted_at,
                 handler: demo.handler,
                 lead: demo.lead,
-            }
+            },
         });
     }
     catch (error) {

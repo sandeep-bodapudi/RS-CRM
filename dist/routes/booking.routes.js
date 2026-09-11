@@ -26,7 +26,8 @@ const NewCustomerSchema = zod_1.z.object({
     phone: zod_1.z.string().min(10),
     email: zod_1.z.string().email().optional(),
 });
-const InitiateBookingSchema = zod_1.z.object({
+const InitiateBookingSchema = zod_1.z
+    .object({
     // Customer — either existing id or new_customer inline
     customer_id: zod_1.z.number().int().positive().optional(),
     new_customer: NewCustomerSchema.optional(),
@@ -61,7 +62,8 @@ const InitiateBookingSchema = zod_1.z.object({
     is_legacy: zod_1.z.boolean().optional(),
     legacy_booking_date: zod_1.z.string().optional(),
     legacy_notes: zod_1.z.string().optional(),
-}).refine(data => data.customer_id || data.new_customer, {
+})
+    .refine((data) => data.customer_id || data.new_customer, {
     message: 'Either customer_id or new_customer must be provided',
 });
 const BookingFormSubmitSchema = zod_1.z.object({

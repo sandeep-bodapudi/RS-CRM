@@ -114,7 +114,7 @@ router.get('/:brand/search', websiteAuth_1.optionalWebsiteAccount, async (req, r
         if (!validBrand(req.params.brand))
             return res.status(400).json({ error: 'Invalid brand specified in URL' });
         const companyId = req.apiKeyContext.company_id;
-        const { location, propertyType, listingType, minBudget, maxBudget, possessionStatus, bedrooms, sortBy, anonId } = req.query;
+        const { location, propertyType, listingType, minBudget, maxBudget, possessionStatus, bedrooms, sortBy, anonId, } = req.query;
         const query = {
             location: location || undefined,
             propertyType: propertyType || undefined,
@@ -148,7 +148,11 @@ router.get('/:brand/search', websiteAuth_1.optionalWebsiteAccount, async (req, r
                 }
                 if (bedroomsNum !== undefined)
                     where.bedrooms = { gte: bedroomsNum, ...(bedroomsNum < 5 ? { lte: bedroomsNum } : {}) };
-                rawProperties = await p.property.findMany({ where, select: public_1.PUBLIC_PROPERTY_SELECT, take: 300 });
+                rawProperties = await p.property.findMany({
+                    where,
+                    select: public_1.PUBLIC_PROPERTY_SELECT,
+                    take: 300,
+                });
             }
             catch (err) {
                 logger_1.logger.error('Search primary fetch error:', err);
@@ -186,11 +190,15 @@ router.get('/:brand/search', websiteAuth_1.optionalWebsiteAccount, async (req, r
         }
         const recommendations = (0, recommendations_1.buildRecommendations)(recommendationPool.map(dto_1.toSearchCandidate), query, results.map((r) => r.id), recentlyViewedIds);
         let anyPropertiesExist = true;
-        if (!primaryError && results.length === 0 && Object.values(query).some((v) => v !== undefined)) {
+        if (!primaryError &&
+            results.length === 0 &&
+            Object.values(query).some((v) => v !== undefined)) {
             anyPropertiesExist = propertyIds.length > 0;
         }
         const { error, isGlobalEmpty } = (0, emptyState_1.determineEmptyState)(Object.fromEntries(Object.entries(query).filter(([, v]) => v !== undefined)), results, primaryError, anyPropertiesExist);
-        res.status(200).json({ properties: results, total: results.length, recommendations, error, isGlobalEmpty });
+        res
+            .status(200)
+            .json({ properties: results, total: results.length, recommendations, error, isGlobalEmpty });
     }
     catch (error) {
         logger_1.logger.error('Search error:', error);

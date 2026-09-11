@@ -73,7 +73,7 @@ exports.SiteVisitCompleteSchema = zod_1.z.object({
     proof_photo_url: zod_1.z.string().optional(),
 });
 exports.SiteVisitCancelConfirmSchema = zod_1.z.object({
-    reason: zod_1.z.string().min(1, "A cancellation reason is required"),
+    reason: zod_1.z.string().min(1, 'A cancellation reason is required'),
 });
 // Generic update (used by older/aux endpoints; status is free-form here but
 // routed through the §2 workflow engine in the service layer).

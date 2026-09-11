@@ -8,7 +8,8 @@ const logger_1 = require("./logger");
 const crypto_1 = __importDefault(require("crypto"));
 // Production REQUIRES a real ENCRYPTION_KEY (>= 32 chars) — the dev fallback is
 // only for development/test and is never used in production (Phase 11 Packet 3C).
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || (process.env.NODE_ENV === 'production' ? '' : 'default_32_byte_secret_key_change_me_now!');
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY ||
+    (process.env.NODE_ENV === 'production' ? '' : 'default_32_byte_secret_key_change_me_now!');
 const IV_LENGTH = 16; // For AES, this is always 16
 function deriveKey() {
     // Create a 32-byte key from the env variable (pad or truncate if necessary)

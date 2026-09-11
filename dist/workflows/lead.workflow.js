@@ -60,7 +60,10 @@ class LeadWorkflow {
         }
         // §1 row 5: DEMO_SCHEDULED requires a scheduled date and a handler.
         if (newStatus === shared_1.LeadStatus.DEMO_SCHEDULED) {
-            const hasPendingDemo = entity && entity.pending_demo && entity.pending_demo.scheduled_at && entity.pending_demo.handler_id;
+            const hasPendingDemo = entity &&
+                entity.pending_demo &&
+                entity.pending_demo.scheduled_at &&
+                entity.pending_demo.handler_id;
             const hasExistingDemo = entity && entity.demos && entity.demos.length > 0;
             if (!hasPendingDemo && !hasExistingDemo) {
                 return {
@@ -128,7 +131,7 @@ class LeadWorkflow {
         // Opportunity has expected_value).
         if (newStatus === shared_1.LeadStatus.NEGOTIATION) {
             const opps = entity?.opportunities || [];
-            const opp = Array.isArray(opps) && opps.length > 0 ? opps[0] : (entity?.opportunity || null);
+            const opp = Array.isArray(opps) && opps.length > 0 ? opps[0] : entity?.opportunity || null;
             const expected = opp && (opp.expected_value ?? opp.expectedValue);
             if (expected === undefined || expected === null) {
                 return {
@@ -141,7 +144,7 @@ class LeadWorkflow {
         // (expected_value + target property).
         if (newStatus === shared_1.LeadStatus.BOOKING_INITIATED) {
             const opps = entity?.opportunities || [];
-            const opp = Array.isArray(opps) && opps.length > 0 ? opps[0] : (entity?.opportunity || null);
+            const opp = Array.isArray(opps) && opps.length > 0 ? opps[0] : entity?.opportunity || null;
             const expected = opp && (opp.expected_value ?? opp.expectedValue);
             const propertyId = opp && (opp.property_id ?? opp.propertyId);
             if (expected === undefined || expected === null || !propertyId) {
@@ -200,39 +203,18 @@ LeadWorkflow.DROPPABLE_FROM = new Set([
 LeadWorkflow.transitionMatrix = {
     [shared_1.LeadStatus.NEW]: [shared_1.LeadStatus.ASSIGNED],
     [shared_1.LeadStatus.ASSIGNED]: [shared_1.LeadStatus.CONTACTED, shared_1.LeadStatus.DROPPED],
-    [shared_1.LeadStatus.CONTACTED]: [
-        shared_1.LeadStatus.QUALIFIED,
-        shared_1.LeadStatus.DROPPED,
-    ],
+    [shared_1.LeadStatus.CONTACTED]: [shared_1.LeadStatus.QUALIFIED, shared_1.LeadStatus.DROPPED],
     [shared_1.LeadStatus.QUALIFIED]: [
         shared_1.LeadStatus.DEMO_SCHEDULED,
         shared_1.LeadStatus.SITE_VISIT_SCHEDULED,
         shared_1.LeadStatus.DROPPED,
     ],
-    [shared_1.LeadStatus.DEMO_SCHEDULED]: [
-        shared_1.LeadStatus.DEMO_COMPLETED,
-        shared_1.LeadStatus.DROPPED,
-    ],
-    [shared_1.LeadStatus.DEMO_COMPLETED]: [
-        shared_1.LeadStatus.SITE_VISIT_SCHEDULED,
-        shared_1.LeadStatus.DROPPED,
-    ],
-    [shared_1.LeadStatus.SITE_VISIT_SCHEDULED]: [
-        shared_1.LeadStatus.SITE_VISIT_COMPLETED,
-        shared_1.LeadStatus.DROPPED,
-    ],
-    [shared_1.LeadStatus.SITE_VISIT_COMPLETED]: [
-        shared_1.LeadStatus.NEGOTIATION,
-        shared_1.LeadStatus.DROPPED,
-    ],
-    [shared_1.LeadStatus.NEGOTIATION]: [
-        shared_1.LeadStatus.BOOKING_INITIATED,
-        shared_1.LeadStatus.DROPPED,
-    ],
-    [shared_1.LeadStatus.BOOKING_INITIATED]: [
-        shared_1.LeadStatus.BOOKED,
-        shared_1.LeadStatus.DROPPED,
-    ],
+    [shared_1.LeadStatus.DEMO_SCHEDULED]: [shared_1.LeadStatus.DEMO_COMPLETED, shared_1.LeadStatus.DROPPED],
+    [shared_1.LeadStatus.DEMO_COMPLETED]: [shared_1.LeadStatus.SITE_VISIT_SCHEDULED, shared_1.LeadStatus.DROPPED],
+    [shared_1.LeadStatus.SITE_VISIT_SCHEDULED]: [shared_1.LeadStatus.SITE_VISIT_COMPLETED, shared_1.LeadStatus.DROPPED],
+    [shared_1.LeadStatus.SITE_VISIT_COMPLETED]: [shared_1.LeadStatus.NEGOTIATION, shared_1.LeadStatus.DROPPED],
+    [shared_1.LeadStatus.NEGOTIATION]: [shared_1.LeadStatus.BOOKING_INITIATED, shared_1.LeadStatus.DROPPED],
+    [shared_1.LeadStatus.BOOKING_INITIATED]: [shared_1.LeadStatus.BOOKED, shared_1.LeadStatus.DROPPED],
     [shared_1.LeadStatus.BOOKED]: [], // Terminal won state
     [shared_1.LeadStatus.DROPPED]: [shared_1.LeadStatus.RECOVERED_TO_POOL],
     [shared_1.LeadStatus.RECOVERED_TO_POOL]: [shared_1.LeadStatus.ASSIGNED],

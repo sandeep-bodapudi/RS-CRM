@@ -39,7 +39,9 @@ class PropertyPricingRulesService {
         if (!(0, authorization_1.can)(user, shared_1.Permissions.PROPERTIES_UPDATE, property)) {
             throw { status: 403, message: 'Forbidden: Missing properties.update permission' };
         }
-        const rule = await p.propertyPricingRule.findFirst({ where: { id: ruleId, property_id: propertyId } });
+        const rule = await p.propertyPricingRule.findFirst({
+            where: { id: ruleId, property_id: propertyId },
+        });
         if (!rule)
             throw { status: 404, message: 'Pricing rule not found' };
         return p.propertyPricingRule.update({ where: { id: ruleId }, data });
@@ -49,7 +51,9 @@ class PropertyPricingRulesService {
         if (!(0, authorization_1.can)(user, shared_1.Permissions.PROPERTIES_UPDATE, property)) {
             throw { status: 403, message: 'Forbidden: Missing properties.update permission' };
         }
-        const rule = await p.propertyPricingRule.findFirst({ where: { id: ruleId, property_id: propertyId } });
+        const rule = await p.propertyPricingRule.findFirst({
+            where: { id: ruleId, property_id: propertyId },
+        });
         if (!rule)
             throw { status: 404, message: 'Pricing rule not found' };
         // Soft-deactivate rather than hard delete — PriceLine.property_rule_id

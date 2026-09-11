@@ -12,12 +12,36 @@ const zod_2 = require("zod");
 // OpenAI call's own error handling — picked over the Radha fork's plainer
 // version per the "more complete of the two" direction).
 const ParsedSearchQuerySchema = zod_2.z.object({
-    location: zod_2.z.string().nullable().describe('The city, locality, or state mentioned. e.g. Gachibowli, Hyderabad'),
-    propertyType: zod_2.z.enum(['APARTMENT', 'VILLA', 'INDEPENDENT_HOUSE', 'PLOT', 'COMMERCIAL', 'OFFICE', 'RETAIL', 'WAREHOUSE']).nullable().describe('The type of property if mentioned.'),
-    bedrooms: zod_2.z.string().nullable().describe('The BHK format, e.g. "2" or "3" or "4" for 2BHK/3BHK/4BHK. For commercial, skip this.'),
+    location: zod_2.z
+        .string()
+        .nullable()
+        .describe('The city, locality, or state mentioned. e.g. Gachibowli, Hyderabad'),
+    propertyType: zod_2.z
+        .enum([
+        'APARTMENT',
+        'VILLA',
+        'INDEPENDENT_HOUSE',
+        'PLOT',
+        'COMMERCIAL',
+        'OFFICE',
+        'RETAIL',
+        'WAREHOUSE',
+    ])
+        .nullable()
+        .describe('The type of property if mentioned.'),
+    bedrooms: zod_2.z
+        .string()
+        .nullable()
+        .describe('The BHK format, e.g. "2" or "3" or "4" for 2BHK/3BHK/4BHK. For commercial, skip this.'),
     minBudget: zod_2.z.number().nullable().describe('Minimum budget in INR if specified.'),
-    maxBudget: zod_2.z.number().nullable().describe('Maximum budget in INR if specified. e.g., 2 crores = 20000000.'),
-    possessionStatus: zod_2.z.enum(['READY_TO_MOVE', 'UNDER_CONSTRUCTION']).nullable().describe('Possession status if mentioned.'),
+    maxBudget: zod_2.z
+        .number()
+        .nullable()
+        .describe('Maximum budget in INR if specified. e.g., 2 crores = 20000000.'),
+    possessionStatus: zod_2.z
+        .enum(['READY_TO_MOVE', 'UNDER_CONSTRUCTION'])
+        .nullable()
+        .describe('Possession status if mentioned.'),
 });
 let client = null;
 function getClient() {
@@ -35,7 +59,10 @@ function getClient() {
 }
 async function parseNaturalLanguageQuery(query) {
     if (!process.env.OPENAI_API_KEY) {
-        throw { status: 503, message: 'AI search is currently disabled (OPENAI_API_KEY not configured).' };
+        throw {
+            status: 503,
+            message: 'AI search is currently disabled (OPENAI_API_KEY not configured).',
+        };
     }
     let parsed;
     try {
@@ -44,7 +71,7 @@ async function parseNaturalLanguageQuery(query) {
             messages: [
                 {
                     role: 'system',
-                    content: 'You are an intelligent real estate search parser. Extract structured search criteria from the user\'s natural language query.',
+                    content: "You are an intelligent real estate search parser. Extract structured search criteria from the user's natural language query.",
                 },
                 { role: 'user', content: query },
             ],

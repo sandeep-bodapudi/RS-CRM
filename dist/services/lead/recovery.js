@@ -39,7 +39,7 @@ async function distributeUnassignedPoolLeads(companyId) {
             assigned_to_id: null,
             ownership_type: 'POOL',
         },
-        orderBy: { created_at: 'asc' } // Oldest first
+        orderBy: { created_at: 'asc' }, // Oldest first
     });
     let assignedCount = 0;
     for (const lead of unassignedLeads) {
@@ -98,22 +98,26 @@ async function triggerLeadRecoveryForProperty(propertyId) {
             where: {
                 id: leadId,
                 status: 'DROPPED',
-                exit_reason: 'NO_MATCHING_INVENTORY'
+                exit_reason: 'NO_MATCHING_INVENTORY',
             },
             data: {
                 status: assigneeId ? 'ASSIGNED' : 'NEW',
                 exit_reason: null,
                 exited_from_status: null,
                 ...(assigneeId && !lead.assigned_to_id
-                    ? { assigned_to_id: assigneeId, assigned_at: new Date(), assignment_type: 'PERFORMANCE_WEIGHTED' }
+                    ? {
+                        assigned_to_id: assigneeId,
+                        assigned_at: new Date(),
+                        assignment_type: 'PERFORMANCE_WEIGHTED',
+                    }
                     : {}),
-            }
+            },
         });
         if (updated.count > 0) {
             // Fetch lead to get assigned_to_id for notification
             const recoveredLead = await p.lead.findUnique({
                 where: { id: leadId },
-                select: { assigned_to_id: true, lead_code: true, customer_name: true }
+                select: { assigned_to_id: true, lead_code: true, customer_name: true },
             });
             if (recoveredLead && recoveredLead.assigned_to_id) {
                 await p.notification.create({
@@ -122,21 +126,21 @@ async function triggerLeadRecoveryForProperty(propertyId) {
                         type: 'SYSTEM_ALERT',
                         title: 'Lead Recovered',
                         message: `Lead ${recoveredLead.lead_code} (${recoveredLead.customer_name}) has been automatically recovered because new matching inventory became available.`,
-                    }
+                    },
                 });
                 // Web push to recovered lead owner (outside transaction)
                 (0, notifyEmployee_1.notifyEmployee)(recoveredLead.assigned_to_id, {
                     type: 'SYSTEM_ALERT',
                     title: 'Lead Recovered',
                     message: `Lead ${recoveredLead.lead_code} (${recoveredLead.customer_name}) has been recovered — new inventory is available.`,
-                }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] Lead recovery notify:', err));
+                }, { skipDbNotification: true }).catch((err) => logger_1.logger.error('[WebPush] Lead recovery notify:', err));
                 await p.leadActivity.create({
                     data: {
                         lead_id: leadId,
                         actor_id: recoveredLead.assigned_to_id, // Attributing to the owner
                         activity_type: 'LEAD_RECOVERED',
                         notes: `Lead automatically recovered due to new matching inventory (Property ID: ${propertyId}). Status set to ASSIGNED.`,
-                    }
+                    },
                 });
             }
         }
@@ -144,7 +148,7 @@ async function triggerLeadRecoveryForProperty(propertyId) {
 }
 exports.triggerLeadRecoveryForProperty = triggerLeadRecoveryForProperty;
 async function recoverManualLead(user, leadId) {
-    const lead = await p.lead.findFirst({ where: { id: leadId, } });
+    const lead = await p.lead.findFirst({ where: { id: leadId } });
     if (!lead)
         throw new errors_1.AppError(404, 'Lead not found');
     if (lead.status !== 'DROPPED' && lead.status !== 'CANCELLED') {
@@ -160,30 +164,30 @@ async function recoverManualLead(user, leadId) {
                 assignment_type: 'MANUAL_OVERRIDE',
                 exit_reason: null,
                 exited_from_status: null,
-            }
+            },
         });
         await tx.leadActivity.create({
             data: {
                 lead_id: leadId,
                 actor_id: user.employeeId || 1,
                 activity_type: 'LEAD_RECOVERED',
-                notes: 'Lead manually recovered from Dropped/Cancelled state to Contacted.'
-            }
+                notes: 'Lead manually recovered from Dropped/Cancelled state to Contacted.',
+            },
         });
         await tx.leadActivity.create({
             data: {
                 lead_id: leadId,
                 actor_id: user.employeeId || 1,
                 activity_type: 'CALL_LOGGED',
-                notes: 'Initial contact logged upon manual recovery.'
-            }
+                notes: 'Initial contact logged upon manual recovery.',
+            },
         });
         return recovered;
     });
 }
 exports.recoverManualLead = recoverManualLead;
 async function recoverFreshLead(user, leadId) {
-    const lead = await p.lead.findFirst({ where: { id: leadId, } });
+    const lead = await p.lead.findFirst({ where: { id: leadId } });
     if (!lead)
         throw new errors_1.AppError(404, 'Lead not found');
     if (lead.status !== 'DROPPED' && lead.status !== 'CANCELLED') {
@@ -206,23 +210,23 @@ async function recoverFreshLead(user, leadId) {
                 assignment_type: 'MANUAL_OVERRIDE',
                 created_by_id: user.employeeId || 1,
                 previous_lead_id: lead.id,
-            }
+            },
         });
         await tx.leadActivity.create({
             data: {
                 lead_id: freshLead.id,
                 actor_id: user.employeeId || 1,
                 activity_type: 'LEAD_RECOVERED',
-                notes: `Started fresh lead from previous record (Lead ID: ${lead.lead_code}).`
-            }
+                notes: `Started fresh lead from previous record (Lead ID: ${lead.lead_code}).`,
+            },
         });
         await tx.leadActivity.create({
             data: {
                 lead_id: freshLead.id,
                 actor_id: user.employeeId || 1,
                 activity_type: 'CALL_LOGGED',
-                notes: 'Initial contact logged for fresh start.'
-            }
+                notes: 'Initial contact logged for fresh start.',
+            },
         });
         return freshLead;
     });

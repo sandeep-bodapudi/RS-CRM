@@ -56,7 +56,7 @@ async function checkDbPermission(user, action) {
         return null;
     // Refresh cache if stale or empty
     const now = Date.now();
-    if (!_overrideCache || (now - _overrideCacheAt >= _overrideTtlMs)) {
+    if (!_overrideCache || now - _overrideCacheAt >= _overrideTtlMs) {
         _overrideCache = await buildCache();
         _overrideCacheAt = now;
     }

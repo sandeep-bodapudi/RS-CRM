@@ -9,7 +9,12 @@ const prisma_1 = require("../../lib/prisma");
 const websiteJwt_1 = require("../../utils/websiteJwt");
 const p = prisma_1.prisma;
 function toPublicAccount(account) {
-    return { id: account.id, email: account.email, full_name: account.full_name, phone: account.phone };
+    return {
+        id: account.id,
+        email: account.email,
+        full_name: account.full_name,
+        phone: account.phone,
+    };
 }
 class WebsiteAccountService {
     static async register(companyId, data) {
