@@ -1,12 +1,21 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const logger_1 = require("../utils/logger");
 const express_1 = require("express");
 const prisma_1 = require("../lib/prisma");
 const auth_1 = require("../middleware/auth");
 const shared_1 = require("../shared");
+const permissions_1 = __importDefault(require("./admin/permissions"));
+const attendance_1 = __importDefault(require("./admin/attendance"));
 const router = (0, express_1.Router)();
 const p = prisma_1.prisma;
+// Mount dynamic permissions management router
+router.use('/', permissions_1.default);
+// Mount attendance correction router
+router.use('/', attendance_1.default);
 /**
  * Technical Admin restricted routes for deep telemetry, auditing, and emergency controls.
  * Adheres strictly to SDD Golden Rule #2 (Admin Invincibility & Isolation).

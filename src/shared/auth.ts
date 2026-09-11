@@ -23,10 +23,10 @@ export const Roles = {
   AGENT: 'Agent',
   DIGITAL_MARKETING_EXECUTIVE: 'digital marketing executive',
   SALES_MANAGER: 'Sales manager',
-  CHANNEL_PARTNER_MANAGER: 'Channel partner manager'
+  CHANNEL_PARTNER_MANAGER: 'Channel partner manager',
 } as const;
 
-export type RoleName = typeof Roles[keyof typeof Roles];
+export type RoleName = (typeof Roles)[keyof typeof Roles];
 
 // Permanent 2-Letter Department Codes for Employee IDs: RRH-{DEPT_2DIGIT}-{NUMBER_3DIGIT}
 // Employee IDs remain static and permanent for life even when promoted!
@@ -55,7 +55,7 @@ export const Permissions = {
   EMPLOYEES_VIEW_SENSITIVE: 'employees.view_sensitive',
   EMPLOYEES_MANAGE_DEFAULT_ALL: 'employees.manage_default:all',
   EMPLOYEES_RESET_PASSWORD: 'employees.reset_password',
-  
+
   LEADS_CREATE: 'leads.create',
   LEADS_READ: 'leads.read',
   LEADS_UPDATE: 'leads.update',
@@ -64,14 +64,14 @@ export const Permissions = {
   LEADS_BULK_UPLOAD: 'leads.bulk_upload',
   LEADS_DISTRIBUTION_MONITOR: 'leads.distribution_monitor',
   LEADS_WHATSAPP_PROPOSAL: 'leads.whatsapp_proposal',
-  
+
   CUSTOMERS_CREATE: 'customers.create',
   CUSTOMERS_READ: 'customers.read',
   CUSTOMERS_UPDATE: 'customers.update',
   CUSTOMERS_DELETE: 'customers.delete',
   CUSTOMERS_CONVERT: 'customers.convert',
   CUSTOMERS_KYC_WRITE: 'customers.kyc_write',
-  
+
   PROPERTIES_CREATE: 'properties.create',
   PROPERTIES_READ: 'properties.read',
   PROPERTIES_UPDATE: 'properties.update',
@@ -79,7 +79,7 @@ export const Permissions = {
   PROPERTIES_VERIFY: 'properties.verify',
   PROPERTIES_DM_POLISH: 'properties.dm_polish',
   PROPERTIES_MD_APPROVE: 'properties.md_approve',
-  
+
   SITE_VISITS_CREATE: 'site_visits.create',
   SITE_VISITS_READ: 'site_visits.read',
   SITE_VISITS_VERIFY: 'site_visits.verify',
@@ -91,66 +91,66 @@ export const Permissions = {
   DEMOS_ASSIGN_AGENT: 'demos.assign_agent',
   DEMOS_ACCEPT: 'demos.accept',
   DEMOS_COMPLETE: 'demos.complete',
-  
+
   PROJECTS_CREATE: 'projects.create',
   PROJECTS_READ: 'projects.read',
   PROJECTS_UPDATE: 'projects.update',
   PROJECTS_DELETE: 'projects.delete',
   PROJECTS_SUBMIT_VERIFY: 'projects.submit_verify', // PM submits project for MD review
-  PROJECTS_VERIFY: 'projects.verify',               // MD approves/rejects
-  
+  PROJECTS_VERIFY: 'projects.verify', // MD approves/rejects
+
   BOOKINGS_CREATE: 'bookings.create',
   BOOKINGS_READ: 'bookings.read',
   BOOKINGS_UPDATE: 'bookings.update',
   BOOKINGS_CANCEL: 'bookings.cancel',
   BOOKINGS_CONFIRM: 'bookings.confirm',
-  BOOKINGS_FORM_SUBMIT: 'bookings.form_submit',     // Digital Lead Operator fills & submits the initiation form
-  BOOKINGS_MD_APPROVE: 'bookings.md_approve',       // MD-only: approve or reject submitted booking forms
+  BOOKINGS_FORM_SUBMIT: 'bookings.form_submit', // Digital Lead Operator fills & submits the initiation form
+  BOOKINGS_MD_APPROVE: 'bookings.md_approve', // MD-only: approve or reject submitted booking forms
   BOOKINGS_LEGACY_CREATE: 'bookings.legacy_create', // Create backdated legacy/old bookings
-  
+
   PAYMENTS_CREATE: 'payments.create',
   PAYMENTS_READ: 'payments.read',
   PAYMENTS_UPDATE: 'payments.update',
   PAYMENTS_CANCEL: 'payments.cancel',
-  
+
   TASKS_CREATE: 'tasks.create',
   TASKS_READ: 'tasks.read',
   TASKS_UPDATE: 'tasks.update',
   TASKS_ASSIGN: 'tasks.assign',
-  
+
   ATTENDANCE_READ_OWN: 'attendance.read_own',
   ATTENDANCE_SCAN: 'attendance.scan',
   ATTENDANCE_LATE_PROPOSAL: 'attendance.late_proposal',
   ATTENDANCE_LEAVE_PROPOSAL: 'attendance.leave_proposal',
   ATTENDANCE_PROPOSALS_QUEUE: 'attendance.proposals_queue',
   ATTENDANCE_LIVE_MONITOR: 'attendance.live_monitor',
-  
+
   REPORTS_CREATE: 'reports.create',
   REPORTS_READ_OWN: 'reports.read_own',
   REPORTS_READ_TEAM: 'reports.read_team',
   REPORTS_TARGETS_CONFIGURE: 'reports.targets.configure',
-  
+
   EXPENSES_CREATE: 'expenses.create',
   EXPENSES_READ_OWN: 'expenses.read_own',
   EXPENSES_REVIEW: 'expenses.review',
   EXPENSES_MD_APPROVE: 'expenses.md_approve',
   EXPENSES_MARK_REFUNDED: 'expenses.mark_refunded',
-  
+
   PERFORMANCE_READ_OWN: 'performance.read_own',
   PERFORMANCE_READ_TEAM: 'performance.read_team',
   PERFORMANCE_HISTORY: 'performance.history',
-  
+
   ADMIN_SYSTEM_METRICS: 'admin.system_metrics',
   ADMIN_AUDIT_LOGS: 'admin.audit_logs',
   ADMIN_SECURITY_ALERTS: 'admin.security_alerts',
   ADMIN_EMERGENCY_LOCKDOWN: 'admin.emergency_lockdown',
   MESSAGE_TEMPLATES_MANAGE: 'message_templates.manage', // §5 admin template editor
-  
+
   PUBLIC_PROPERTIES_READ: 'public.properties.read',
   PUBLIC_LEADS_CREATE: 'public.leads.create',
 
   AI_SEARCH: 'ai.search',
-  
+
   DOCUMENTS_CREATE: 'documents.create',
   DOCUMENTS_READ: 'documents.read',
   DOCUMENTS_VERIFY: 'documents.verify',
@@ -163,16 +163,16 @@ export const Permissions = {
   COMPLAINTS_CLOSE: 'complaints.close',
 } as const;
 
-export type Permission = typeof Permissions[keyof typeof Permissions];
+export type Permission = (typeof Permissions)[keyof typeof Permissions];
 
 export const ALL_PERMISSIONS = Object.values(Permissions);
 
 // Role -> Permission Matrix (Phase 1 - Stage 2 Blueprint Section 8)
 export const RolePermissionsMatrix: Record<RoleName, string[]> = {
   [Roles.MD]: ALL_PERMISSIONS, // MD gets all permissions
-  
+
   [Roles.ADMIN]: ALL_PERMISSIONS, // Admin is a second fully-privileged account alongside MD (2026-09-07 -- previously a curated list that excluded EMPLOYEES_VIEW_SENSITIVE and all LEADS_* permissions, which blocked real Admin usage; product decision was to match MD instead of narrowing the gaps one by one).
-  
+
   [Roles.HR_MANAGER]: [
     Permissions.PROJECTS_READ,
     Permissions.PROPERTIES_READ,
@@ -219,8 +219,8 @@ export const RolePermissionsMatrix: Record<RoleName, string[]> = {
     // dashboard, scoped in the query layer to leads assigned to that employee.
     Permissions.LEADS_READ,
   ],
-  
-[Roles.MARKETING_DIRECTOR]: [
+
+  [Roles.MARKETING_DIRECTOR]: [
     Permissions.PROJECTS_READ,
     Permissions.TASKS_CREATE,
     Permissions.LEADS_CREATE,
@@ -256,10 +256,10 @@ export const RolePermissionsMatrix: Record<RoleName, string[]> = {
     Permissions.PAYMENTS_READ,
     Permissions.DOCUMENTS_CREATE,
     Permissions.DOCUMENTS_READ,
-      Permissions.EXPENSES_CREATE,
+    Permissions.EXPENSES_CREATE,
     Permissions.EXPENSES_READ_OWN,
   ],
-  
+
   [Roles.PROJECT_MANAGER]: [
     Permissions.PROJECTS_CREATE,
     Permissions.PROJECTS_READ,
@@ -274,6 +274,8 @@ export const RolePermissionsMatrix: Record<RoleName, string[]> = {
     Permissions.SITE_VISITS_ASSIGN_AGENT,
     Permissions.DEMOS_READ,
     Permissions.DEMOS_ASSIGN_AGENT,
+    Permissions.DEMOS_ACCEPT,
+    Permissions.DEMOS_COMPLETE,
     Permissions.TASKS_CREATE,
     Permissions.TASKS_READ,
     Permissions.TASKS_UPDATE,
@@ -353,10 +355,10 @@ export const RolePermissionsMatrix: Record<RoleName, string[]> = {
     Permissions.BOOKINGS_READ,
     Permissions.PAYMENTS_READ,
     Permissions.DOCUMENTS_READ,
-      Permissions.EXPENSES_CREATE,
+    Permissions.EXPENSES_CREATE,
     Permissions.EXPENSES_READ_OWN,
   ],
-  
+
   [Roles.DIGITAL_MARKETING_HEAD]: [
     Permissions.PROJECTS_READ,
     Permissions.PROPERTIES_DM_POLISH,
@@ -368,7 +370,7 @@ export const RolePermissionsMatrix: Record<RoleName, string[]> = {
     Permissions.EXPENSES_READ_OWN,
     Permissions.EMPLOYEES_READ,
   ],
-  
+
   [Roles.AGENT]: [
     Permissions.PROJECTS_READ,
     Permissions.PROPERTIES_READ,
@@ -419,12 +421,12 @@ export const RolePermissionsMatrix: Record<RoleName, string[]> = {
     Permissions.ATTENDANCE_READ_OWN,
     Permissions.ATTENDANCE_SCAN,
     Permissions.PERFORMANCE_READ_OWN,
-      Permissions.EXPENSES_CREATE,
+    Permissions.EXPENSES_CREATE,
     Permissions.EXPENSES_READ_OWN,
     Permissions.PROPERTIES_DM_POLISH,
     Permissions.EMPLOYEES_READ,
   ],
-  
+
   [Roles.SALES_MANAGER]: [
     Permissions.PROJECTS_READ,
     Permissions.PROPERTIES_READ,
@@ -466,15 +468,14 @@ export const RolePermissionsMatrix: Record<RoleName, string[]> = {
     Permissions.PERFORMANCE_READ_OWN,
     Permissions.TASKS_READ,
     Permissions.TASKS_UPDATE,
-      Permissions.EXPENSES_CREATE,
+    Permissions.EXPENSES_CREATE,
     Permissions.EXPENSES_READ_OWN,
     Permissions.CUSTOMERS_CONVERT,
-  ]
+  ],
 };
 
 // Employee Code Regex: e.g. RRH-EX-001 (MD), RRH-EX-002 (Admin), RRH-HR-001 (HR), RRH-SL-001 (Sales/Telecaller), DEV-SM-001
 export const EMPLOYEE_CODE_REGEX = /^(RRH|DEV|SON)-[A-Z]{2,5}-\d{3,5}$/;
-
 
 // Login Request Schema
 export const LoginSchema = z.object({
@@ -483,10 +484,7 @@ export const LoginSchema = z.object({
     .trim()
     .toUpperCase()
     .min(1, 'Employee ID is required')
-    .regex(
-      EMPLOYEE_CODE_REGEX,
-      'Invalid Employee ID format. Expected format: RRH-XX-000'
-    ),
+    .regex(EMPLOYEE_CODE_REGEX, 'Invalid Employee ID format. Expected format: RRH-XX-000'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
 });
 

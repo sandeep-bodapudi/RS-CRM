@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { RolePermissions } from '../src/shared/auth';
+import { RolePermissionsMatrix } from '../src/shared/auth';
 
 const prisma = new PrismaClient();
 
@@ -8,9 +8,9 @@ async function main() {
 
   // Ensure all permissions from auth.ts exist in the DB
   const allPermissions = new Set<string>();
-  for (const role of Object.keys(RolePermissions)) {
-    const roleName = role as keyof typeof RolePermissions;
-    for (const perm of RolePermissions[roleName]) {
+  for (const role of Object.keys(RolePermissionsMatrix)) {
+    const roleName = role as keyof typeof RolePermissionsMatrix;
+    for (const perm of RolePermissionsMatrix[roleName]) {
       allPermissions.add(perm);
     }
   }
@@ -24,9 +24,9 @@ async function main() {
   }
 
   // Assign permissions to roles
-  for (const roleName of Object.keys(RolePermissions)) {
-    const permissions = RolePermissions[roleName as keyof typeof RolePermissions];
-    
+  for (const roleName of Object.keys(RolePermissionsMatrix)) {
+    const permissions = RolePermissionsMatrix[roleName as keyof typeof RolePermissionsMatrix];
+
     const role = await prisma.role.findUnique({ where: { name: roleName } });
     if (!role) {
       console.warn(`Role ${roleName} not found in DB. Skipping...`);
@@ -43,13 +43,13 @@ async function main() {
           role_id_permission_id: {
             role_id: role.id,
             permission_id: permission.id,
-          }
+          },
         },
         update: {},
         create: {
           role_id: role.id,
           permission_id: permission.id,
-        }
+        },
       });
     }
     console.log(`Updated permissions for role: ${roleName}`);

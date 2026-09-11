@@ -160,7 +160,9 @@ router.patch(
         const durationMinutes = Math.max(0, Math.round((checkOutTime - checkInTime) / 60000));
         updateData.working_duration_minutes = durationMinutes;
 
-        auditActions.push(`checkout: ${oldData.check_out_at || 'None'} → ${check_out_at || 'Cleared'}`);
+        auditActions.push(
+          `checkout: ${oldData.check_out_at || 'None'} → ${check_out_at || 'Cleared'}`,
+        );
       }
 
       if (notes !== undefined) {

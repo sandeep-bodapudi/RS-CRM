@@ -2,7 +2,12 @@ import { logger } from '../../utils/logger';
 import { Response, NextFunction, Router } from 'express';
 import { authenticateToken, AuthenticatedRequest } from '../../middleware/auth';
 import { requireAuthz } from '../../middleware/authz';
-import { PropertyCreateSchema, PropertyUpdateSchema, PropertyReassignSchema, Permissions } from '../../shared';
+import {
+  PropertyCreateSchema,
+  PropertyUpdateSchema,
+  PropertyReassignSchema,
+  Permissions,
+} from '../../shared';
 import { validateRequestBody } from '../../middleware/validate';
 import { PropertyService } from '../../services/property.service';
 import { prisma } from '../../lib/prisma';
@@ -17,7 +22,8 @@ router.get(
   requireAuthz(Permissions.PROPERTIES_READ),
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      const { brand, category, status, sales_status, project_id, unassigned, dm_executive_id } = req.query;
+      const { brand, category, status, sales_status, project_id, unassigned, dm_executive_id } =
+        req.query;
       const filters: {
         brand?: string;
         category?: string;
@@ -184,7 +190,12 @@ router.post(
     try {
       const propertyId = parseInt(req.params.id, 10);
       const { new_pm_id, reason } = req.body;
-      const property = await PropertyService.reassignProperty(req.user!, propertyId, new_pm_id, reason);
+      const property = await PropertyService.reassignProperty(
+        req.user!,
+        propertyId,
+        new_pm_id,
+        reason,
+      );
       return res.status(200).json({ message: 'Property reassigned successfully', property });
     } catch (error: any) {
       logger.error('Reassign property error:', error);

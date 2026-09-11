@@ -19,13 +19,13 @@ export const SiteVisitStatus = {
   COMPLETED: 'COMPLETED',
   CANCELLED: 'CANCELLED',
 } as const;
-export type SiteVisitStatusType = typeof SiteVisitStatus[keyof typeof SiteVisitStatus];
+export type SiteVisitStatusType = (typeof SiteVisitStatus)[keyof typeof SiteVisitStatus];
 
 export const SiteVisitOutcome = {
   INTERESTED: 'INTERESTED',
   NOT_INTERESTED: 'NOT_INTERESTED',
 } as const;
-export type SiteVisitOutcomeType = typeof SiteVisitOutcome[keyof typeof SiteVisitOutcome];
+export type SiteVisitOutcomeType = (typeof SiteVisitOutcome)[keyof typeof SiteVisitOutcome];
 
 export const SiteVisitCreateSchema = z.object({
   lead_id: z.number().int().positive(),
@@ -92,7 +92,7 @@ export const SiteVisitCompleteSchema = z.object({
 export type SiteVisitCompleteInput = z.infer<typeof SiteVisitCompleteSchema>;
 
 export const SiteVisitCancelConfirmSchema = z.object({
-  reason: z.string().min(1, "A cancellation reason is required"),
+  reason: z.string().min(1, 'A cancellation reason is required'),
 });
 export type SiteVisitCancelConfirmInput = z.infer<typeof SiteVisitCancelConfirmSchema>;
 

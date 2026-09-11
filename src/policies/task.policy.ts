@@ -24,13 +24,13 @@ export class TaskPolicy {
 
     // Managers can mutate tasks of their subordinates
     const isManagement = user.roles.some((r) =>
-      [Roles.MD, Roles.ADMIN, Roles.HR_MANAGER, Roles.MARKETING_DIRECTOR].includes(r as any)
+      [Roles.MD, Roles.ADMIN, Roles.HR_MANAGER, Roles.MARKETING_DIRECTOR].includes(r as any),
     );
     if (isManagement) {
       if (user.roles.includes(Roles.ADMIN) || user.roles.includes(Roles.MD)) {
         return true; // Global managers within the company
       }
-      
+
       // For middle management, check hierarchy
       const managerOf = await isManagerOf(user.employeeId, task.assignee_id);
       if (managerOf) return true;

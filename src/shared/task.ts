@@ -8,7 +8,7 @@ export const TaskPriority = {
   URGENT: 'URGENT',
 } as const;
 
-export type TaskPriorityType = typeof TaskPriority[keyof typeof TaskPriority];
+export type TaskPriorityType = (typeof TaskPriority)[keyof typeof TaskPriority];
 
 export const TaskStatus = {
   PENDING: 'PENDING',
@@ -17,7 +17,7 @@ export const TaskStatus = {
   OVERDUE: 'OVERDUE',
 } as const;
 
-export type TaskStatusType = typeof TaskStatus[keyof typeof TaskStatus];
+export type TaskStatusType = (typeof TaskStatus)[keyof typeof TaskStatus];
 
 // Daily Report Schema (with 15-character minimum below_target_reason check)
 export const DailyReportSchema = z.object({

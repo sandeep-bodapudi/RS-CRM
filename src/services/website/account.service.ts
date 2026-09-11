@@ -5,8 +5,18 @@ import { WebsiteAccountRegisterInput, WebsiteAccountLoginInput } from '../../sha
 
 const p = prisma;
 
-function toPublicAccount(account: { id: number; email: string; full_name: string; phone: string | null }) {
-  return { id: account.id, email: account.email, full_name: account.full_name, phone: account.phone };
+function toPublicAccount(account: {
+  id: number;
+  email: string;
+  full_name: string;
+  phone: string | null;
+}) {
+  return {
+    id: account.id,
+    email: account.email,
+    full_name: account.full_name,
+    phone: account.phone,
+  };
 }
 
 export class WebsiteAccountService {

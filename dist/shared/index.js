@@ -34,3 +34,4 @@ __exportStar(require("./siteVisit"), exports);
 __exportStar(require("./messageTemplate"), exports);
 __exportStar(require("./employee"), exports);
 __exportStar(require("./websiteAccount"), exports);
+__exportStar(require("./demo"), exports);

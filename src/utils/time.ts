@@ -79,7 +79,8 @@ export const toHolidayDateKey = (dateString: string): Date => new Date(`${dateSt
  * for the same reason as getISTMonthRange: used only as a boundary value,
  * never read back with a local (non-UTC) accessor.
  */
-export const getISTMidnightInstant = (dateString: string): Date => new Date(`${dateString}T00:00:00+05:30`);
+export const getISTMidnightInstant = (dateString: string): Date =>
+  new Date(`${dateString}T00:00:00+05:30`);
 
 /**
  * IST-safe [startOfMonth, endOfMonth] instants for a given IST calendar year
@@ -94,7 +95,10 @@ export const getISTMidnightInstant = (dateString: string): Date => new Date(`${d
  * never read back with a local (non-UTC) accessor — so this is safe
  * regardless of the server's own timezone.
  */
-export const getISTMonthRange = (year: number, month: number): { startOfMonth: Date; endOfMonth: Date } => {
+export const getISTMonthRange = (
+  year: number,
+  month: number,
+): { startOfMonth: Date; endOfMonth: Date } => {
   const pad = (n: number) => String(n).padStart(2, '0');
   const nextYear = month === 12 ? year + 1 : year;
   const nextMonth = month === 12 ? 1 : month + 1;

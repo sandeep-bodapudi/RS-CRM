@@ -43,7 +43,7 @@ router.get(
       logger.error('Fetch analytics KPIs error:', error);
       return res.status(500).json({ error: 'Failed to fetch analytics KPIs' });
     }
-  }
+  },
 );
 router.get(
   '/sales-manager',
@@ -59,7 +59,7 @@ router.get(
       logger.error('Fetch sales manager dashboard error:', error);
       return res.status(500).json({ error: 'Failed to fetch sales manager dashboard' });
     }
-  }
+  },
 );
 
 // GET /api/v1/analytics/hr-overview
@@ -81,7 +81,7 @@ router.get(
       logger.error('Fetch HR overview error:', error);
       return res.status(500).json({ error: 'Failed to fetch HR overview' });
     }
-  }
+  },
 );
 
 export default router;

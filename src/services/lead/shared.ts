@@ -6,11 +6,11 @@ const p = prisma;
  * Helper to generate sequential static lead code: RRH-LD-YYYY-XXXX
  */
 export async function generateNextLeadCode(): Promise<string> {
-    const currentYear = new Date().getFullYear();
-    const count = await p.lead.count();
-    const sequentialNum = (count + 1).toString().padStart(4, '0');
-    return `RRH-LD-${currentYear}-${sequentialNum}`;
-  }
+  const currentYear = new Date().getFullYear();
+  const count = await p.lead.count();
+  const sequentialNum = (count + 1).toString().padStart(4, '0');
+  return `RRH-LD-${currentYear}-${sequentialNum}`;
+}
 
 /**
  * Replaces a lead's full preferred-location list (§ Phase 2). Case-insensitive
@@ -45,16 +45,16 @@ export async function syncLeadPreferredLocations(
 }
 
 export function calculateLeadScore(leadData: any): number {
-    let score = 0;
-    // Base score based on source
-    if (leadData.source === 'WALK_IN' || leadData.source === 'REFERRAL') score += 20;
-    else if (leadData.source === 'WEBSITE') score += 10;
-    
-    // Profile completeness
-    if (leadData.email) score += 10;
-    if (leadData.budget_min && leadData.budget_max) score += 15;
-    if (leadData.preferred_location) score += 10;
-    if (leadData.property_type_preference) score += 5;
-    
-    return score;
-  }
+  let score = 0;
+  // Base score based on source
+  if (leadData.source === 'WALK_IN' || leadData.source === 'REFERRAL') score += 20;
+  else if (leadData.source === 'WEBSITE') score += 10;
+
+  // Profile completeness
+  if (leadData.email) score += 10;
+  if (leadData.budget_min && leadData.budget_max) score += 15;
+  if (leadData.preferred_location) score += 10;
+  if (leadData.property_type_preference) score += 5;
+
+  return score;
+}

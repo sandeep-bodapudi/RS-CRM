@@ -3,7 +3,11 @@ import { TokenPayload } from '../utils/jwt';
 import { buildProjectScope } from '../authz/dataScope';
 import { can } from '../authz/authorization';
 import { Permissions } from '../shared';
-import { AmenityCreateInput, AmenityUpdateInput, ProjectAmenityUpsertInput } from '../shared/amenity';
+import {
+  AmenityCreateInput,
+  AmenityUpdateInput,
+  ProjectAmenityUpsertInput,
+} from '../shared/amenity';
 
 const p = prisma;
 
@@ -43,16 +47,23 @@ export class AmenityService {
     try {
       return await p.amenity.create({ data: { company_id: user.companyId, ...data } });
     } catch (err: any) {
-      if (err?.code === 'P2002') throw { status: 409, message: 'An amenity with this name already exists' };
+      if (err?.code === 'P2002')
+        throw { status: 409, message: 'An amenity with this name already exists' };
       throw err;
     }
   }
 
-  static async updateCatalogAmenity(user: TokenPayload, amenityId: number, data: AmenityUpdateInput) {
+  static async updateCatalogAmenity(
+    user: TokenPayload,
+    amenityId: number,
+    data: AmenityUpdateInput,
+  ) {
     if (!hasCatalogAccess(user)) {
       throw { status: 403, message: 'Forbidden: Missing projects.update permission' };
     }
-    const amenity = await p.amenity.findFirst({ where: { id: amenityId, company_id: user.companyId } });
+    const amenity = await p.amenity.findFirst({
+      where: { id: amenityId, company_id: user.companyId },
+    });
     if (!amenity) throw { status: 404, message: 'Amenity not found' };
     return p.amenity.update({ where: { id: amenityId }, data });
   }
@@ -62,7 +73,9 @@ export class AmenityService {
     if (!hasCatalogAccess(user)) {
       throw { status: 403, message: 'Forbidden: Missing projects.update permission' };
     }
-    const amenity = await p.amenity.findFirst({ where: { id: amenityId, company_id: user.companyId } });
+    const amenity = await p.amenity.findFirst({
+      where: { id: amenityId, company_id: user.companyId },
+    });
     if (!amenity) throw { status: 404, message: 'Amenity not found' };
     await p.amenity.update({ where: { id: amenityId }, data: { is_active: false } });
     return { deactivated: true };
@@ -101,12 +114,19 @@ export class AmenityService {
    * brand-new unit still picks it up immediately, because createUnit always
    * prices against the project's current effective rules.
    */
-  static async setProjectAmenity(user: TokenPayload, projectId: number, amenityId: number, data: ProjectAmenityUpsertInput) {
+  static async setProjectAmenity(
+    user: TokenPayload,
+    projectId: number,
+    amenityId: number,
+    data: ProjectAmenityUpsertInput,
+  ) {
     const project = await this.assertProjectInScope(user, projectId);
     if (!can(user, Permissions.PROJECTS_UPDATE, project)) {
       throw { status: 403, message: 'Forbidden: Missing projects.update permission' };
     }
-    const amenity = await p.amenity.findFirst({ where: { id: amenityId, company_id: user.companyId } });
+    const amenity = await p.amenity.findFirst({
+      where: { id: amenityId, company_id: user.companyId },
+    });
     if (!amenity) throw { status: 404, message: 'Amenity not found' };
 
     const { selected_unit_ids, ...rest } = data;
@@ -118,8 +138,14 @@ export class AmenityService {
       include: { amenity: true },
     });
 
-    const isSelected = projectAmenity.availability === 'CHARGEABLE' && projectAmenity.applicability === 'SELECTED_UNITS';
-    await this.applySelectedUnits(projectId, amenityId, isSelected ? selected_unit_ids ?? [] : null);
+    const isSelected =
+      projectAmenity.availability === 'CHARGEABLE' &&
+      projectAmenity.applicability === 'SELECTED_UNITS';
+    await this.applySelectedUnits(
+      projectId,
+      amenityId,
+      isSelected ? (selected_unit_ids ?? []) : null,
+    );
 
     return projectAmenity;
   }
@@ -130,7 +156,11 @@ export class AmenityService {
    * every other unit in the project. Passing `null` clears the marker from
    * every unit (used when the amenity stops being SELECTED_UNITS-scoped).
    */
-  private static async applySelectedUnits(projectId: number, amenityId: number, unitIds: number[] | null): Promise<void> {
+  private static async applySelectedUnits(
+    projectId: number,
+    amenityId: number,
+    unitIds: number[] | null,
+  ): Promise<void> {
     const marker = -amenityId;
     const units = await p.projectUnit.findMany({
       where: { project_id: projectId },
@@ -140,13 +170,18 @@ export class AmenityService {
     const wantSelected = new Set(unitIds ?? []);
 
     for (const unit of units) {
-      const current: number[] = Array.isArray(unit.selected_optional_rule_ids) ? (unit.selected_optional_rule_ids as number[]) : [];
+      const current: number[] = Array.isArray(unit.selected_optional_rule_ids)
+        ? (unit.selected_optional_rule_ids as number[])
+        : [];
       const hasMarker = current.includes(marker);
       const shouldHave = unitIds !== null && wantSelected.has(unit.id);
       if (hasMarker === shouldHave) continue;
 
       const next = shouldHave ? [...current, marker] : current.filter((id) => id !== marker);
-      await p.projectUnit.update({ where: { id: unit.id }, data: { selected_optional_rule_ids: next } });
+      await p.projectUnit.update({
+        where: { id: unit.id },
+        data: { selected_optional_rule_ids: next },
+      });
     }
   }
 
@@ -155,10 +190,14 @@ export class AmenityService {
     if (!can(user, Permissions.PROJECTS_UPDATE, project)) {
       throw { status: 403, message: 'Forbidden: Missing projects.update permission' };
     }
-    const existing = await p.projectAmenity.findUnique({ where: { project_id_amenity_id: { project_id: projectId, amenity_id: amenityId } } });
+    const existing = await p.projectAmenity.findUnique({
+      where: { project_id_amenity_id: { project_id: projectId, amenity_id: amenityId } },
+    });
     if (!existing) throw { status: 404, message: 'This amenity is not configured on this project' };
 
-    await p.projectAmenity.delete({ where: { project_id_amenity_id: { project_id: projectId, amenity_id: amenityId } } });
+    await p.projectAmenity.delete({
+      where: { project_id_amenity_id: { project_id: projectId, amenity_id: amenityId } },
+    });
     await this.applySelectedUnits(projectId, amenityId, null);
     return { removed: true };
   }

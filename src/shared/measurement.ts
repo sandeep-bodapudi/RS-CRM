@@ -149,7 +149,10 @@ export function dimensionsDisagree(
  * with a 40%+ loading is a real commercial signal, so we surface it rather than
  * leaving three area numbers to be compared by eye.
  */
-export function loadingFactor(carpetSqft?: number | null, superBuiltUpSqft?: number | null): number | null {
+export function loadingFactor(
+  carpetSqft?: number | null,
+  superBuiltUpSqft?: number | null,
+): number | null {
   if (!carpetSqft || !superBuiltUpSqft || carpetSqft <= 0) return null;
   return round((superBuiltUpSqft - carpetSqft) / carpetSqft, 4);
 }
@@ -167,7 +170,11 @@ export function validateFlatAreas(areas: {
   super_built_up_area_sqft?: number | null;
 }): AreaValidationIssue[] {
   const issues: AreaValidationIssue[] = [];
-  const { carpet_area_sqft: carpet, built_up_area_sqft: builtUp, super_built_up_area_sqft: sbua } = areas;
+  const {
+    carpet_area_sqft: carpet,
+    built_up_area_sqft: builtUp,
+    super_built_up_area_sqft: sbua,
+  } = areas;
 
   if (carpet && builtUp && carpet >= builtUp) {
     issues.push({
@@ -237,7 +244,10 @@ export function resolveBasisAreaSqft(
 }
 
 /** "150 Sq.Yds (1,350 Sq.Ft)" — always show both so nobody has to convert mentally. */
-export function formatAreaDual(areaSqft?: number | null, preferredUnit: AreaUnitType = 'SQYD'): string {
+export function formatAreaDual(
+  areaSqft?: number | null,
+  preferredUnit: AreaUnitType = 'SQYD',
+): string {
   if (!areaSqft) return '—';
   const sqftStr = `${Math.round(areaSqft).toLocaleString('en-IN')} ${AREA_UNIT_LABELS.SQFT}`;
   if (preferredUnit === 'SQFT') return sqftStr;

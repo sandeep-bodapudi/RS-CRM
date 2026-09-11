@@ -17,9 +17,9 @@ const p = prisma;
 
 // VAPID keys — generate once with: npx web-push generate-vapid-keys
 // Then put them in your .env file
-const VAPID_PUBLIC  = process.env.VAPID_PUBLIC_KEY  || '';
+const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || '';
 const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || '';
-const VAPID_EMAIL   = process.env.VAPID_EMAIL        || 'mailto:admin@radharealhomes.com';
+const VAPID_EMAIL = process.env.VAPID_EMAIL || 'mailto:admin@radharealhomes.com';
 
 if (VAPID_PUBLIC && VAPID_PRIVATE) {
   try {
@@ -34,10 +34,10 @@ if (VAPID_PUBLIC && VAPID_PRIVATE) {
 }
 
 export interface NotifyPayload {
-  type: string;      // e.g. 'EXPENSE_REFUND_APPROVED', 'SALARY_CHANGED'
+  type: string; // e.g. 'EXPENSE_REFUND_APPROVED', 'SALARY_CHANGED'
   title: string;
   message: string;
-  link?: string;     // Optional deep-link for when user taps notification
+  link?: string; // Optional deep-link for when user taps notification
 }
 
 export interface NotifyOptions {
@@ -51,7 +51,7 @@ export interface NotifyOptions {
 export async function notifyEmployee(
   employeeIds: number | number[],
   payload: NotifyPayload,
-  options?: NotifyOptions
+  options?: NotifyOptions,
 ): Promise<void> {
   const ids = Array.isArray(employeeIds) ? employeeIds : [employeeIds];
 
@@ -69,7 +69,10 @@ export async function notifyEmployee(
           },
         });
       } catch (err) {
-        logger.error(`[NotifyEmployee] Failed to create in-app notification for employee ${employeeId}:`, err);
+        logger.error(
+          `[NotifyEmployee] Failed to create in-app notification for employee ${employeeId}:`,
+          err,
+        );
       }
     }
 
@@ -92,7 +95,7 @@ export async function notifyEmployee(
           try {
             await webpush.sendNotification(
               { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-              pushPayload
+              pushPayload,
             );
           } catch (pushErr: any) {
             // 410 Gone = subscription expired, clean it up
@@ -105,7 +108,10 @@ export async function notifyEmployee(
         }
       }
     } catch (err) {
-      logger.error(`[NotifyEmployee] Push subscription fetch failed for employee ${employeeId}:`, err);
+      logger.error(
+        `[NotifyEmployee] Push subscription fetch failed for employee ${employeeId}:`,
+        err,
+      );
     }
   }
 }

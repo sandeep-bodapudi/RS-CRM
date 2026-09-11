@@ -12,14 +12,13 @@ export class PropertyPolicy {
         Roles.MARKETING_DIRECTOR,
         Roles.DIGITAL_LEAD_OPERATOR,
         Roles.DIGITAL_MARKETING_HEAD,
-      ].includes(r as any)
+      ].includes(r as any),
     );
   }
 
   static canCreate(user: TokenPayload): boolean {
     return (user.permissions || []).includes(Permissions.PROPERTIES_CREATE);
   }
-
 
   /**
    * Determines whether a user may update a specific Property.

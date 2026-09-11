@@ -1,12 +1,15 @@
-import { prisma } from '../../lib/prisma';
-import { TokenPayload } from '../../utils/jwt';
-import { AppError } from '../lead/errors';
-import { notifyEmployee } from '../../utils/notifyEmployee';
-import { logger } from '../../utils/logger';
+import { prisma } from '../lib/prisma';
+import { TokenPayload } from '../utils/jwt';
+import { AppError } from './lead/errors';
+import { notifyEmployee } from '../utils/notifyEmployee';
+import { logger } from '../utils/logger';
 
 const p = prisma;
 
-export async function listDemos(user: TokenPayload, filters: { status?: string; handler_id?: string; leadId?: string }) {
+export async function listDemos(
+  user: TokenPayload,
+  filters: { status?: string; handler_id?: string; leadId?: string },
+) {
   const whereCondition: any = {
     lead: { company_id: user.companyId },
   };
@@ -57,7 +60,15 @@ export async function listDemos(user: TokenPayload, filters: { status?: string; 
       },
       interested_properties: {
         include: {
-          property: { select: { id: true, property_code: true, title: true, location: true, final_price: true } },
+          property: {
+            select: {
+              id: true,
+              property_code: true,
+              title: true,
+              location: true,
+              final_price: true,
+            },
+          },
         },
       },
     },
@@ -98,7 +109,15 @@ export async function getDemo(user: TokenPayload, demoId: number) {
       },
       interested_properties: {
         include: {
-          property: { select: { id: true, property_code: true, title: true, location: true, final_price: true } },
+          property: {
+            select: {
+              id: true,
+              property_code: true,
+              title: true,
+              location: true,
+              final_price: true,
+            },
+          },
         },
       },
     },
@@ -124,7 +143,7 @@ export async function acceptDemo(user: TokenPayload, demoId: number, notes?: str
   if (demo.accepted_at) throw { status: 409, message: 'Demo already accepted' };
 
   // Only the assigned handler or MD/Admin can accept
-  if (demo.handler_id !== user.employeeId && !['MD', 'ADMIN'].includes(user.role)) {
+  if (demo.handler_id !== user.employeeId && !['MD', 'ADMIN'].includes(user.roles[0])) {
     throw { status: 403, message: 'Only the assigned demo handler can accept this demo' };
   }
 
@@ -151,11 +170,15 @@ export async function acceptDemo(user: TokenPayload, demoId: number, notes?: str
   });
 
   // Web push to handler
-  notifyEmployee(demo.handler_id, {
-    type: 'DEMO_ACCEPTED',
-    title: `Demo Confirmed: ${demo.lead.customer_name}`,
-    message: `Your demo is confirmed for ${new Date(demo.scheduled_at).toLocaleString()}. See details in the app.`,
-  }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] Demo accept:', err));
+  notifyEmployee(
+    demo.handler_id,
+    {
+      type: 'DEMO_ACCEPTED',
+      title: `Demo Confirmed: ${demo.lead.customer_name}`,
+      message: `Your demo is confirmed for ${new Date(demo.scheduled_at).toLocaleString()}. See details in the app.`,
+    },
+    { skipDbNotification: true },
+  ).catch((err: any) => logger.error('[WebPush] Demo accept:', err));
 
   // Notify telecaller that demo was accepted
   await p.notification.create({
@@ -178,7 +201,7 @@ export async function declineDemo(user: TokenPayload, demoId: number, notes?: st
   if (!demo) throw { status: 404, message: 'Demo not found' };
   if (demo.accepted_at) throw { status: 409, message: 'Demo already accepted' };
 
-  if (demo.handler_id !== user.employeeId && !['MD', 'ADMIN'].includes(user.role)) {
+  if (demo.handler_id !== user.employeeId && !['MD', 'ADMIN'].includes(user.roles[0])) {
     throw { status: 403, message: 'Only the assigned demo handler can decline this demo' };
   }
 
@@ -209,25 +232,25 @@ export async function completeDemo(user: TokenPayload, demoId: number, notes?: s
     include: { lead: true, handler: true },
   });
   if (!demo) throw { status: 404, message: 'Demo not found' };
-  
-  if (demo.handler_id !== user.employeeId && !['MD', 'ADMIN'].includes(user.role)) {
+
+  if (demo.handler_id !== user.employeeId && !['MD', 'ADMIN'].includes(user.roles[0])) {
     throw { status: 403, message: 'Only the assigned demo handler can complete this demo' };
   }
 
   // Update lead status to DEMO_COMPLETED
   await p.lead.update({
     where: { id: demo.lead_id },
-    data: { status: 'DEMO_COMPLETED' }
+    data: { status: 'DEMO_COMPLETED' },
   });
 
   // Add notes to timeline
   await p.leadActivity.create({
     data: {
       lead_id: demo.lead_id,
-      employee_id: user.employeeId,
+      actor_id: user.employeeId,
       activity_type: 'DEMO_COMPLETED',
       notes: notes || 'Demo completed successfully.',
-    }
+    },
   });
 
   return demo;
@@ -240,29 +263,29 @@ export async function cancelDemo(user: TokenPayload, demoId: number, notes?: str
   });
   if (!demo) throw { status: 404, message: 'Demo not found' };
 
-  if (demo.handler_id !== user.employeeId && !['MD', 'ADMIN'].includes(user.role)) {
+  if (demo.handler_id !== user.employeeId && !['MD', 'ADMIN'].includes(user.roles[0])) {
     throw { status: 403, message: 'Only the assigned demo handler can cancel this demo' };
   }
 
   // Delete the demo record
   await p.demo.delete({
-    where: { id: demoId }
+    where: { id: demoId },
   });
 
   // Revert Lead status to QUALIFIED
   await p.lead.update({
     where: { id: demo.lead_id },
-    data: { status: 'QUALIFIED' }
+    data: { status: 'QUALIFIED' },
   });
 
   // Add notes to timeline
   await p.leadActivity.create({
     data: {
       lead_id: demo.lead_id,
-      employee_id: user.employeeId,
+      actor_id: user.employeeId,
       activity_type: 'STATUS_CHANGED',
       notes: `Demo cancelled by handler. ${notes ? 'Reason: ' + notes : ''}`,
-    }
+    },
   });
 
   // Notify telecaller
@@ -279,7 +302,12 @@ export async function cancelDemo(user: TokenPayload, demoId: number, notes?: str
 }
 
 // reassignDemo: route a PENDING demo to a different handler
-export async function reassignDemo(user: TokenPayload, demoId: number, newHandlerId: number, reason?: string) {
+export async function reassignDemo(
+  user: TokenPayload,
+  demoId: number,
+  newHandlerId: number,
+  reason?: string,
+) {
   const demo = await p.demo.findFirst({
     where: { id: demoId, lead: { company_id: user.companyId } },
     include: { lead: true, handler: true },
@@ -305,9 +333,11 @@ export async function reassignDemo(user: TokenPayload, demoId: number, newHandle
   await p.leadActivity.create({
     data: {
       lead_id: demo.lead_id,
-      employee_id: user.employeeId,
+      actor_id: user.employeeId,
       activity_type: 'DEMO_REASSIGNED',
-      notes: reason ? `Demo reassigned from ${demo.handler?.full_name || 'unknown'} to ${newHandler.full_name}. Reason: ${reason}` : `Demo reassigned from ${demo.handler?.full_name || 'unknown'} to ${newHandler.full_name}.`,
+      notes: reason
+        ? `Demo reassigned from ${demo.handler?.full_name || 'unknown'} to ${newHandler.full_name}. Reason: ${reason}`
+        : `Demo reassigned from ${demo.handler?.full_name || 'unknown'} to ${newHandler.full_name}.`,
     },
   });
 
@@ -332,23 +362,30 @@ export async function reassignDemo(user: TokenPayload, demoId: number, newHandle
       },
     });
     // Web push to old handler
-    notifyEmployee(demo.handler_id, {
-      type: 'SYSTEM_ALERT',
-      title: `Demo Reassigned: ${demo.lead.customer_name}`,
-      message: `Your demo has been reassigned to ${newHandler.full_name}.`,
-    }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] Demo reassign old:', err));
+    notifyEmployee(
+      demo.handler_id,
+      {
+        type: 'SYSTEM_ALERT',
+        title: `Demo Reassigned: ${demo.lead.customer_name}`,
+        message: `Your demo has been reassigned to ${newHandler.full_name}.`,
+      },
+      { skipDbNotification: true },
+    ).catch((err: any) => logger.error('[WebPush] Demo reassign old:', err));
   }
 
   // Web push to new handler
-  notifyEmployee(newHandlerId, {
-    type: 'DEMO_ASSIGNED',
-    title: `Demo Assigned to You: ${demo.lead.customer_name}`,
-    message: `A demo for ${demo.lead.customer_name} (${demo.lead.lead_code}) has been routed to you.`,
-  }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] Demo reassign new:', err));
+  notifyEmployee(
+    newHandlerId,
+    {
+      type: 'DEMO_ASSIGNED',
+      title: `Demo Assigned to You: ${demo.lead.customer_name}`,
+      message: `A demo for ${demo.lead.customer_name} (${demo.lead.lead_code}) has been routed to you.`,
+    },
+    { skipDbNotification: true },
+  ).catch((err: any) => logger.error('[WebPush] Demo reassign new:', err));
 
   return await p.demo.findFirst({
     where: { id: demoId },
     include: { lead: true, handler: true },
   });
 }
-

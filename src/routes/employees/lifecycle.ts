@@ -61,7 +61,11 @@ router.post(
             entity_type: 'EMPLOYEE',
             entity_id: employeeId,
             old_value: JSON.stringify({ status: targetEmployee.status }),
-            new_value: JSON.stringify({ status: 'RESIGNED', resignation_date: resignedAt, last_working_day: lastDay }),
+            new_value: JSON.stringify({
+              status: 'RESIGNED',
+              resignation_date: resignedAt,
+              last_working_day: lastDay,
+            }),
             reason: reason || null,
           },
         });
@@ -131,7 +135,9 @@ router.post(
             roleChanged = !currentRoles.some((r: any) => r.role.name === role_name);
             if (roleChanged) {
               await tx.employeeRole.deleteMany({ where: { employee_id: employeeId } });
-              await tx.employeeRole.create({ data: { employee_id: employeeId, role_id: targetRole.id } });
+              await tx.employeeRole.create({
+                data: { employee_id: employeeId, role_id: targetRole.id },
+              });
             }
           }
         }

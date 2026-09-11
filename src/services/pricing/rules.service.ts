@@ -3,7 +3,10 @@ import { TokenPayload } from '../../utils/jwt';
 import { buildProjectScope } from '../../authz/dataScope';
 import { can } from '../../authz/authorization';
 import { Permissions } from '../../shared';
-import { ProjectPricingRuleCreateInput, ProjectPricingRuleUpdateInput } from '../../shared/projectUnit';
+import {
+  ProjectPricingRuleCreateInput,
+  ProjectPricingRuleUpdateInput,
+} from '../../shared/projectUnit';
 
 const p = prisma;
 
@@ -27,7 +30,11 @@ export class PricingRulesService {
     });
   }
 
-  static async createRule(user: TokenPayload, projectId: number, data: ProjectPricingRuleCreateInput) {
+  static async createRule(
+    user: TokenPayload,
+    projectId: number,
+    data: ProjectPricingRuleCreateInput,
+  ) {
     const project = await this.assertProjectInScope(user, projectId);
     if (!can(user, Permissions.PROJECTS_UPDATE, project)) {
       throw { status: 403, message: 'Forbidden: Missing projects.update permission' };
@@ -37,12 +44,19 @@ export class PricingRulesService {
     });
   }
 
-  static async updateRule(user: TokenPayload, projectId: number, ruleId: number, data: ProjectPricingRuleUpdateInput) {
+  static async updateRule(
+    user: TokenPayload,
+    projectId: number,
+    ruleId: number,
+    data: ProjectPricingRuleUpdateInput,
+  ) {
     const project = await this.assertProjectInScope(user, projectId);
     if (!can(user, Permissions.PROJECTS_UPDATE, project)) {
       throw { status: 403, message: 'Forbidden: Missing projects.update permission' };
     }
-    const rule = await p.projectPricingRule.findFirst({ where: { id: ruleId, project_id: projectId } });
+    const rule = await p.projectPricingRule.findFirst({
+      where: { id: ruleId, project_id: projectId },
+    });
     if (!rule) throw { status: 404, message: 'Pricing rule not found' };
     return p.projectPricingRule.update({ where: { id: ruleId }, data });
   }
@@ -52,7 +66,9 @@ export class PricingRulesService {
     if (!can(user, Permissions.PROJECTS_UPDATE, project)) {
       throw { status: 403, message: 'Forbidden: Missing projects.update permission' };
     }
-    const rule = await p.projectPricingRule.findFirst({ where: { id: ruleId, project_id: projectId } });
+    const rule = await p.projectPricingRule.findFirst({
+      where: { id: ruleId, project_id: projectId },
+    });
     if (!rule) throw { status: 404, message: 'Pricing rule not found' };
     // Soft-deactivate rather than hard delete: PriceLine rows reference rules by
     // id (rule_id, onDelete: SetNull) so a past cost sheet stays legible even

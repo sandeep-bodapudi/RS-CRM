@@ -29,44 +29,46 @@ const NewCustomerSchema = z.object({
   email: z.string().email().optional(),
 });
 
-const InitiateBookingSchema = z.object({
-  // Customer — either existing id or new_customer inline
-  customer_id: z.number().int().positive().optional(),
-  new_customer: NewCustomerSchema.optional(),
-  // Inventory
-  property_id: z.number().int().positive().optional().nullable(),
-  project_unit_id: z.number().int().positive().optional().nullable(),
-  assigned_employee_id: z.number().int().positive().optional(),
-  // Financial
-  agreed_price: z.number().positive(),
-  booking_amount: z.number().positive(),
-  notes: z.string().optional(),
-  // Form fields
-  serial_no: z.string().optional(),
-  plot_no: z.string().optional(),
-  area_sqyd: z.number().positive().optional(),
-  facing: z.string().optional(),
-  price_per_sqyd: z.number().optional(),
-  sale_price_per_sqyd: z.number().optional(),
-  charges_per_sqyd: z.number().optional(),
-  emi_months: z.number().int().min(1).optional(),
-  emi_charges: z.number().optional(),
-  total_cost: z.number().optional(),
-  total_cost_words: z.string().optional(),
-  receipt_no: z.string().optional(),
-  receipt_date: z.string().optional(),
-  booking_amount_words: z.string().optional(),
-  referred_by: z.string().optional(),
-  referred_by_code: z.string().optional(),
-  // T&C
-  tc_accepted_by_name: z.string().optional(),
-  // Legacy mode
-  is_legacy: z.boolean().optional(),
-  legacy_booking_date: z.string().optional(),
-  legacy_notes: z.string().optional(),
-}).refine(data => data.customer_id || data.new_customer, {
-  message: 'Either customer_id or new_customer must be provided',
-});
+const InitiateBookingSchema = z
+  .object({
+    // Customer — either existing id or new_customer inline
+    customer_id: z.number().int().positive().optional(),
+    new_customer: NewCustomerSchema.optional(),
+    // Inventory
+    property_id: z.number().int().positive().optional().nullable(),
+    project_unit_id: z.number().int().positive().optional().nullable(),
+    assigned_employee_id: z.number().int().positive().optional(),
+    // Financial
+    agreed_price: z.number().positive(),
+    booking_amount: z.number().positive(),
+    notes: z.string().optional(),
+    // Form fields
+    serial_no: z.string().optional(),
+    plot_no: z.string().optional(),
+    area_sqyd: z.number().positive().optional(),
+    facing: z.string().optional(),
+    price_per_sqyd: z.number().optional(),
+    sale_price_per_sqyd: z.number().optional(),
+    charges_per_sqyd: z.number().optional(),
+    emi_months: z.number().int().min(1).optional(),
+    emi_charges: z.number().optional(),
+    total_cost: z.number().optional(),
+    total_cost_words: z.string().optional(),
+    receipt_no: z.string().optional(),
+    receipt_date: z.string().optional(),
+    booking_amount_words: z.string().optional(),
+    referred_by: z.string().optional(),
+    referred_by_code: z.string().optional(),
+    // T&C
+    tc_accepted_by_name: z.string().optional(),
+    // Legacy mode
+    is_legacy: z.boolean().optional(),
+    legacy_booking_date: z.string().optional(),
+    legacy_notes: z.string().optional(),
+  })
+  .refine((data) => data.customer_id || data.new_customer, {
+    message: 'Either customer_id or new_customer must be provided',
+  });
 
 const BookingFormSubmitSchema = z.object({
   serial_no: z.string().optional(),
@@ -100,18 +102,14 @@ router.use(authenticateToken);
 
 // ─── Standard booking CRUD ────────────────────────────────────────────────────
 
-router.get(
-  '/',
-  requireAuthz(Permissions.BOOKINGS_READ as any),
-  async (req: any, res, next) => {
-    try {
-      const bookings = await BookingService.getBookings(req.user);
-      res.json(bookings);
-    } catch (error) {
-      next(error);
-    }
+router.get('/', requireAuthz(Permissions.BOOKINGS_READ as any), async (req: any, res, next) => {
+  try {
+    const bookings = await BookingService.getBookings(req.user);
+    res.json(bookings);
+  } catch (error) {
+    next(error);
   }
-);
+});
 
 router.get(
   '/pending-md-approval',
@@ -123,21 +121,17 @@ router.get(
     } catch (error) {
       next(error);
     }
-  }
+  },
 );
 
-router.get(
-  '/:id',
-  requireAuthz(Permissions.BOOKINGS_READ as any),
-  async (req: any, res, next) => {
-    try {
-      const booking = await BookingService.getBookingById(req.user, parseInt(req.params.id, 10));
-      res.json(booking);
-    } catch (error) {
-      next(error);
-    }
+router.get('/:id', requireAuthz(Permissions.BOOKINGS_READ as any), async (req: any, res, next) => {
+  try {
+    const booking = await BookingService.getBookingById(req.user, parseInt(req.params.id, 10));
+    res.json(booking);
+  } catch (error) {
+    next(error);
   }
-);
+});
 
 router.get(
   '/:id/handoff-status',
@@ -149,22 +143,18 @@ router.get(
     } catch (error) {
       next(error);
     }
-  }
+  },
 );
 
-router.post(
-  '/',
-  requireAuthz(Permissions.BOOKINGS_CREATE as any),
-  async (req: any, res, next) => {
-    try {
-      const dto = CreateBookingSchema.parse(req.body);
-      const booking = await BookingService.createBooking(req.user, dto);
-      res.status(201).json(booking);
-    } catch (error) {
-      next(error);
-    }
+router.post('/', requireAuthz(Permissions.BOOKINGS_CREATE as any), async (req: any, res, next) => {
+  try {
+    const dto = CreateBookingSchema.parse(req.body);
+    const booking = await BookingService.createBooking(req.user, dto);
+    res.status(201).json(booking);
+  } catch (error) {
+    next(error);
   }
-);
+});
 
 // ─── Booking Initiation Form endpoints (Phase 2026-09-08) ────────────────────
 
@@ -184,7 +174,7 @@ router.post(
     } catch (error) {
       next(error);
     }
-  }
+  },
 );
 
 /**
@@ -197,12 +187,16 @@ router.post(
   async (req: any, res, next) => {
     try {
       const formData = BookingFormSubmitSchema.parse(req.body);
-      const booking = await BookingService.submitBookingForm(req.user, parseInt(req.params.id, 10), formData);
+      const booking = await BookingService.submitBookingForm(
+        req.user,
+        parseInt(req.params.id, 10),
+        formData,
+      );
       res.json(booking);
     } catch (error) {
       next(error);
     }
-  }
+  },
 );
 
 /**
@@ -219,7 +213,7 @@ router.post(
     } catch (error) {
       next(error);
     }
-  }
+  },
 );
 
 /**
@@ -232,12 +226,16 @@ router.post(
   async (req: any, res, next) => {
     try {
       const { reason } = MDRejectSchema.parse(req.body);
-      const booking = await BookingService.mdRejectBooking(req.user, parseInt(req.params.id, 10), reason);
+      const booking = await BookingService.mdRejectBooking(
+        req.user,
+        parseInt(req.params.id, 10),
+        reason,
+      );
       res.json(booking);
     } catch (error) {
       next(error);
     }
-  }
+  },
 );
 
 // ─── Existing status management ───────────────────────────────────────────────
@@ -252,7 +250,7 @@ router.post(
     } catch (error) {
       next(error);
     }
-  }
+  },
 );
 
 router.post(
@@ -261,12 +259,16 @@ router.post(
   async (req: any, res, next) => {
     try {
       const reason = req.body.reason || 'Booking cancelled';
-      const booking = await BookingService.cancelBooking(req.user, parseInt(req.params.id, 10), reason);
+      const booking = await BookingService.cancelBooking(
+        req.user,
+        parseInt(req.params.id, 10),
+        reason,
+      );
       res.json(booking);
     } catch (error) {
       next(error);
     }
-  }
+  },
 );
 
 router.put(
@@ -275,12 +277,16 @@ router.put(
   async (req: any, res, next) => {
     try {
       const { status } = UpdateBookingStatusSchema.parse(req.body);
-      const booking = await BookingService.updateBookingStatus(req.user, parseInt(req.params.id, 10), status);
+      const booking = await BookingService.updateBookingStatus(
+        req.user,
+        parseInt(req.params.id, 10),
+        status,
+      );
       res.json(booking);
     } catch (error) {
       next(error);
     }
-  }
+  },
 );
 
 export default router;

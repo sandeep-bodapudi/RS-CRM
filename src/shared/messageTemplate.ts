@@ -26,4 +26,4 @@ export const MessageTemplateKey = {
   POST_VISIT_INTERESTED: 'POST_VISIT_INTERESTED', // thank-you + next steps toward booking
   BOOKING_CONFIRMED: 'BOOKING_CONFIRMED', // welcome + portal credentials
 } as const;
-export type MessageTemplateKeyType = typeof MessageTemplateKey[keyof typeof MessageTemplateKey];
+export type MessageTemplateKeyType = (typeof MessageTemplateKey)[keyof typeof MessageTemplateKey];

@@ -10,7 +10,15 @@ import { UnitTypeEnum, ChargeCalcMethodEnum } from './projectUnit';
 // pricing.service.ts's getEffectiveRules), or OPTIONAL (available, but no
 // automatic charge — a buyer opts in, not modelled as a pricing rule here).
 
-export const AmenityCategoryEnum = z.enum(['SECURITY', 'RECREATION', 'CONVENIENCE', 'ENVIRONMENT', 'SPORTS', 'UTILITY', 'OTHER']);
+export const AmenityCategoryEnum = z.enum([
+  'SECURITY',
+  'RECREATION',
+  'CONVENIENCE',
+  'ENVIRONMENT',
+  'SPORTS',
+  'UTILITY',
+  'OTHER',
+]);
 export const AmenityAvailabilityEnum = z.enum(['INCLUDED', 'OPTIONAL', 'CHARGEABLE']);
 export const AmenityApplicabilityEnum = z.enum(['ALL_UNITS', 'SELECTED_UNITS', 'BY_UNIT_TYPE']);
 
@@ -39,10 +47,15 @@ export const ProjectAmenityUpsertSchema = z
     notes: z.string().optional().nullable(),
     sort_order: z.number().int().optional(),
   })
-  .refine((data) => data.availability !== 'CHARGEABLE' || (!!data.charge_calc_method && data.charge_amount != null), {
-    message: 'A calculation method and amount are required for a chargeable amenity',
-    path: ['charge_amount'],
-  })
+  .refine(
+    (data) =>
+      data.availability !== 'CHARGEABLE' ||
+      (!!data.charge_calc_method && data.charge_amount != null),
+    {
+      message: 'A calculation method and amount are required for a chargeable amenity',
+      path: ['charge_amount'],
+    },
+  )
   .refine((data) => data.applicability !== 'BY_UNIT_TYPE' || !!data.applicable_unit_type, {
     message: 'Select which unit type this amenity applies to',
     path: ['applicable_unit_type'],

@@ -41,7 +41,8 @@ export interface RequirementModel {
   confidence?: number;
 }
 
-export type FieldEvaluationStatus = 'MATCH' | 'PARTIAL' | 'MISMATCH' | 'UNKNOWN' | 'MISSING' | 'NOT_APPLICABLE';
+export type FieldEvaluationStatus =
+  'MATCH' | 'PARTIAL' | 'MISMATCH' | 'UNKNOWN' | 'MISSING' | 'NOT_APPLICABLE';
 
 export interface FieldEvaluation {
   satisfaction: number;

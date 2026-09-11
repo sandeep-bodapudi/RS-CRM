@@ -103,11 +103,20 @@ function match(reason: string, requestedValue?: unknown, matchedValue?: unknown)
   return { satisfaction: 1, status: 'MATCH', reason, requestedValue, matchedValue };
 }
 
-function mismatch(reason: string, requestedValue?: unknown, actualValue?: unknown): FieldEvaluation {
+function mismatch(
+  reason: string,
+  requestedValue?: unknown,
+  actualValue?: unknown,
+): FieldEvaluation {
   return { satisfaction: 0, status: 'MISMATCH', reason, requestedValue, deviation: actualValue };
 }
 
-function partial(reason: string, satisfaction: number, requestedValue?: unknown, actualValue?: unknown): FieldEvaluation {
+function partial(
+  reason: string,
+  satisfaction: number,
+  requestedValue?: unknown,
+  actualValue?: unknown,
+): FieldEvaluation {
   return { satisfaction, status: 'PARTIAL', reason, requestedValue, deviation: actualValue };
 }
 
@@ -120,14 +129,23 @@ function unknown(reason: string, requestedValue?: unknown): FieldEvaluation {
 }
 
 function notApplicable(reason: string, requestedValue?: unknown): FieldEvaluation {
-  return { satisfaction: NOT_APPLICABLE_SATISFACTION, status: 'NOT_APPLICABLE', reason, requestedValue };
+  return {
+    satisfaction: NOT_APPLICABLE_SATISFACTION,
+    status: 'NOT_APPLICABLE',
+    reason,
+    requestedValue,
+  };
 }
 
 function getFieldValue(property: MatchCandidate, field: string): unknown {
   return (property as unknown as Record<string, unknown>)[field];
 }
 
-function sentinelEvaluation(field: string, raw: unknown, requestedValue?: unknown): FieldEvaluation | null {
+function sentinelEvaluation(
+  field: string,
+  raw: unknown,
+  requestedValue?: unknown,
+): FieldEvaluation | null {
   if (raw === undefined || raw === null) {
     return missing(`No ${field} data provided`, requestedValue);
   }
@@ -209,14 +227,19 @@ function evaluatePrice(property: MatchCandidate, req: Requirement): FieldEvaluat
   const pMin = property.priceMin ?? property.price;
   const pMax = property.priceMax ?? property.price;
   const hasRange = pMin !== pMax;
-  const label = property.priceFormatted || `${formatINR(pMin)}${hasRange ? `–${formatINR(pMax)}` : ''}`;
+  const label =
+    property.priceFormatted || `${formatINR(pMin)}${hasRange ? `–${formatINR(pMax)}` : ''}`;
 
   if (pMin === undefined || pMin === null || Number.isNaN(Number(pMin))) {
     return missing('Price not provided', req.value);
   }
 
   if (min > 0 && max !== Infinity && pMax < min) {
-    return mismatch(`Price ${label} is below the minimum budget (min ${formatINR(min)})`, req.value, property.price);
+    return mismatch(
+      `Price ${label} is below the minimum budget (min ${formatINR(min)})`,
+      req.value,
+      property.price,
+    );
   }
 
   if (pMin >= min && pMax <= max) {
@@ -248,7 +271,11 @@ function evaluatePrice(property: MatchCandidate, req: Requirement): FieldEvaluat
         property.price,
       );
     }
-    return mismatch(`Price ${label} exceeds budget (max ${formatINR(max)})`, req.value, property.price);
+    return mismatch(
+      `Price ${label} exceeds budget (max ${formatINR(max)})`,
+      req.value,
+      property.price,
+    );
   }
 
   return match(`Price ${label} is within budget`, req.value, property.price);
@@ -259,14 +286,21 @@ function evaluateParking(property: MatchCandidate, req: Requirement): FieldEvalu
   const sentinel = sentinelEvaluation('Parking', raw, req.value);
   if (sentinel) return sentinel;
 
-  const hasParking = raw === true || (Array.isArray(property.amenities) && property.amenities.some((a) => a.toLowerCase() === 'parking'));
+  const hasParking =
+    raw === true ||
+    (Array.isArray(property.amenities) &&
+      property.amenities.some((a) => a.toLowerCase() === 'parking'));
   const requested = req.value;
 
   if (requested === true) {
-    return hasParking ? match('Parking is available', true, true) : mismatch('Parking is not available', true, false);
+    return hasParking
+      ? match('Parking is available', true, true)
+      : mismatch('Parking is not available', true, false);
   }
   if (requested === false) {
-    return hasParking ? mismatch('Parking is available', false, true) : match('Parking is not available (matches)', false, false);
+    return hasParking
+      ? mismatch('Parking is available', false, true)
+      : match('Parking is not available (matches)', false, false);
   }
   return unknown('Parking requirement is not understood', req.value);
 }
@@ -311,7 +345,9 @@ function evaluateAmenities(property: MatchCandidate, req: Requirement): FieldEva
   if (raw.length === 0) {
     return mismatch('None of the required amenities are available', req.value, []);
   }
-  const needed = Array.isArray(req.value) ? (req.value as unknown[]).map(String) : [String(req.value)];
+  const needed = Array.isArray(req.value)
+    ? (req.value as unknown[]).map(String)
+    : [String(req.value)];
   const have = raw.map((a) => a.toLowerCase());
   const found = needed.filter((n) => have.includes(n.toLowerCase()));
   if (found.length === needed.length) {
@@ -319,12 +355,20 @@ function evaluateAmenities(property: MatchCandidate, req: Requirement): FieldEva
   }
   if (found.length > 0) {
     const satisfaction = Math.max(0.3, found.length / needed.length);
-    return partial(`Only some amenities available: ${found.join(', ')}`, Math.round(satisfaction * 100) / 100, req.value, found);
+    return partial(
+      `Only some amenities available: ${found.join(', ')}`,
+      Math.round(satisfaction * 100) / 100,
+      req.value,
+      found,
+    );
   }
   return mismatch(`Amenities missing: ${needed.join(', ')}`, req.value, []);
 }
 
-const FIELD_EVALUATORS: Record<string, (property: MatchCandidate, req: Requirement) => FieldEvaluation> = {
+const FIELD_EVALUATORS: Record<
+  string,
+  (property: MatchCandidate, req: Requirement) => FieldEvaluation
+> = {
   propertyType: evaluatePropertyType,
   listingType: evaluateListingType,
   possessionStatus: evaluatePossession,
@@ -347,7 +391,10 @@ export function evaluateField(property: MatchCandidate, req: Requirement): Field
   return evaluator(property, req);
 }
 
-export function checkCandidateEligibility(property: MatchCandidate, requirements: Requirement[]): boolean {
+export function checkCandidateEligibility(
+  property: MatchCandidate,
+  requirements: Requirement[],
+): boolean {
   for (const req of requirements) {
     if (req.importance === 'EXCLUDED') {
       const evalResult = evaluateField(property, req);
@@ -362,7 +409,11 @@ export function checkCandidateEligibility(property: MatchCandidate, requirements
     const evalResult = evaluateField(property, req);
     if (evalResult.status === 'MISMATCH') return false;
 
-    if (evalResult.status === 'UNKNOWN' || evalResult.status === 'MISSING' || evalResult.status === 'NOT_APPLICABLE') {
+    if (
+      evalResult.status === 'UNKNOWN' ||
+      evalResult.status === 'MISSING' ||
+      evalResult.status === 'NOT_APPLICABLE'
+    ) {
       return false;
     }
   }
@@ -392,7 +443,10 @@ function categorize(evalResult: FieldEvaluation, explanation: MatchExplanation):
   }
 }
 
-export function evaluatePropertyMatch<T extends MatchCandidate>(property: T, requirementModel: RequirementModel): RankedProperty<T> {
+export function evaluatePropertyMatch<T extends MatchCandidate>(
+  property: T,
+  requirementModel: RequirementModel,
+): RankedProperty<T> {
   const requirements = requirementModel.requirements;
 
   if (requirements.length === 0) {
@@ -435,7 +489,9 @@ export function rankByRequirementModel<T extends MatchCandidate>(
   properties: T[],
   requirementModel: RequirementModel,
 ): RankedProperty<T>[] {
-  const eligible = properties.filter((p) => checkCandidateEligibility(p, requirementModel.requirements));
+  const eligible = properties.filter((p) =>
+    checkCandidateEligibility(p, requirementModel.requirements),
+  );
   const ranked = eligible.map((p) => evaluatePropertyMatch(p, requirementModel));
   ranked.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;

@@ -19,7 +19,7 @@ export class LeadPolicy {
         Roles.MARKETING_DIRECTOR,
         Roles.DIGITAL_LEAD_OPERATOR,
         Roles.SALES_MANAGER,
-      ].includes(r as any)
+      ].includes(r as any),
     );
   }
 
@@ -39,10 +39,7 @@ export class LeadPolicy {
     }
 
     // Telecallers/Agents: Assigned access only
-    return (
-      lead.assigned_to_id === user.employeeId ||
-      lead.created_by_id === user.employeeId
-    );
+    return lead.assigned_to_id === user.employeeId || lead.created_by_id === user.employeeId;
   }
 
   /**
@@ -52,7 +49,7 @@ export class LeadPolicy {
   static canMutate(user: TokenPayload, lead: Lead): boolean {
     // Management can mutate any lead in their company
     if (this.isManagement(user)) {
-        return lead.company_id === user.companyId;
+      return lead.company_id === user.companyId;
     }
 
     // Telecallers/Agents: can ONLY mutate leads currently assigned to their own
@@ -61,7 +58,7 @@ export class LeadPolicy {
     // tracking) but is view-only until it's actually assigned to someone --
     // it isn't theirs to work just because they introduced it.
     if (lead.assigned_to_id === user.employeeId) {
-        return lead.company_id === user.companyId;
+      return lead.company_id === user.companyId;
     }
 
     return false;
@@ -79,5 +76,4 @@ export class LeadPolicy {
 
     return this.isManagement(user);
   }
-
 }

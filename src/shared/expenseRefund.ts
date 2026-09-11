@@ -10,7 +10,8 @@ export const ExpenseRefundStatus = {
   REJECTED_BY_MD: 'REJECTED_BY_MD',
 } as const;
 
-export type ExpenseRefundStatusType = typeof ExpenseRefundStatus[keyof typeof ExpenseRefundStatus];
+export type ExpenseRefundStatusType =
+  (typeof ExpenseRefundStatus)[keyof typeof ExpenseRefundStatus];
 
 export const ExpenseRefundCreateSchema = z.object({
   purpose: z.string().min(3, 'Purpose is required'),
@@ -24,7 +25,9 @@ export const ExpenseRefundAccountantReviewSchema = z.object({
   note: z.string().optional(),
 });
 
-export type ExpenseRefundAccountantReviewInput = z.infer<typeof ExpenseRefundAccountantReviewSchema>;
+export type ExpenseRefundAccountantReviewInput = z.infer<
+  typeof ExpenseRefundAccountantReviewSchema
+>;
 
 export const ExpenseRefundMDReviewSchema = z.object({
   decision: z.enum(['APPROVE', 'REJECT']),

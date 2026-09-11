@@ -68,7 +68,10 @@ export function inventoryConnect(ref: InventoryRef) {
 }
 
 /** Plain FK fields, for creates that set scalars rather than relations. */
-export function inventoryFk(ref: InventoryRef): { property_id: number | null; project_unit_id: number | null } {
+export function inventoryFk(ref: InventoryRef): {
+  property_id: number | null;
+  project_unit_id: number | null;
+} {
   return ref.kind === 'PROPERTY'
     ? { property_id: ref.id, project_unit_id: null }
     : { property_id: null, project_unit_id: ref.id };
@@ -268,12 +271,28 @@ export async function getInventoryPortalDetail(
       select: {
         // § Phase 3: Property.price removed — final_price is authoritative;
         // the InventoryPortalDetail.property.price output key is unchanged.
-        id: true, property_code: true, title: true, category: true, final_price: true,
-        area_sqft: true, location: true, address: true, city: true, state: true,
-        pincode: true, bedrooms: true, bathrooms: true, facing: true,
+        id: true,
+        property_code: true,
+        title: true,
+        category: true,
+        final_price: true,
+        area_sqft: true,
+        location: true,
+        address: true,
+        city: true,
+        state: true,
+        pincode: true,
+        bedrooms: true,
+        bathrooms: true,
+        facing: true,
         project: {
           select: {
-            id: true, project_code: true, name: true, location: true, city: true, state: true,
+            id: true,
+            project_code: true,
+            name: true,
+            location: true,
+            city: true,
+            state: true,
             company: { select: { id: true, name: true } },
           },
         },
@@ -282,27 +301,57 @@ export async function getInventoryPortalDetail(
     if (!row) return { property: null, projectUnit: null, project: null, company: null };
     return {
       property: {
-        id: row.id, property_code: row.property_code, title: row.title, category: row.category,
-        price: row.final_price, area_sqft: row.area_sqft, location: row.location, address: row.address,
-        city: row.city, state: row.state, pincode: row.pincode, bedrooms: row.bedrooms,
-        bathrooms: row.bathrooms, facing: row.facing,
+        id: row.id,
+        property_code: row.property_code,
+        title: row.title,
+        category: row.category,
+        price: row.final_price,
+        area_sqft: row.area_sqft,
+        location: row.location,
+        address: row.address,
+        city: row.city,
+        state: row.state,
+        pincode: row.pincode,
+        bedrooms: row.bedrooms,
+        bathrooms: row.bathrooms,
+        facing: row.facing,
       },
       projectUnit: null,
       project: row.project
-        ? { id: row.project.id, project_code: row.project.project_code, name: row.project.name, location: row.project.location, city: row.project.city, state: row.project.state }
+        ? {
+            id: row.project.id,
+            project_code: row.project.project_code,
+            name: row.project.name,
+            location: row.project.location,
+            city: row.project.city,
+            state: row.project.state,
+          }
         : null,
-      company: row.project?.company ? { id: row.project.company.id, name: row.project.company.name } : null,
+      company: row.project?.company
+        ? { id: row.project.company.id, name: row.project.company.name }
+        : null,
     };
   }
 
   const row = await client.projectUnit.findUnique({
     where: { id: ref.id },
     select: {
-      id: true, unit_code: true, unit_number: true, unit_type: true, final_price: true,
-      calculated_price: true, plot_area_sqyd: true, facing: true,
+      id: true,
+      unit_code: true,
+      unit_number: true,
+      unit_type: true,
+      final_price: true,
+      calculated_price: true,
+      plot_area_sqyd: true,
+      facing: true,
       project: {
         select: {
-          id: true, project_code: true, name: true, location: true, city: true, state: true,
+          id: true,
+          project_code: true,
+          name: true,
+          location: true,
+          city: true,
+          state: true,
           company: { select: { id: true, name: true } },
         },
       },
@@ -312,14 +361,28 @@ export async function getInventoryPortalDetail(
   return {
     property: null,
     projectUnit: {
-      id: row.id, unit_code: row.unit_code, unit_number: row.unit_number, unit_type: row.unit_type,
-      final_price: row.final_price, calculated_price: row.calculated_price,
-      plot_area_sqyd: row.plot_area_sqyd, facing: row.facing,
+      id: row.id,
+      unit_code: row.unit_code,
+      unit_number: row.unit_number,
+      unit_type: row.unit_type,
+      final_price: row.final_price,
+      calculated_price: row.calculated_price,
+      plot_area_sqyd: row.plot_area_sqyd,
+      facing: row.facing,
     },
     project: row.project
-      ? { id: row.project.id, project_code: row.project.project_code, name: row.project.name, location: row.project.location, city: row.project.city, state: row.project.state }
+      ? {
+          id: row.project.id,
+          project_code: row.project.project_code,
+          name: row.project.name,
+          location: row.project.location,
+          city: row.project.city,
+          state: row.project.state,
+        }
       : null,
-    company: row.project?.company ? { id: row.project.company.id, name: row.project.company.name } : null,
+    company: row.project?.company
+      ? { id: row.project.company.id, name: row.project.company.name }
+      : null,
   };
 }
 

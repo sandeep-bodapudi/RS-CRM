@@ -2368,15 +2368,16 @@ model SiteVisitEscalation {
 }
 
 model Demo {
-  id           Int      @id @default(autoincrement())
+  id           Int        @id @default(autoincrement())
   lead_id      Int
   handler_id   Int
   scheduled_at DateTime
-  summary      String   @db.Text
-  created_at   DateTime @default(now())
-  updated_at   DateTime @updatedAt
-  accepted_at  DateTime? // When handler accepted the demo request (blind approval)
-  accepted_by  Int?     // Employee ID who accepted (usually the handler themselves)
+  summary      String     @db.Text
+  status       String     @default("PENDING")
+  created_at   DateTime   @default(now())
+  updated_at   DateTime   @updatedAt
+  accepted_at  DateTime?  // When handler accepted the demo request (blind approval)
+  accepted_by  Int?       // Employee ID who accepted (usually the handler themselves)
 
   lead                  Lead                     @relation(fields: [lead_id], references: [id], onDelete: Cascade)
   handler               Employee                 @relation("DemoHandler", fields: [handler_id], references: [id])

@@ -7,7 +7,13 @@ import { requireAuthz } from '../../middleware/authz';
 import { validateRequestBody } from '../../middleware/validate';
 import { prisma } from '../../lib/prisma';
 import { buildPropertyScope } from '../../authz/dataScope';
-import { Permissions, PropertyPricingRuleCreateSchema, PropertyPricingRuleUpdateSchema, PropertyPricePreviewSchema, OverridePropertyPriceSchema } from '../../shared';
+import {
+  Permissions,
+  PropertyPricingRuleCreateSchema,
+  PropertyPricingRuleUpdateSchema,
+  PropertyPricePreviewSchema,
+  OverridePropertyPriceSchema,
+} from '../../shared';
 import { PropertyPricingRulesService } from '../../services/pricing/propertyRules.service';
 import { PricingService } from '../../services/pricing/pricing.service';
 import { PropertyService } from '../../services/property.service';
@@ -68,7 +74,12 @@ router.put(
     try {
       const propertyId = parseInt(req.params.id, 10);
       const ruleId = parseInt(req.params.ruleId, 10);
-      const rule = await PropertyPricingRulesService.updateRule(req.user!, propertyId, ruleId, req.body);
+      const rule = await PropertyPricingRulesService.updateRule(
+        req.user!,
+        propertyId,
+        ruleId,
+        req.body,
+      );
       return res.status(200).json({ message: 'Pricing rule updated', rule });
     } catch (error: any) {
       logger.error('Update property pricing rule error:', error);
@@ -153,7 +164,12 @@ router.post(
   async (req: AuthenticatedRequest, res: Response) => {
     try {
       const propertyId = parseInt(req.params.id, 10);
-      const property = await PropertyService.overridePrice(req.user!, propertyId, req.body.override_price, req.body.override_reason);
+      const property = await PropertyService.overridePrice(
+        req.user!,
+        propertyId,
+        req.body.override_price,
+        req.body.override_reason,
+      );
       return res.status(200).json({ message: 'Price override applied', property });
     } catch (error: any) {
       logger.error('Override property price error:', error);

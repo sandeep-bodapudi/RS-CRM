@@ -107,4 +107,3 @@ export type ProjectLayoutRegionsInput = z.infer<typeof ProjectLayoutRegionsSchem
 export const AddPropertyInterestSchema = z.object({
   property_id: z.number().int().positive(),
 });
-

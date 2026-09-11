@@ -9,7 +9,13 @@ import {
   ProjectUnitUpdateInput,
   ProjectUnitBulkCreateInput,
 } from '../shared/projectUnit';
-import { normalizeArea, areaFromDimensions, dimensionsDisagree, validateFlatAreas, AreaUnitType } from '../shared/measurement';
+import {
+  normalizeArea,
+  areaFromDimensions,
+  dimensionsDisagree,
+  validateFlatAreas,
+  AreaUnitType,
+} from '../shared/measurement';
 import { PricingService, getEffectiveRules } from './pricing/pricing.service';
 import { computePrice, resolveFinalPrice, PricingUnitInput } from './pricing/engine';
 
@@ -33,7 +39,10 @@ export class ProjectUnitService {
     return project;
   }
 
-  private static async generateUnitCode(projectCode: string, client: { projectUnit: { count: (args?: any) => Promise<number> } } = p): Promise<string> {
+  private static async generateUnitCode(
+    projectCode: string,
+    client: { projectUnit: { count: (args?: any) => Promise<number> } } = p,
+  ): Promise<string> {
     const count = await client.projectUnit.count();
     const seq = (count + 1).toString().padStart(5, '0');
     return `${projectCode}-U${seq}`;
@@ -71,7 +80,8 @@ export class ProjectUnitService {
 
     if (data.carpet_area_sqft != null) out.carpet_area_sqft = data.carpet_area_sqft;
     if (data.built_up_area_sqft != null) out.built_up_area_sqft = data.built_up_area_sqft;
-    if (data.super_built_up_area_sqft != null) out.super_built_up_area_sqft = data.super_built_up_area_sqft;
+    if (data.super_built_up_area_sqft != null)
+      out.super_built_up_area_sqft = data.super_built_up_area_sqft;
 
     const areaIssues = validateFlatAreas({
       carpet_area_sqft: out.carpet_area_sqft ?? data.carpet_area_sqft,
@@ -83,7 +93,13 @@ export class ProjectUnitService {
       throw { status: 400, message: areaErrors.map((e) => e.message).join(' ') };
     }
 
-    return { fields: out, warnings: [...warnings, ...areaIssues.filter((i) => i.severity === 'warning').map((i) => i.message)] };
+    return {
+      fields: out,
+      warnings: [
+        ...warnings,
+        ...areaIssues.filter((i) => i.severity === 'warning').map((i) => i.message),
+      ],
+    };
   }
 
   private static toCreateData(data: Partial<ProjectUnitCreateInput>) {
@@ -177,7 +193,12 @@ export class ProjectUnitService {
     }
 
     const [units, total] = await Promise.all([
-      p.projectUnit.findMany({ where, take, skip, orderBy: [{ tower: 'asc' }, { floor: 'asc' }, { unit_number: 'asc' }] }),
+      p.projectUnit.findMany({
+        where,
+        take,
+        skip,
+        orderBy: [{ tower: 'asc' }, { floor: 'asc' }, { unit_number: 'asc' }],
+      }),
       p.projectUnit.count({ where }),
     ]);
 
@@ -188,7 +209,17 @@ export class ProjectUnitService {
     const unit = await p.projectUnit.findUnique({
       where: { id: unitId },
       include: {
-        project: { select: { id: true, name: true, project_code: true, location: true, assigned_pm_id: true, company_id: true, branch_id: true } },
+        project: {
+          select: {
+            id: true,
+            name: true,
+            project_code: true,
+            location: true,
+            assigned_pm_id: true,
+            company_id: true,
+            branch_id: true,
+          },
+        },
         price_lines: { orderBy: { sort_order: 'asc' } },
         features: true,
         images: { orderBy: { sort_order: 'asc' } },
@@ -199,7 +230,10 @@ export class ProjectUnitService {
 
     // Scope via the parent project, matching every other unit operation.
     const scope = await buildProjectScope(user);
-    const inScope = await p.project.findFirst({ where: { id: unit.project_id, ...scope }, select: { id: true } });
+    const inScope = await p.project.findFirst({
+      where: { id: unit.project_id, ...scope },
+      select: { id: true },
+    });
     if (!inScope) throw { status: 404, message: 'Unit not found' };
 
     return unit;
@@ -309,17 +343,29 @@ export class ProjectUnitService {
     }
 
     if (['RESERVED', 'BOOKED'].includes(status)) {
-      throw { status: 409, message: `${status} is set automatically when a booking is created — it cannot be set manually.` };
+      throw {
+        status: 409,
+        message: `${status} is set automatically when a booking is created — it cannot be set manually.`,
+      };
     }
     if (status === 'SOLD' && unit.sales_status !== 'BOOKED') {
-      throw { status: 409, message: 'A unit can only be marked SOLD from BOOKED (on final payment/registration).' };
+      throw {
+        status: 409,
+        message: 'A unit can only be marked SOLD from BOOKED (on final payment/registration).',
+      };
     }
     if (unit.locked_by_booking_id && !['SOLD'].includes(status)) {
-      throw { status: 409, message: 'This unit is locked by an active booking. Cancel the booking first.' };
+      throw {
+        status: 409,
+        message: 'This unit is locked by an active booking. Cancel the booking first.',
+      };
     }
 
     return p.$transaction(async (tx) => {
-      const updated = await tx.projectUnit.update({ where: { id: unitId }, data: { sales_status: status as any } });
+      const updated = await tx.projectUnit.update({
+        where: { id: unitId },
+        data: { sales_status: status as any },
+      });
       await tx.auditEvent.create({
         data: {
           actor_id: user.employeeId || 1,
@@ -335,7 +381,12 @@ export class ProjectUnitService {
     });
   }
 
-  static async overridePrice(user: TokenPayload, unitId: number, overridePrice: number | null, reason?: string | null) {
+  static async overridePrice(
+    user: TokenPayload,
+    unitId: number,
+    overridePrice: number | null,
+    reason?: string | null,
+  ) {
     const unit = await p.projectUnit.findUnique({ where: { id: unitId } });
     if (!unit) throw { status: 404, message: 'Unit not found' };
     const project = await this.assertProjectInScope(user, unit.project_id);
@@ -348,7 +399,7 @@ export class ProjectUnitService {
       where: { id: unitId },
       data: {
         override_price: overridePrice,
-        override_reason: overridePrice != null ? reason ?? null : null,
+        override_reason: overridePrice != null ? (reason ?? null) : null,
         overridden_by_id: overridePrice != null ? user.employeeId : null,
         overridden_at: overridePrice != null ? new Date() : null,
       },
@@ -382,7 +433,10 @@ export class ProjectUnitService {
     }
 
     if (['RESERVED', 'BOOKED', 'SOLD'].includes(unit.sales_status)) {
-      throw { status: 409, message: `Cannot delete: unit is ${unit.sales_status}. Resolve the booking first.` };
+      throw {
+        status: 409,
+        message: `Cannot delete: unit is ${unit.sales_status}. Resolve the booking first.`,
+      };
     }
 
     const [bookingCount, interestCount] = await Promise.all([
@@ -390,10 +444,17 @@ export class ProjectUnitService {
       p.leadPropertyInterest.count({ where: { project_unit_id: unitId } }),
     ]);
     if (bookingCount > 0) {
-      throw { status: 409, message: 'Cannot delete: this unit has booking history. Change its status instead.' };
+      throw {
+        status: 409,
+        message: 'Cannot delete: this unit has booking history. Change its status instead.',
+      };
     }
     if (interestCount > 0) {
-      throw { status: 409, message: 'Cannot delete: leads have shown interest in this unit. Change its status instead.' };
+      throw {
+        status: 409,
+        message:
+          'Cannot delete: leads have shown interest in this unit. Change its status instead.',
+      };
     }
 
     await p.projectUnit.delete({ where: { id: unitId } });
@@ -402,14 +463,21 @@ export class ProjectUnitService {
 
   /** A free-standing feature ("Park Facing", "2 Car Parking") — distinct from a
    * project amenity, which every matching unit shares (spec section 29). */
-  static async addFeature(user: TokenPayload, unitId: number, label: string, chargeAmount?: number | null) {
+  static async addFeature(
+    user: TokenPayload,
+    unitId: number,
+    label: string,
+    chargeAmount?: number | null,
+  ) {
     const unit = await p.projectUnit.findUnique({ where: { id: unitId } });
     if (!unit) throw { status: 404, message: 'Unit not found' };
     const project = await this.assertProjectInScope(user, unit.project_id);
     if (!can(user, Permissions.PROJECTS_UPDATE, project)) {
       throw { status: 403, message: 'Forbidden: Missing projects.update permission' };
     }
-    return p.inventoryFeature.create({ data: { project_unit_id: unitId, label, charge_amount: chargeAmount ?? null } });
+    return p.inventoryFeature.create({
+      data: { project_unit_id: unitId, label, charge_amount: chargeAmount ?? null },
+    });
   }
 
   static async removeFeature(user: TokenPayload, unitId: number, featureId: number) {
@@ -419,7 +487,9 @@ export class ProjectUnitService {
     if (!can(user, Permissions.PROJECTS_UPDATE, project)) {
       throw { status: 403, message: 'Forbidden: Missing projects.update permission' };
     }
-    const feature = await p.inventoryFeature.findFirst({ where: { id: featureId, project_unit_id: unitId } });
+    const feature = await p.inventoryFeature.findFirst({
+      where: { id: featureId, project_unit_id: unitId },
+    });
     if (!feature) throw { status: 404, message: 'Feature not found' };
     await p.inventoryFeature.delete({ where: { id: featureId } });
     return { deleted: true };
@@ -438,7 +508,10 @@ export class ProjectUnitService {
     // AuditEvent.actor_id has no FK relation (see schema.prisma) — resolve
     // names with a single batched lookup rather than one query per row.
     const actorIds = [...new Set(events.map((e) => e.actor_id))];
-    const actors = await p.employee.findMany({ where: { id: { in: actorIds } }, select: { id: true, full_name: true } });
+    const actors = await p.employee.findMany({
+      where: { id: { in: actorIds } },
+      select: { id: true, full_name: true },
+    });
     const nameById = new Map(actors.map((a) => [a.id, a.full_name]));
     return events.map((e) => ({ ...e, actor_name: nameById.get(e.actor_id) || null }));
   }
@@ -501,7 +574,11 @@ export class ProjectUnitService {
    * rules once and prices every row against them (rather than looping
    * PricingService.recalculateUnit, which would refetch rules per row).
    */
-  static async bulkCreateUnits(user: TokenPayload, projectId: number, payload: ProjectUnitBulkCreateInput) {
+  static async bulkCreateUnits(
+    user: TokenPayload,
+    projectId: number,
+    payload: ProjectUnitBulkCreateInput,
+  ) {
     const project = await this.assertProjectInScope(user, projectId);
     if (!can(user, Permissions.PROJECTS_UPDATE, project)) {
       throw { status: 403, message: 'Forbidden: Missing projects.update permission' };

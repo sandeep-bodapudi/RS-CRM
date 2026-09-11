@@ -162,6 +162,67 @@ router.post('/:id/reassign', auth_1.authenticateToken, (0, authz_1.requireAuthz)
     }
 });
 // ─────────────────────────────────────────────────────────────
+// Project Verification Workflow
+// ─────────────────────────────────────────────────────────────
+// POST /api/v1/projects/:id/submit-for-review
+// PM submits their project for MD review (DRAFT|REJECTED → PENDING_VERIFICATION)
+router.post('/:id/submit-for-review', auth_1.authenticateToken, (0, authz_1.requireAuthz)(shared_1.Permissions.PROJECTS_SUBMIT_VERIFY, projectInScope()), async (req, res) => {
+    try {
+        const projectId = parseInt(req.params.id, 10);
+        if (isNaN(projectId))
+            return res.status(400).json({ error: 'Invalid ID' });
+        const project = await p.project.findFirst({ where: { id: projectId } });
+        if (!project)
+            return res.status(404).json({ error: 'Project not found' });
+        if (!['DRAFT', 'REJECTED'].includes(project.status)) {
+            return res.status(400).json({ error: `Cannot submit: project is already ${project.status}` });
+        }
+        const updated = await p.project.update({
+            where: { id: projectId },
+            data: { status: 'PENDING_VERIFICATION', verified_by_id: null, verified_at: null, verification_notes: null },
+        });
+        logger_1.logger.info(`Project ${projectId} submitted for review by employee ${req.user.employeeId}`);
+        return res.status(200).json({ message: 'Project submitted for MD review.', project: updated });
+    }
+    catch (error) {
+        logger_1.logger.error('Submit project for review error:', error);
+        return res.status(500).json({ error: 'Failed to submit project for review' });
+    }
+});
+// POST /api/v1/projects/:id/verify
+// MD approves or rejects: body { action: 'APPROVE' | 'REJECT', notes?: string }
+router.post('/:id/verify', auth_1.authenticateToken, (0, authz_1.requireAuthz)(shared_1.Permissions.PROJECTS_VERIFY), async (req, res) => {
+    try {
+        const projectId = parseInt(req.params.id, 10);
+        if (isNaN(projectId))
+            return res.status(400).json({ error: 'Invalid ID' });
+        const { action, notes } = req.body;
+        if (!['APPROVE', 'REJECT'].includes(action)) {
+            return res.status(400).json({ error: 'action must be APPROVE or REJECT' });
+        }
+        const project = await p.project.findFirst({ where: { id: projectId } });
+        if (!project)
+            return res.status(404).json({ error: 'Project not found' });
+        if (project.status !== 'PENDING_VERIFICATION') {
+            return res.status(400).json({ error: `Project is not pending verification (current: ${project.status})` });
+        }
+        const newStatus = action === 'APPROVE' ? 'VERIFIED' : 'REJECTED';
+        const updated = await p.project.update({
+            where: { id: projectId },
+            data: { status: newStatus, verified_by_id: req.user.employeeId, verified_at: new Date(), verification_notes: notes || null },
+        });
+        logger_1.logger.info(`Project ${projectId} ${newStatus} by MD employee ${req.user.employeeId}`);
+        const msg = action === 'APPROVE'
+            ? `Project "${project.name}" approved and is now visible to all staff.`
+            : `Project "${project.name}" rejected. The PM has been informed.`;
+        return res.status(200).json({ message: msg, project: updated });
+    }
+    catch (error) {
+        logger_1.logger.error('Verify project error:', error);
+        return res.status(500).json({ error: 'Failed to verify project' });
+    }
+});
+// ─────────────────────────────────────────────────────────────
 // Phase 2.23: Layout images & unit-position regions
 // ─────────────────────────────────────────────────────────────
 // POST /api/v1/projects/:id/layout-images - Upload a layout/site-plan image

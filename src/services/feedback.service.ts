@@ -13,7 +13,8 @@ const p = prisma;
 const FEEDBACK_LINK_TTL_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
 const APP_URL = process.env.APP_URL || 'http://localhost:5173';
 
-const hashToken = (token: string): string => crypto.createHash('sha256').update(token).digest('hex');
+const hashToken = (token: string): string =>
+  crypto.createHash('sha256').update(token).digest('hex');
 
 /**
  * Called from SiteVisitService.completeVisit() right after a visit is marked
@@ -92,7 +93,8 @@ async function findValidFeedbackByToken(token: string) {
     include: { rated_employee: true },
   });
   if (!feedback) throw { status: 404, message: 'This feedback link is invalid.' };
-  if (feedback.expires_at < new Date()) throw { status: 410, message: 'This feedback link has expired.' };
+  if (feedback.expires_at < new Date())
+    throw { status: 410, message: 'This feedback link has expired.' };
   return feedback;
 }
 
@@ -114,7 +116,8 @@ export interface SubmitFeedbackInput {
 
 export async function submitFeedback(token: string, input: SubmitFeedbackInput): Promise<void> {
   const feedback = await findValidFeedbackByToken(token);
-  if (feedback.submitted_at) throw { status: 409, message: 'Feedback has already been submitted for this visit.' };
+  if (feedback.submitted_at)
+    throw { status: 409, message: 'Feedback has already been submitted for this visit.' };
 
   if (!Number.isInteger(input.rating) || input.rating < 1 || input.rating > 5) {
     throw { status: 400, message: 'Rating must be a whole number between 1 and 5.' };
@@ -179,7 +182,11 @@ export interface FeedbackListItem {
  * analytics.service.ts's header comment: tenant scope must always come from
  * the authenticated token, never be left open "because they're an MD").
  */
-export async function listFeedback(requester: { employeeId: number; roles: string[]; companyId: number }): Promise<FeedbackListItem[]> {
+export async function listFeedback(requester: {
+  employeeId: number;
+  roles: string[];
+  companyId: number;
+}): Promise<FeedbackListItem[]> {
   const isMD = requester.roles.includes(Roles.MD);
 
   const where = isMD

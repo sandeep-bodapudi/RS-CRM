@@ -125,7 +125,8 @@ export function calculatePerformanceScore(inputs: PerformanceScoreInputs): Perfo
     presentCount: inputs.presentCount,
     presentBoost: inputs.attendanceBoost,
     propertyBookingContributions: inputs.propertyBookingContributions,
-    propertyBookingBoost: inputs.propertyBookingContributions * PERFORMANCE_WEIGHTS.propertyBookingBoost,
+    propertyBookingBoost:
+      inputs.propertyBookingContributions * PERFORMANCE_WEIGHTS.propertyBookingBoost,
     lateCount: inputs.lateCount,
     latePenalty: inputs.lateCount * PERFORMANCE_WEIGHTS.latePenalty,
     halfDayCount: inputs.halfDayCount,
@@ -137,20 +138,22 @@ export function calculatePerformanceScore(inputs: PerformanceScoreInputs): Perfo
     overdueTasks: inputs.overdueTasks,
     overduePenalty: inputs.overdueTasks * PERFORMANCE_WEIGHTS.overduePenalty,
     uninformedAbsentEvents: inputs.uninformedAbsentEvents,
-    uninformedAbsentPenalty: inputs.uninformedAbsentEvents * PERFORMANCE_WEIGHTS.uninformedAbsentPenalty,
+    uninformedAbsentPenalty:
+      inputs.uninformedAbsentEvents * PERFORMANCE_WEIGHTS.uninformedAbsentPenalty,
   };
 
-  const rawScore = PERFORMANCE_BASE_SCORE
-    + breakdown.taskBoost
-    + breakdown.reportBoost
-    + breakdown.presentBoost
-    + breakdown.propertyBookingBoost
-    + breakdown.targetExceededBoost
-    - breakdown.latePenalty
-    - breakdown.halfDayPenalty
-    - breakdown.belowTargetPenalty
-    - breakdown.overduePenalty
-    - breakdown.uninformedAbsentPenalty;
+  const rawScore =
+    PERFORMANCE_BASE_SCORE +
+    breakdown.taskBoost +
+    breakdown.reportBoost +
+    breakdown.presentBoost +
+    breakdown.propertyBookingBoost +
+    breakdown.targetExceededBoost -
+    breakdown.latePenalty -
+    breakdown.halfDayPenalty -
+    breakdown.belowTargetPenalty -
+    breakdown.overduePenalty -
+    breakdown.uninformedAbsentPenalty;
 
   return {
     score: roundPerformanceScore(rawScore),

@@ -17,14 +17,14 @@ export const DocumentType = {
   OTHER: 'OTHER',
 } as const;
 
-export type DocumentTypeValue = typeof DocumentType[keyof typeof DocumentType];
+export type DocumentTypeValue = (typeof DocumentType)[keyof typeof DocumentType];
 
 export const DocumentStatus = {
   ACTIVE: 'ACTIVE',
   ARCHIVED: 'ARCHIVED',
 } as const;
 
-export type DocumentStatusValue = typeof DocumentStatus[keyof typeof DocumentStatus];
+export type DocumentStatusValue = (typeof DocumentStatus)[keyof typeof DocumentStatus];
 
 export const DocumentVerificationStatus = {
   PENDING: 'PENDING',
@@ -32,10 +32,14 @@ export const DocumentVerificationStatus = {
   REJECTED: 'REJECTED',
 } as const;
 
-export type DocumentVerificationStatusValue = typeof DocumentVerificationStatus[keyof typeof DocumentVerificationStatus];
+export type DocumentVerificationStatusValue =
+  (typeof DocumentVerificationStatus)[keyof typeof DocumentVerificationStatus];
 
 // Document type -> required entity FK mapping
-export const DOCUMENT_TYPE_ENTITY_REQUIREMENTS: Record<string, { required: string[]; optional: string[] }> = {
+export const DOCUMENT_TYPE_ENTITY_REQUIREMENTS: Record<
+  string,
+  { required: string[]; optional: string[] }
+> = {
   [DocumentType.KYC_PAN]: { required: ['customer_id'], optional: [] },
   [DocumentType.KYC_AADHAAR]: { required: ['customer_id'], optional: [] },
   [DocumentType.BOOKING_AGREEMENT]: { required: ['booking_id'], optional: ['customer_id'] },
@@ -45,14 +49,32 @@ export const DOCUMENT_TYPE_ENTITY_REQUIREMENTS: Record<string, { required: strin
   [DocumentType.PROPERTY_TITLE]: { required: ['property_id'], optional: ['project_id'] },
   [DocumentType.PROPERTY_PLAN]: { required: ['property_id'], optional: ['project_id'] },
   [DocumentType.PROPOSAL]: { required: ['lead_id'], optional: ['opportunity_id'] },
-  [DocumentType.OTHER]: { required: [], optional: ['customer_id', 'lead_id', 'opportunity_id', 'booking_id', 'property_id', 'project_id', 'payment_id'] },
+  [DocumentType.OTHER]: {
+    required: [],
+    optional: [
+      'customer_id',
+      'lead_id',
+      'opportunity_id',
+      'booking_id',
+      'property_id',
+      'project_id',
+      'payment_id',
+    ],
+  },
 };
 
 export const DocumentUploadSchema = z.object({
   document_type: z.enum([
-    'KYC_PAN', 'KYC_AADHAAR', 'BOOKING_AGREEMENT', 'PAYMENT_RECEIPT',
-    'BOOKING_RECEIPT', 'SALE_DEED', 'PROPERTY_TITLE', 'PROPERTY_PLAN',
-    'PROPOSAL', 'OTHER',
+    'KYC_PAN',
+    'KYC_AADHAAR',
+    'BOOKING_AGREEMENT',
+    'PAYMENT_RECEIPT',
+    'BOOKING_RECEIPT',
+    'SALE_DEED',
+    'PROPERTY_TITLE',
+    'PROPERTY_PLAN',
+    'PROPOSAL',
+    'OTHER',
   ]),
   title: z.string().min(1, 'Title is required').max(255),
   customer_id: z.coerce.number().int().positive().optional().nullable(),

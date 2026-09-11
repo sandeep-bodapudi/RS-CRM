@@ -10,7 +10,8 @@ import SftpClient = require('ssh2-sftp-client');
 // Accepts either name: existing deployments (Render, .env.example) already
 // document UPLOAD_ROOT; the code historically read UPLOAD_DIR instead, so
 // UPLOAD_ROOT was silently never applied. Both now work.
-const UPLOAD_DIR = process.env.UPLOAD_DIR || process.env.UPLOAD_ROOT || path.join(process.cwd(), 'uploads');
+const UPLOAD_DIR =
+  process.env.UPLOAD_DIR || process.env.UPLOAD_ROOT || path.join(process.cwd(), 'uploads');
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -27,7 +28,9 @@ export const memoryUpload = multer({
 /**
  * Reusable helper to process image buffer before storage
  */
-export async function processImageBuffer(buffer: Buffer): Promise<{ processedBuffer: Buffer, filename: string }> {
+export async function processImageBuffer(
+  buffer: Buffer,
+): Promise<{ processedBuffer: Buffer; filename: string }> {
   const processedBuffer = await sharp(buffer)
     .resize(2560, 2560, {
       fit: 'inside',
@@ -38,7 +41,7 @@ export async function processImageBuffer(buffer: Buffer): Promise<{ processedBuf
 
   const uuid = crypto.randomUUID();
   const filename = `${uuid}.webp`;
-  
+
   return { processedBuffer, filename };
 }
 
@@ -51,27 +54,29 @@ export class LocalPropertyImageStorage implements PropertyImageStorage {
   async upload(buffer: Buffer, propertyId: number): Promise<string> {
     const { processedBuffer, filename } = await processImageBuffer(buffer);
     const propertyImagesDir = path.join(UPLOAD_DIR, 'properties', String(propertyId), 'images');
-    
+
     if (!fs.existsSync(propertyImagesDir)) {
       fs.mkdirSync(propertyImagesDir, { recursive: true });
     }
 
     const absolutePath = path.join(propertyImagesDir, filename);
     await fs.promises.writeFile(absolutePath, processedBuffer);
-    
+
     return `/uploads/properties/${propertyId}/images/${filename}`;
   }
 
   async delete(imageUrl: string): Promise<void> {
-    const match = imageUrl.match(/^\/uploads\/(properties\/\d+\/images\/[a-f0-9-]+\.webp|property-images\/prop-[0-9-]+\.[a-z]+)$/i);
+    const match = imageUrl.match(
+      /^\/uploads\/(properties\/\d+\/images\/[a-f0-9-]+\.webp|property-images\/prop-[0-9-]+\.[a-z]+)$/i,
+    );
     if (!match) {
       logger.warn(`Invalid or unrecognizable image URL for deletion: ${imageUrl}`);
       return;
     }
-    
+
     const relativeSafePath = match[1];
     const absolutePath = path.join(UPLOAD_DIR, relativeSafePath);
-    
+
     if (absolutePath.startsWith(path.resolve(UPLOAD_DIR)) && fs.existsSync(absolutePath)) {
       try {
         fs.unlinkSync(absolutePath);
@@ -100,17 +105,22 @@ export class FtpPropertyImageStorage implements PropertyImageStorage {
     const client = await getFtpClient();
     try {
       const { processedBuffer, filename } = await processImageBuffer(buffer);
-      const remoteDir = path.posix.join(process.env.FTP_REMOTE_BASE_PATH || '', 'properties', String(propertyId), 'images');
-      
+      const remoteDir = path.posix.join(
+        process.env.FTP_REMOTE_BASE_PATH || '',
+        'properties',
+        String(propertyId),
+        'images',
+      );
+
       await client.ensureDir(remoteDir);
-      
+
       // Write buffer to stream for basic-ftp
       const { Readable } = await import('stream');
       const stream = Readable.from(processedBuffer);
-      
+
       const remotePath = path.posix.join(remoteDir, filename);
       await client.uploadFrom(stream, remotePath);
-      
+
       const baseUrl = process.env.FTP_PUBLIC_BASE_URL || '';
       return `${baseUrl}/properties/${propertyId}/images/${filename}`;
     } finally {
@@ -170,7 +180,12 @@ export class SftpPropertyImageStorage implements PropertyImageStorage {
     const client = await getSftpClient();
     try {
       const { processedBuffer, filename } = await processImageBuffer(buffer);
-      const remoteDir = path.posix.join(process.env.SFTP_REMOTE_BASE_PATH || '', 'properties', String(propertyId), 'images');
+      const remoteDir = path.posix.join(
+        process.env.SFTP_REMOTE_BASE_PATH || '',
+        'properties',
+        String(propertyId),
+        'images',
+      );
       await client.mkdir(remoteDir, true);
       const remotePath = path.posix.join(remoteDir, filename);
       await client.put(processedBuffer, remotePath);
@@ -333,18 +348,18 @@ export class FtpStorageService implements StorageService {
   async upload(buffer: Buffer, originalName: string, _mimeType: string): Promise<string> {
     const ext = path.extname(originalName).toLowerCase() || '.bin';
     const filename = `doc-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
-    
+
     const client = await getFtpClient();
     try {
       const remoteDir = path.posix.join(process.env.FTP_REMOTE_BASE_PATH || '', this.remoteSubdir);
       await client.ensureDir(remoteDir);
-      
+
       const { Readable } = await import('stream');
       const stream = Readable.from(buffer);
-      
+
       const remotePath = path.posix.join(remoteDir, filename);
       await client.uploadFrom(stream, remotePath);
-      
+
       const baseUrl = process.env.FTP_PUBLIC_BASE_URL || '';
       return `${baseUrl}/${this.remoteSubdir}/${filename}`;
     } finally {
@@ -367,7 +382,7 @@ export class FtpStorageService implements StorageService {
       const stream = new PassThrough();
       const chunks: Buffer[] = [];
       stream.on('data', (chunk) => chunks.push(chunk));
-      
+
       await client.downloadTo(stream, remotePath);
       return Buffer.concat(chunks);
     } finally {

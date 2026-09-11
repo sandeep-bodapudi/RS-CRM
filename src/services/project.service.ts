@@ -24,11 +24,31 @@ const p = prisma;
 function mapCommonProjectFields(data: Partial<ProjectCreateInput & ProjectUpdateInput>) {
   const out: Record<string, any> = {};
   const passthroughKeys = [
-    'project_type', 'developer_name', 'state', 'district', 'city', 'mandal', 'village',
-    'locality', 'address', 'pincode', 'latitude', 'longitude', 'maps_link',
-    'total_area_value', 'towers_count', 'blocks_count', 'floors_count',
-    'rera_status', 'approval_authority', 'approval_number', 'lp_number',
-    'default_price_basis', 'default_area_unit', 'total_area_unit', 'cover_image_url',
+    'project_type',
+    'developer_name',
+    'state',
+    'district',
+    'city',
+    'mandal',
+    'village',
+    'locality',
+    'address',
+    'pincode',
+    'latitude',
+    'longitude',
+    'maps_link',
+    'total_area_value',
+    'towers_count',
+    'blocks_count',
+    'floors_count',
+    'rera_status',
+    'approval_authority',
+    'approval_number',
+    'lp_number',
+    'default_price_basis',
+    'default_area_unit',
+    'total_area_unit',
+    'cover_image_url',
   ] as const;
   for (const key of passthroughKeys) {
     if (data[key as keyof typeof data] !== undefined) out[key] = data[key as keyof typeof data];
@@ -47,7 +67,12 @@ export class ProjectService {
     return `RRH-PJ-${currentYear}-${seq}`;
   }
 
-  static async listProjects(user: TokenPayload, filters: { status?: string }, take: number = 50, skip: number = 0) {
+  static async listProjects(
+    user: TokenPayload,
+    filters: { status?: string },
+    take: number = 50,
+    skip: number = 0,
+  ) {
     const whereCondition = await buildProjectScope(user);
 
     if (filters.status) {
@@ -70,7 +95,7 @@ export class ProjectService {
 
   static async getProject(user: TokenPayload, projectId: number) {
     const whereCondition = await buildProjectScope(user);
-    
+
     const project = await p.project.findFirst({
       where: {
         id: projectId,
@@ -84,9 +109,9 @@ export class ProjectService {
             property_code: true,
             title: true,
             status: true,
-          }
-        }
-      }
+          },
+        },
+      },
     });
 
     if (!project) throw { status: 404, message: 'Project not found or unauthorized' };
@@ -99,9 +124,10 @@ export class ProjectService {
 
     if (data.assigned_pm_id) {
       const pm = await p.employee.findFirst({
-        where: { id: data.assigned_pm_id, company_id: companyId }
+        where: { id: data.assigned_pm_id, company_id: companyId },
       });
-      if (!pm) throw { status: 400, message: 'Invalid assigned_pm_id or does not belong to your company' };
+      if (!pm)
+        throw { status: 400, message: 'Invalid assigned_pm_id or does not belong to your company' };
     }
 
     const baseSlug = slugify(`${data.name} ${data.location}`);
@@ -116,7 +142,7 @@ export class ProjectService {
     while (retries < MAX_RETRIES) {
       try {
         const projectCode = await this.generateNextProjectCode();
-        
+
         const project = await p.project.create({
           data: {
             project_code: projectCode,
@@ -149,11 +175,15 @@ export class ProjectService {
             },
           });
           // Web push to assigned PM (outside transaction)
-          notifyEmployee(data.assigned_pm_id, {
-            type: 'PROJECT_ASSIGNED',
-            title: `New Project Assigned: ${projectCode}`,
-            message: `Project "${data.name}" (${projectCode}) has been created and assigned to you.`,
-          }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] Create project PM notify:', err));
+          notifyEmployee(
+            data.assigned_pm_id,
+            {
+              type: 'PROJECT_ASSIGNED',
+              title: `New Project Assigned: ${projectCode}`,
+              message: `Project "${data.name}" (${projectCode}) has been created and assigned to you.`,
+            },
+            { skipDbNotification: true },
+          ).catch((err) => logger.error('[WebPush] Create project PM notify:', err));
         }
 
         return project;
@@ -181,27 +211,44 @@ export class ProjectService {
       where: {
         id: projectId,
         ...whereCondition,
-      }
+      },
     });
 
     if (!project) throw { status: 404, message: 'Project not found or unauthorized' };
 
     // Core fields are locked while a project is PENDING_VERIFICATION (awaiting MD review).
     // PM can still update media, documents, and images via separate endpoints.
-    const CORE_LOCKED_FIELDS = ['name', 'description', 'location', 'total_area', 'total_units',
-      'launch_date', 'project_phase', 'rera_number', 'assigned_pm_id', 'project_type', 'developer_name', 'status'];
-    if (project.verification_status === 'PENDING_VERIFICATION') {
+    const CORE_LOCKED_FIELDS = [
+      'name',
+      'description',
+      'location',
+      'total_area',
+      'total_units',
+      'launch_date',
+      'project_phase',
+      'rera_number',
+      'assigned_pm_id',
+      'project_type',
+      'developer_name',
+      'status',
+    ];
+    if (project.status === 'PENDING_VERIFICATION') {
       const attemptedCoreChange = CORE_LOCKED_FIELDS.some((f) => (data as any)[f] !== undefined);
       if (attemptedCoreChange) {
-        throw { status: 409, message: 'Core project details are locked while pending MD verification. Only media and documents may be updated.' };
+        throw {
+          status: 409,
+          message:
+            'Core project details are locked while pending MD verification. Only media and documents may be updated.',
+        };
       }
     }
 
     if (data.assigned_pm_id && data.assigned_pm_id !== project.assigned_pm_id) {
       const pm = await p.employee.findFirst({
-        where: { id: data.assigned_pm_id, company_id: user.companyId }
+        where: { id: data.assigned_pm_id, company_id: user.companyId },
       });
-      if (!pm) throw { status: 400, message: 'Invalid assigned_pm_id or does not belong to your company' };
+      if (!pm)
+        throw { status: 400, message: 'Invalid assigned_pm_id or does not belong to your company' };
     }
 
     // Explicit safe-fields whitelist — status is handled separately below via
@@ -214,7 +261,8 @@ export class ProjectService {
     if (data.location !== undefined) updateData.location = data.location;
     if (data.total_area !== undefined) updateData.total_area = data.total_area;
     if (data.total_units !== undefined) updateData.total_units = data.total_units;
-    if (data.launch_date !== undefined) updateData.launch_date = data.launch_date ? new Date(data.launch_date) : null;
+    if (data.launch_date !== undefined)
+      updateData.launch_date = data.launch_date ? new Date(data.launch_date) : null;
     if (data.project_phase !== undefined) updateData.project_phase = data.project_phase;
     if (data.rera_number !== undefined) updateData.rera_number = data.rera_number;
     if (data.amenities !== undefined) updateData.amenities = data.amenities;
@@ -261,48 +309,60 @@ export class ProjectService {
       const newPmId = data.assigned_pm_id;
       const oldPmId = project.assigned_pm_id;
 
-      finalProject = await p.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
-        const updated = await tx.project.update({
-          where: { id: projectId },
-          data: { assigned_pm_id: newPmId },
-        });
-
-        // Notify the new PM
-        await tx.notification.create({
-          data: {
-            employee_id: newPmId,
-            type: 'PROJECT_ASSIGNED',
-            title: `Project Assigned to You: ${updated.project_code}`,
-            message: `Project "${updated.name}" (${updated.project_code}) has been assigned to you.`,
-          },
-        });
-        // Web push to new PM (outside transaction)
-        notifyEmployee(newPmId, {
-          type: 'PROJECT_ASSIGNED',
-          title: `Project Assigned to You: ${updated.project_code}`,
-          message: `Project "${updated.name}" (${updated.project_code}) has been assigned to you.`,
-        }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] Project PM changed new PM:', err));
-
-        // Notify the old PM (if exists)
-        if (oldPmId) {
-          await tx.notification.create({
-            data: {
-              employee_id: oldPmId,
-              type: 'PROJECT_REASSIGNED',
-              title: `Project Reassigned: ${updated.project_code}`,
-              message: `Project "${updated.name}" (${updated.project_code}) has been reassigned from you.`,
-            },
+      finalProject = await p.$transaction(
+        async (tx: import('@prisma/client').Prisma.TransactionClient) => {
+          const updated = await tx.project.update({
+            where: { id: projectId },
+            data: { assigned_pm_id: newPmId },
           });
-          // Web push to old PM (outside transaction)
-          notifyEmployee(oldPmId, {
-            type: 'PROJECT_REASSIGNED',
-            title: `Project Reassigned: ${updated.project_code}`,
-            message: `Project "${updated.name}" (${updated.project_code}) has been reassigned from you.`,
-          }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] Project PM changed old PM:', err));
-        }
 
-        return updated;
-      });
+          // Notify the new PM
+          if (newPmId) {
+            await tx.notification.create({
+              data: {
+                employee_id: newPmId,
+                type: 'PROJECT_ASSIGNED',
+                title: `Project Assigned to You: ${updated.project_code}`,
+                message: `Project "${updated.name}" (${updated.project_code}) has been assigned to you.`,
+              },
+            });
+            // Web push to new PM (outside transaction)
+            notifyEmployee(
+              newPmId,
+              {
+                type: 'PROJECT_ASSIGNED',
+                title: `Project Assigned to You: ${updated.project_code}`,
+                message: `Project "${updated.name}" (${updated.project_code}) has been assigned to you.`,
+              },
+              { skipDbNotification: true },
+            ).catch((err) => logger.error('[WebPush] Project PM changed new PM:', err));
+          }
+
+          // Notify the old PM (if exists)
+          if (oldPmId) {
+            await tx.notification.create({
+              data: {
+                employee_id: oldPmId,
+                type: 'PROJECT_REASSIGNED',
+                title: `Project Reassigned: ${updated.project_code}`,
+                message: `Project "${updated.name}" (${updated.project_code}) has been reassigned from you.`,
+              },
+            });
+            // Web push to old PM (outside transaction)
+            notifyEmployee(
+              oldPmId,
+              {
+                type: 'PROJECT_REASSIGNED',
+                title: `Project Reassigned: ${updated.project_code}`,
+                message: `Project "${updated.name}" (${updated.project_code}) has been reassigned from you.`,
+              },
+              { skipDbNotification: true },
+            ).catch((err) => logger.error('[WebPush] Project PM changed old PM:', err));
+          }
+
+          return updated;
+        },
+      );
     }
 
     if (finalProject) {
@@ -322,7 +382,7 @@ export class ProjectService {
       where: {
         id: projectId,
         ...whereCondition,
-      }
+      },
     });
 
     if (!project) throw { status: 404, message: 'Project not found or unauthorized' };
@@ -356,7 +416,10 @@ export class ProjectService {
     // blocks cancellation. BLOCKED/UNAVAILABLE units have already been
     // administratively taken off the table and do not block.
     const activeUnitCount = await p.projectUnit.count({
-      where: { project_id: projectId, sales_status: { in: ['AVAILABLE', 'HOLD', 'RESERVED', 'BOOKED', 'SOLD'] } },
+      where: {
+        project_id: projectId,
+        sales_status: { in: ['AVAILABLE', 'HOLD', 'RESERVED', 'BOOKED', 'SOLD'] },
+      },
     });
     if (activePropertyCount > 0 || activeUnitCount > 0) {
       throw {
@@ -396,7 +459,12 @@ export class ProjectService {
    * granted via Phase 1.2's `EmployeeCompanyAccess` works here too — the same
    * class of bug found and fixed in `bulkCreateUnitsForProject` (2.20).
    */
-  static async reassignProject(user: TokenPayload, projectId: number, newPmId: number, reason: string) {
+  static async reassignProject(
+    user: TokenPayload,
+    projectId: number,
+    newPmId: number,
+    reason: string,
+  ) {
     if (!reason || reason.trim() === '') {
       throw { status: 400, message: 'Reassignment reason is mandatory' };
     }
@@ -416,7 +484,7 @@ export class ProjectService {
     // The new PM must belong to the PROJECT's own company, not necessarily the
     // acting user's — same reasoning as the 2.20 company-inheritance fix.
     const newPm = await p.employee.findFirst({
-      where: { id: newPmId, company_id: project.company_id, status: 'ACTIVE' }
+      where: { id: newPmId, company_id: project.company_id, status: 'ACTIVE' },
     });
     if (!newPm) throw { status: 400, message: 'New assignee not found or unauthorized' };
 
@@ -425,7 +493,7 @@ export class ProjectService {
     return await p.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
       const updated = await tx.project.update({
         where: { id: projectId },
-        data: { assigned_pm_id: newPmId }
+        data: { assigned_pm_id: newPmId },
       });
 
       await tx.auditEvent.create({
@@ -436,8 +504,8 @@ export class ProjectService {
           entity_id: projectId,
           old_value: oldPmId ? oldPmId.toString() : 'UNASSIGNED',
           new_value: newPmId.toString(),
-          reason: reason
-        }
+          reason: reason,
+        },
       });
 
       // Notify the new PM that they've been assigned a project
@@ -450,11 +518,15 @@ export class ProjectService {
         },
       });
       // Web push to new PM (outside transaction)
-      notifyEmployee(newPmId, {
-        type: 'PROJECT_ASSIGNED',
-        title: `Project Assigned to You: ${updated.project_code}`,
-        message: `Project "${updated.name}" (${updated.project_code}) has been assigned to you${reason ? `. Reason: ${reason}` : ''}.`,
-      }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] ReassignProject new PM:', err));
+      notifyEmployee(
+        newPmId,
+        {
+          type: 'PROJECT_ASSIGNED',
+          title: `Project Assigned to You: ${updated.project_code}`,
+          message: `Project "${updated.name}" (${updated.project_code}) has been assigned to you${reason ? `. Reason: ${reason}` : ''}.`,
+        },
+        { skipDbNotification: true },
+      ).catch((err) => logger.error('[WebPush] ReassignProject new PM:', err));
 
       // Notify the old PM (if exists) that the project was reassigned away
       if (oldPmId && oldPmId !== newPmId) {
@@ -467,19 +539,27 @@ export class ProjectService {
           },
         });
         // Web push to old PM (outside transaction)
-        notifyEmployee(oldPmId, {
-          type: 'PROJECT_REASSIGNED',
-          title: `Project Reassigned: ${updated.project_code}`,
-          message: `Project "${updated.name}" (${updated.project_code}) has been reassigned from you.`,
-        }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] Project reassign old PM:', err));
+        notifyEmployee(
+          oldPmId,
+          {
+            type: 'PROJECT_REASSIGNED',
+            title: `Project Reassigned: ${updated.project_code}`,
+            message: `Project "${updated.name}" (${updated.project_code}) has been reassigned from you.`,
+          },
+          { skipDbNotification: true },
+        ).catch((err) => logger.error('[WebPush] Project reassign old PM:', err));
       }
 
       // Web push to new PM (outside transaction)
-      notifyEmployee(newPmId, {
-        type: 'PROJECT_ASSIGNED',
-        title: `Project Assigned to You: ${updated.project_code}`,
-        message: `Project "${updated.name}" (${updated.project_code}) has been assigned to you${reason ? `. Reason: ${reason}` : ''}.`,
-      }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] Project reassign new PM:', err));
+      notifyEmployee(
+        newPmId,
+        {
+          type: 'PROJECT_ASSIGNED',
+          title: `Project Assigned to You: ${updated.project_code}`,
+          message: `Project "${updated.name}" (${updated.project_code}) has been assigned to you${reason ? `. Reason: ${reason}` : ''}.`,
+        },
+        { skipDbNotification: true },
+      ).catch((err) => logger.error('[WebPush] Project reassign new PM:', err));
 
       return updated;
     });
@@ -511,10 +591,15 @@ export class ProjectService {
     }
 
     const { processedBuffer, filename } = await processImageBuffer(file.buffer);
-    const imageUrl = await getStorageService('projects-layout').upload(processedBuffer, filename, 'image/webp');
+    const imageUrl = await getStorageService('projects-layout').upload(
+      processedBuffer,
+      filename,
+      'image/webp',
+    );
 
     return await p.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
-      const isFirstImage = (await tx.projectLayoutImage.count({ where: { project_id: projectId } })) === 0;
+      const isFirstImage =
+        (await tx.projectLayoutImage.count({ where: { project_id: projectId } })) === 0;
       return await tx.projectLayoutImage.create({
         data: {
           project_id: projectId,
@@ -537,7 +622,14 @@ export class ProjectService {
         regions: {
           include: {
             property: {
-              select: { id: true, property_code: true, title: true, status: true, final_price: true, category: true },
+              select: {
+                id: true,
+                property_code: true,
+                title: true,
+                status: true,
+                final_price: true,
+                category: true,
+              },
             },
           },
         },
@@ -551,7 +643,9 @@ export class ProjectService {
       throw { status: 403, message: 'Forbidden: Missing projects.update permission' };
     }
 
-    const image = await p.projectLayoutImage.findFirst({ where: { id: imageId, project_id: projectId } });
+    const image = await p.projectLayoutImage.findFirst({
+      where: { id: imageId, project_id: projectId },
+    });
     if (!image) throw { status: 404, message: 'Layout image not found' };
 
     await p.projectLayoutImage.delete({ where: { id: imageId } });
@@ -578,7 +672,9 @@ export class ProjectService {
       throw { status: 403, message: 'Forbidden: Missing projects.update permission' };
     }
 
-    const image = await p.projectLayoutImage.findFirst({ where: { id: imageId, project_id: projectId } });
+    const image = await p.projectLayoutImage.findFirst({
+      where: { id: imageId, project_id: projectId },
+    });
     if (!image) throw { status: 404, message: 'Layout image not found' };
 
     const failed: { index: number; error: string }[] = [];
@@ -591,11 +687,19 @@ export class ProjectService {
           if (!(region.x >= 0 && region.x <= 1) || !(region.y >= 0 && region.y <= 1)) {
             throw new Error('x and y must be fractional coordinates between 0 and 1');
           }
-          const unit = await tx.property.findFirst({ where: { id: region.property_id, project_id: projectId } });
-          if (!unit) throw new Error(`Property ${region.property_id} is not a unit of this project`);
+          const unit = await tx.property.findFirst({
+            where: { id: region.property_id, project_id: projectId },
+          });
+          if (!unit)
+            throw new Error(`Property ${region.property_id} is not a unit of this project`);
 
           await tx.propertyLayoutRegion.upsert({
-            where: { layout_image_id_property_id: { layout_image_id: imageId, property_id: region.property_id } },
+            where: {
+              layout_image_id_property_id: {
+                layout_image_id: imageId,
+                property_id: region.property_id,
+              },
+            },
             update: { x: region.x, y: region.y },
             create: {
               layout_image_id: imageId,
@@ -642,9 +746,19 @@ export class ProjectService {
       throw { status: 403, message: 'Forbidden: Missing projects.update permission' };
     }
     const { processedBuffer, filename } = await processImageBuffer(file.buffer);
-    const url = await getStorageService('projects-media').upload(processedBuffer, filename, 'image/webp');
+    const url = await getStorageService('projects-media').upload(
+      processedBuffer,
+      filename,
+      'image/webp',
+    );
     const media = await p.projectMedia.create({
-      data: { project_id: projectId, kind: kind as any, url, title: title || null, uploaded_by_id: user.employeeId },
+      data: {
+        project_id: projectId,
+        kind: kind as any,
+        url,
+        title: title || null,
+        uploaded_by_id: user.employeeId,
+      },
     });
     if (kind === 'COVER') {
       await p.project.update({ where: { id: projectId }, data: { cover_image_url: url } });
@@ -692,9 +806,19 @@ export class ProjectService {
     }
     const ext = (file.originalname.split('.').pop() || 'pdf').toLowerCase();
     const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    const url = await getStorageService('projects-documents').upload(file.buffer, filename, file.mimetype);
+    const url = await getStorageService('projects-documents').upload(
+      file.buffer,
+      filename,
+      file.mimetype,
+    );
     return await p.projectDocument.create({
-      data: { project_id: projectId, kind: kind as any, url, title: title || file.originalname, uploaded_by_id: user.employeeId },
+      data: {
+        project_id: projectId,
+        kind: kind as any,
+        url,
+        title: title || file.originalname,
+        uploaded_by_id: user.employeeId,
+      },
     });
   }
 
@@ -711,7 +835,9 @@ export class ProjectService {
     if (!can(user, Permissions.PROJECTS_UPDATE, project)) {
       throw { status: 403, message: 'Forbidden: Missing projects.update permission' };
     }
-    const doc = await p.projectDocument.findFirst({ where: { id: documentId, project_id: projectId } });
+    const doc = await p.projectDocument.findFirst({
+      where: { id: documentId, project_id: projectId },
+    });
     if (!doc) throw { status: 404, message: 'Document not found' };
     await p.projectDocument.delete({ where: { id: documentId } });
     try {
@@ -730,7 +856,10 @@ export class ProjectService {
       orderBy: { created_at: 'desc' },
     });
     const actorIds = [...new Set(events.map((e) => e.actor_id))];
-    const actors = await p.employee.findMany({ where: { id: { in: actorIds } }, select: { id: true, full_name: true } });
+    const actors = await p.employee.findMany({
+      where: { id: { in: actorIds } },
+      select: { id: true, full_name: true },
+    });
     const nameById = new Map(actors.map((a) => [a.id, a.full_name]));
     return events.map((e) => ({ ...e, actor_name: nameById.get(e.actor_id) || null }));
   }

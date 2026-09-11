@@ -1,4 +1,9 @@
-import { WorkflowDomain, WorkflowTransitionRequest, WorkflowTransitionResult, DomainWorkflow } from './types';
+import {
+  WorkflowDomain,
+  WorkflowTransitionRequest,
+  WorkflowTransitionResult,
+  DomainWorkflow,
+} from './types';
 import { LeadWorkflow } from './lead.workflow';
 import { PropertyWorkflow } from './property.workflow';
 import { SiteVisitWorkflow } from './siteVisit.workflow';
@@ -39,7 +44,7 @@ export class WorkflowEngine {
     if (!workflow) {
       return {
         allowed: false,
-        reason: `No workflow registered for domain ${req.domain}`
+        reason: `No workflow registered for domain ${req.domain}`,
       };
     }
 
@@ -56,7 +61,7 @@ export class WorkflowEngine {
     leadId: number,
     toStatus: string,
     context: { actor: import('../utils/jwt').TokenPayload; entity: any },
-    extraUpdateData: any = {}
+    extraUpdateData: any = {},
   ) {
     const transitionRes = this.canTransition({
       domain: WorkflowDomain.LEAD,

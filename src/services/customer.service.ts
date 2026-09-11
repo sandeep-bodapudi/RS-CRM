@@ -6,11 +6,13 @@ import { buildCustomerScope } from '../authz/dataScope';
 import { CustomerPolicy } from '../policies/customer.policy';
 import { WorkflowEngine } from '../workflows/workflowEngine';
 
-
 const p = prisma;
 
 export class AppError extends Error {
-  constructor(public statusCode: number, message: string) {
+  constructor(
+    public statusCode: number,
+    message: string,
+  ) {
     super(message);
     this.name = 'AppError';
   }
@@ -66,12 +68,15 @@ export class CustomerService {
         where: { phone: dto.phone },
       });
       if (existing) {
-        throw new AppError(409, 'A customer with this phone number already exists in your company.');
+        throw new AppError(
+          409,
+          'A customer with this phone number already exists in your company.',
+        );
       }
     }
 
     if (dto.assigned_to_id) {
-      const emp = await p.employee.findFirst({ where: { id: dto.assigned_to_id, } });
+      const emp = await p.employee.findFirst({ where: { id: dto.assigned_to_id } });
       if (!emp) {
         throw new AppError(400, 'Assigned employee not found or cross-company assignment');
       }
@@ -129,7 +134,10 @@ export class CustomerService {
     const isChannelPartnerManager = user.roles.includes(Roles.CHANNEL_PARTNER_MANAGER);
     const isManagement = user.roles.includes(Roles.MD) || user.roles.includes(Roles.ADMIN);
     if (isChannelPartnerManager && !isManagement && lead.created_by_id !== user.employeeId) {
-      throw new AppError(403, 'Channel Partner Managers may only convert leads they personally created.');
+      throw new AppError(
+        403,
+        'Channel Partner Managers may only convert leads they personally created.',
+      );
     }
 
     if (lead.converted_customer) {
@@ -165,12 +173,7 @@ export class CustomerService {
       });
 
       // Update lead status to BOOKED (won state) — routed through the engine.
-      await WorkflowEngine.transitionLead(
-        tx,
-        lead.id,
-        'BOOKED',
-        { actor: user, entity: lead }
-      );
+      await WorkflowEngine.transitionLead(tx, lead.id, 'BOOKED', { actor: user, entity: lead });
 
       await tx.leadActivity.create({
         data: {
@@ -186,7 +189,7 @@ export class CustomerService {
   }
 
   static async upsertFromLead(user: TokenPayload, leadId: number, tx: any) {
-    const lead = await tx.lead.findUnique({ where: { id: leadId, } });
+    const lead = await tx.lead.findUnique({ where: { id: leadId } });
     if (!lead) {
       throw new AppError(404, 'Lead not found or access denied');
     }

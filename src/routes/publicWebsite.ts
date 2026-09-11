@@ -36,32 +36,45 @@ function validBrand(brand: string) {
 
 // ─── Account: register / login / me ─────────────────────────────────────────
 
-router.post('/:brand/account/register', publicWriteLimiter, validateRequestBody(WebsiteAccountRegisterSchema), async (req: any, res: Response) => {
-  try {
-    if (!validBrand(req.params.brand)) return res.status(400).json({ error: 'Invalid brand specified in URL' });
-    const result = await WebsiteAccountService.register(req.apiKeyContext.company_id, req.body);
-    res.status(201).json(result);
-  } catch (error: any) {
-    if (error.status) return res.status(error.status).json({ error: error.message });
-    logger.error('Website account register error:', error);
-    res.status(500).json({ error: 'Failed to register account' });
-  }
-});
+router.post(
+  '/:brand/account/register',
+  publicWriteLimiter,
+  validateRequestBody(WebsiteAccountRegisterSchema),
+  async (req: any, res: Response) => {
+    try {
+      if (!validBrand(req.params.brand))
+        return res.status(400).json({ error: 'Invalid brand specified in URL' });
+      const result = await WebsiteAccountService.register(req.apiKeyContext.company_id, req.body);
+      res.status(201).json(result);
+    } catch (error: any) {
+      if (error.status) return res.status(error.status).json({ error: error.message });
+      logger.error('Website account register error:', error);
+      res.status(500).json({ error: 'Failed to register account' });
+    }
+  },
+);
 
-router.post('/:brand/account/login', publicWriteLimiter, validateRequestBody(WebsiteAccountLoginSchema), async (req: any, res: Response) => {
-  try {
-    if (!validBrand(req.params.brand)) return res.status(400).json({ error: 'Invalid brand specified in URL' });
-    const result = await WebsiteAccountService.login(req.apiKeyContext.company_id, req.body);
-    res.status(200).json(result);
-  } catch (error: any) {
-    if (error.status) return res.status(error.status).json({ error: error.message });
-    logger.error('Website account login error:', error);
-    res.status(500).json({ error: 'Failed to log in' });
-  }
-});
+router.post(
+  '/:brand/account/login',
+  publicWriteLimiter,
+  validateRequestBody(WebsiteAccountLoginSchema),
+  async (req: any, res: Response) => {
+    try {
+      if (!validBrand(req.params.brand))
+        return res.status(400).json({ error: 'Invalid brand specified in URL' });
+      const result = await WebsiteAccountService.login(req.apiKeyContext.company_id, req.body);
+      res.status(200).json(result);
+    } catch (error: any) {
+      if (error.status) return res.status(error.status).json({ error: error.message });
+      logger.error('Website account login error:', error);
+      res.status(500).json({ error: 'Failed to log in' });
+    }
+  },
+);
 
 router.get('/:brand/account/me', requireWebsiteAccount, async (req: any, res: Response) => {
-  if (!validBrand(req.params.brand)) return res.status(400).json({ error: 'Invalid brand specified in URL' });
+  if (!validBrand(req.params.brand))
+    return res.status(400).json({ error: 'Invalid brand specified in URL' });
   res.status(200).json({ account: WebsiteAccountService.me(req.websiteAccount) });
 });
 
@@ -69,42 +82,68 @@ router.get('/:brand/account/me', requireWebsiteAccount, async (req: any, res: Re
 
 function savedItemRoutes(kind: 'shortlist' | 'compare') {
   router.get(`/:brand/account/${kind}`, requireWebsiteAccount, async (req: any, res: Response) => {
-    if (!validBrand(req.params.brand)) return res.status(400).json({ error: 'Invalid brand specified in URL' });
+    if (!validBrand(req.params.brand))
+      return res.status(400).json({ error: 'Invalid brand specified in URL' });
     const items = await WebsiteSavedItemsService.list(req.websiteAccount.id, kind);
     res.status(200).json({ items });
   });
 
-  router.post(`/:brand/account/${kind}`, requireWebsiteAccount, validateRequestBody(WebsiteSavedItemSchema), async (req: any, res: Response) => {
-    if (!validBrand(req.params.brand)) return res.status(400).json({ error: 'Invalid brand specified in URL' });
-    const item = await WebsiteSavedItemsService.add(req.websiteAccount.id, kind, req.body);
-    res.status(201).json({ item });
-  });
+  router.post(
+    `/:brand/account/${kind}`,
+    requireWebsiteAccount,
+    validateRequestBody(WebsiteSavedItemSchema),
+    async (req: any, res: Response) => {
+      if (!validBrand(req.params.brand))
+        return res.status(400).json({ error: 'Invalid brand specified in URL' });
+      const item = await WebsiteSavedItemsService.add(req.websiteAccount.id, kind, req.body);
+      res.status(201).json({ item });
+    },
+  );
 
-  router.delete(`/:brand/account/${kind}`, requireWebsiteAccount, validateRequestBody(WebsiteSavedItemSchema), async (req: any, res: Response) => {
-    if (!validBrand(req.params.brand)) return res.status(400).json({ error: 'Invalid brand specified in URL' });
-    const result = await WebsiteSavedItemsService.remove(req.websiteAccount.id, kind, req.body);
-    res.status(200).json(result);
-  });
+  router.delete(
+    `/:brand/account/${kind}`,
+    requireWebsiteAccount,
+    validateRequestBody(WebsiteSavedItemSchema),
+    async (req: any, res: Response) => {
+      if (!validBrand(req.params.brand))
+        return res.status(400).json({ error: 'Invalid brand specified in URL' });
+      const result = await WebsiteSavedItemsService.remove(req.websiteAccount.id, kind, req.body);
+      res.status(200).json(result);
+    },
+  );
 }
 savedItemRoutes('shortlist');
 savedItemRoutes('compare');
 
 // ─── Activity tracking ───────────────────────────────────────────────────────
 
-router.post('/:brand/activity/track', publicWriteLimiter, optionalWebsiteAccount, validateRequestBody(WebsiteActivityTrackSchema), async (req: any, res: Response) => {
-  if (!validBrand(req.params.brand)) return res.status(400).json({ error: 'Invalid brand specified in URL' });
-  // Never fails the caller — see WebsiteActivityService.track.
-  await WebsiteActivityService.track(req.apiKeyContext.company_id, req.websiteAccount?.id ?? null, req.body);
-  res.status(200).json({ tracked: true });
-});
+router.post(
+  '/:brand/activity/track',
+  publicWriteLimiter,
+  optionalWebsiteAccount,
+  validateRequestBody(WebsiteActivityTrackSchema),
+  async (req: any, res: Response) => {
+    if (!validBrand(req.params.brand))
+      return res.status(400).json({ error: 'Invalid brand specified in URL' });
+    // Never fails the caller — see WebsiteActivityService.track.
+    await WebsiteActivityService.track(
+      req.apiKeyContext.company_id,
+      req.websiteAccount?.id ?? null,
+      req.body,
+    );
+    res.status(200).json({ tracked: true });
+  },
+);
 
 // ─── AI-powered search ───────────────────────────────────────────────────────
 
 router.post('/:brand/search/parse', publicWriteLimiter, async (req: any, res: Response) => {
   try {
-    if (!validBrand(req.params.brand)) return res.status(400).json({ error: 'Invalid brand specified in URL' });
+    if (!validBrand(req.params.brand))
+      return res.status(400).json({ error: 'Invalid brand specified in URL' });
     const { query } = req.body || {};
-    if (!query || typeof query !== 'string') return res.status(400).json({ error: 'Query string is required' });
+    if (!query || typeof query !== 'string')
+      return res.status(400).json({ error: 'Query string is required' });
     const parsed = await parseNaturalLanguageQuery(query);
     res.status(200).json(parsed);
   } catch (error: any) {
@@ -116,9 +155,20 @@ router.post('/:brand/search/parse', publicWriteLimiter, async (req: any, res: Re
 
 router.get('/:brand/search', optionalWebsiteAccount, async (req: any, res: Response) => {
   try {
-    if (!validBrand(req.params.brand)) return res.status(400).json({ error: 'Invalid brand specified in URL' });
+    if (!validBrand(req.params.brand))
+      return res.status(400).json({ error: 'Invalid brand specified in URL' });
     const companyId = req.apiKeyContext.company_id as number;
-    const { location, propertyType, listingType, minBudget, maxBudget, possessionStatus, bedrooms, sortBy, anonId } = req.query as Record<string, string | undefined>;
+    const {
+      location,
+      propertyType,
+      listingType,
+      minBudget,
+      maxBudget,
+      possessionStatus,
+      bedrooms,
+      sortBy,
+      anonId,
+    } = req.query as Record<string, string | undefined>;
 
     const query = {
       location: location || undefined,
@@ -126,7 +176,8 @@ router.get('/:brand/search', optionalWebsiteAccount, async (req: any, res: Respo
       listingType: listingType && listingType !== 'ANY' ? listingType : undefined,
       minBudget: minBudget ? Number(minBudget) : undefined,
       maxBudget: maxBudget ? Number(maxBudget) : undefined,
-      possessionStatus: possessionStatus && possessionStatus !== 'ANY' ? possessionStatus : undefined,
+      possessionStatus:
+        possessionStatus && possessionStatus !== 'ANY' ? possessionStatus : undefined,
     };
     const bedroomsNum = bedrooms ? Number(bedrooms) : undefined;
     const isRelevance = !sortBy || sortBy === 'relevance';
@@ -152,9 +203,14 @@ router.get('/:brand/search', optionalWebsiteAccount, async (req: any, res: Respo
             ...(query.maxBudget !== undefined ? { lte: query.maxBudget } : {}),
           };
         }
-        if (bedroomsNum !== undefined) where.bedrooms = { gte: bedroomsNum, ...(bedroomsNum < 5 ? { lte: bedroomsNum } : {}) };
+        if (bedroomsNum !== undefined)
+          where.bedrooms = { gte: bedroomsNum, ...(bedroomsNum < 5 ? { lte: bedroomsNum } : {}) };
 
-        rawProperties = await p.property.findMany({ where, select: PUBLIC_PROPERTY_SELECT, take: 300 });
+        rawProperties = await p.property.findMany({
+          where,
+          select: PUBLIC_PROPERTY_SELECT,
+          take: 300,
+        });
       } catch (err) {
         logger.error('Search primary fetch error:', err);
         primaryError = true;
@@ -172,7 +228,11 @@ router.get('/:brand/search', optionalWebsiteAccount, async (req: any, res: Respo
     }
 
     const accountId = req.websiteAccount?.id ?? null;
-    const recentlyViewedIds = await WebsiteActivityService.recentlyViewedIds(companyId, accountId, anonId);
+    const recentlyViewedIds = await WebsiteActivityService.recentlyViewedIds(
+      companyId,
+      accountId,
+      anonId,
+    );
 
     let recommendationPool: any[] = [];
     if (propertyIds.length > 0) {
@@ -197,7 +257,11 @@ router.get('/:brand/search', optionalWebsiteAccount, async (req: any, res: Respo
     );
 
     let anyPropertiesExist = true;
-    if (!primaryError && results.length === 0 && Object.values(query).some((v) => v !== undefined)) {
+    if (
+      !primaryError &&
+      results.length === 0 &&
+      Object.values(query).some((v) => v !== undefined)
+    ) {
       anyPropertiesExist = propertyIds.length > 0;
     }
     const { error, isGlobalEmpty } = determineEmptyState(
@@ -207,7 +271,9 @@ router.get('/:brand/search', optionalWebsiteAccount, async (req: any, res: Respo
       anyPropertiesExist,
     );
 
-    res.status(200).json({ properties: results, total: results.length, recommendations, error, isGlobalEmpty });
+    res
+      .status(200)
+      .json({ properties: results, total: results.length, recommendations, error, isGlobalEmpty });
   } catch (error) {
     logger.error('Search error:', error);
     res.status(500).json({ error: 'Search failed' });

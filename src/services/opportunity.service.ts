@@ -8,43 +8,50 @@ import { WorkflowDomain } from '../workflows/types';
 import { CustomerService } from './customer.service';
 import { BookingService } from './booking.service';
 
-
-
 export class OpportunityService {
   /**
    * 1. Create an Opportunity from a Lead.
    */
-  static async createFromLead(user: TokenPayload, data: {
-    lead_id: number;
-    owner_id?: number;
-    project_id?: number;
-    property_id?: number;
-    expected_value?: number;
-    probability?: number;
-    budget_min?: number;
-    budget_max?: number;
-  }) {
+  static async createFromLead(
+    user: TokenPayload,
+    data: {
+      lead_id: number;
+      owner_id?: number;
+      project_id?: number;
+      property_id?: number;
+      expected_value?: number;
+      probability?: number;
+      budget_min?: number;
+      budget_max?: number;
+    },
+  ) {
     const { lead_id, project_id, property_id, ...opportunityData } = data;
     const owner_id = data.owner_id || user.employeeId;
 
     // 1. Validate Lead and Company Association
-    const lead = await prisma.lead.findFirst({ where: { id: lead_id, company_id: user.companyId } });
+    const lead = await prisma.lead.findFirst({
+      where: { id: lead_id, company_id: user.companyId },
+    });
     if (!lead) {
       throw new AppError(404, 'Lead not found');
     }
 
     // Check if user has permission to mutate this Lead
     // Typically verified by LeadPolicy, but for now we enforce company boundary strictly
-    
+
     // 2. Validate Owner (Employee)
-    const owner = await prisma.employee.findFirst({ where: { id: owner_id, company_id: user.companyId } });
+    const owner = await prisma.employee.findFirst({
+      where: { id: owner_id, company_id: user.companyId },
+    });
     if (!owner) {
       throw new AppError(400, 'Owner assignment not allowed or not found');
     }
 
     // 3. Validate Project (if provided)
     if (project_id) {
-      const project = await prisma.project.findFirst({ where: { id: project_id, company_id: user.companyId } });
+      const project = await prisma.project.findFirst({
+        where: { id: project_id, company_id: user.companyId },
+      });
       if (!project) {
         throw new AppError(404, 'Project not found');
       }
@@ -52,11 +59,14 @@ export class OpportunityService {
 
     // 4. Validate Property (if provided)
     if (property_id) {
-      const property = await prisma.property.findFirst({ where: { id: property_id, company_id: user.companyId }, include: { project: true } });
+      const property = await prisma.property.findFirst({
+        where: { id: property_id, company_id: user.companyId },
+        include: { project: true },
+      });
       if (!property) {
         throw new AppError(404, 'Property not found');
       }
-      
+
       // Ensure property and project match if both are provided
       if (project_id && property.project_id !== project_id) {
         throw new AppError(400, 'Property does not belong to the specified Project');
@@ -91,12 +101,10 @@ export class OpportunityService {
       // engine (the only authority allowed to write Lead.status) rather than a
       // raw update. OPPORTUNITY_OPEN no longer exists.
       if (lead.status === 'SITE_VISIT_COMPLETED') {
-        await WorkflowEngine.transitionLead(
-          tx,
-          lead_id,
-          'NEGOTIATION',
-          { actor: user, entity: { ...lead, opportunities: [opportunity] } }
-        );
+        await WorkflowEngine.transitionLead(tx, lead_id, 'NEGOTIATION', {
+          actor: user,
+          entity: { ...lead, opportunities: [opportunity] },
+        });
       }
 
       return opportunity;
@@ -117,7 +125,15 @@ export class OpportunityService {
    */
   static async createFromLeadTx(
     tx: Prisma.TransactionClient,
-    lead: { id: number; company_id: number; source?: string | null; campaign?: string | null; utm_source?: string | null; utm_medium?: string | null; utm_campaign?: string | null },
+    lead: {
+      id: number;
+      company_id: number;
+      source?: string | null;
+      campaign?: string | null;
+      utm_source?: string | null;
+      utm_medium?: string | null;
+      utm_campaign?: string | null;
+    },
     actingEmployeeId: number,
     interestedPropertyId?: number | null,
   ) {
@@ -156,15 +172,19 @@ export class OpportunityService {
   /**
    * 2. Update Opportunity Commercial Fields
    */
-  static async updateOpportunity(user: TokenPayload, id: number, data: {
-    project_id?: number;
-    property_id?: number;
-    expected_value?: number;
-    probability?: number;
-    budget_min?: number;
-    budget_max?: number;
-    expected_close_date?: Date;
-  }) {
+  static async updateOpportunity(
+    user: TokenPayload,
+    id: number,
+    data: {
+      project_id?: number;
+      property_id?: number;
+      expected_value?: number;
+      probability?: number;
+      budget_min?: number;
+      budget_max?: number;
+      expected_close_date?: Date;
+    },
+  ) {
     const opp = await prisma.opportunity.findFirst({ where: { id, company_id: user.companyId } });
     if (!opp) throw new AppError(404, 'Opportunity not found');
 
@@ -174,7 +194,9 @@ export class OpportunityService {
 
     // Validate Project
     if (data.project_id) {
-      const project = await prisma.project.findFirst({ where: { id: data.project_id, company_id: user.companyId } });
+      const project = await prisma.project.findFirst({
+        where: { id: data.project_id, company_id: user.companyId },
+      });
       if (!project) {
         throw new AppError(404, 'Project not found');
       }
@@ -182,7 +204,9 @@ export class OpportunityService {
 
     // Validate Property
     if (data.property_id) {
-      const property = await prisma.property.findFirst({ where: { id: data.property_id, company_id: user.companyId } });
+      const property = await prisma.property.findFirst({
+        where: { id: data.property_id, company_id: user.companyId },
+      });
       if (!property) {
         throw new AppError(404, 'Property not found');
       }
@@ -209,45 +233,44 @@ export class OpportunityService {
     const opps = await prisma.opportunity.findMany({
       where: {
         lead_id,
-        company_id: user.companyId
+        company_id: user.companyId,
       },
       include: {
         project: { select: { id: true, name: true } },
         property: { select: { id: true, title: true, property_code: true } },
-        owner: { select: { id: true, full_name: true, employee_code: true } }
+        owner: { select: { id: true, full_name: true, employee_code: true } },
       },
-      orderBy: { created_at: 'desc' }
+      orderBy: { created_at: 'desc' },
     });
 
     // Check visibility via OpportunityPolicy
-    return opps.filter(opp => OpportunityPolicy.canView(user, opp));
+    return opps.filter((opp) => OpportunityPolicy.canView(user, opp));
   }
-
 
   /**
    * 4. List Opportunities with Company Scope, Filtering, Sorting, and Pagination
    */
-  static async getOpportunities(user: TokenPayload, filters: {
-    owner_id?: string | number;
-    project_id?: string | number;
-    property_id?: string | number;
-    date_from?: string;
-    date_to?: string;
-    expected_close_from?: string;
-    expected_close_to?: string;
-    sort_by?: string;
-    sort_order?: string;
-    limit?: string | number;
-    offset?: string | number;
-  } = {}) {
+  static async getOpportunities(
+    user: TokenPayload,
+    filters: {
+      owner_id?: string | number;
+      project_id?: string | number;
+      property_id?: string | number;
+      date_from?: string;
+      date_to?: string;
+      expected_close_from?: string;
+      expected_close_to?: string;
+      sort_by?: string;
+      sort_order?: string;
+      limit?: string | number;
+      offset?: string | number;
+    } = {},
+  ) {
     const policyWhere = OpportunityPolicy.canList(user);
-    
-    const where: any = {
-      AND: [
-        policyWhere
-      ]
-    };
 
+    const where: any = {
+      AND: [policyWhere],
+    };
 
     if (filters.owner_id) where.AND.push({ owner_id: Number(filters.owner_id) });
     if (filters.project_id) where.AND.push({ project_id: Number(filters.project_id) });
@@ -269,8 +292,16 @@ export class OpportunityService {
     }
 
     // Sorting
-    const allowedSortFields = ['created_at', 'updated_at', 'expected_value', 'probability', 'expected_close_date'];
-    const sortBy = allowedSortFields.includes(filters.sort_by || '') ? filters.sort_by! : 'updated_at';
+    const allowedSortFields = [
+      'created_at',
+      'updated_at',
+      'expected_value',
+      'probability',
+      'expected_close_date',
+    ];
+    const sortBy = allowedSortFields.includes(filters.sort_by || '')
+      ? filters.sort_by!
+      : 'updated_at';
     const sortOrder = filters.sort_order === 'asc' ? 'asc' : 'desc';
 
     // Pagination
@@ -308,8 +339,8 @@ export class OpportunityService {
         project: true,
         property: true,
         tasks: true,
-        site_visits: true
-      }
+        site_visits: true,
+      },
     });
 
     if (!opp || opp.company_id !== user.companyId) throw new AppError(404, 'Opportunity not found');
@@ -347,12 +378,12 @@ export class OpportunityService {
     });
 
     const TERMINAL_STAGES = ['BOOKED', 'DROPPED'];
-    const activeOpps = allOpps.filter(o => !TERMINAL_STAGES.includes(o.lead?.status || ''));
+    const activeOpps = allOpps.filter((o) => !TERMINAL_STAGES.includes(o.lead?.status || ''));
     const now = Date.now();
 
     // --- Count by stage ---
     const countByStage: Record<string, number> = {};
-    allOpps.forEach(o => {
+    allOpps.forEach((o) => {
       const stage = o.lead?.status || 'UNKNOWN';
       countByStage[stage] = (countByStage[stage] || 0) + 1;
     });
@@ -360,7 +391,7 @@ export class OpportunityService {
     // --- Pipeline values ---
     let totalExpectedValue = 0;
     let totalWeightedValue = 0;
-    activeOpps.forEach(o => {
+    activeOpps.forEach((o) => {
       const val = Number(o.expected_value || 0);
       const prob = Number(o.probability || 0);
       totalExpectedValue += val;
@@ -368,47 +399,72 @@ export class OpportunityService {
     });
 
     // --- Owner segmentation ---
-    const ownerMap = new Map<number, { name: string; count: number; value: number; weighted: number }>();
-    activeOpps.forEach(o => {
-      const entry = ownerMap.get(o.owner_id) || { name: o.owner?.full_name || 'Unknown', count: 0, value: 0, weighted: 0 };
+    const ownerMap = new Map<
+      number,
+      { name: string; count: number; value: number; weighted: number }
+    >();
+    activeOpps.forEach((o) => {
+      const entry = ownerMap.get(o.owner_id) || {
+        name: o.owner?.full_name || 'Unknown',
+        count: 0,
+        value: 0,
+        weighted: 0,
+      };
       entry.count++;
       entry.value += Number(o.expected_value || 0);
-      entry.weighted += Number(o.expected_value || 0) * Number(o.probability || 0) / 100;
+      entry.weighted += (Number(o.expected_value || 0) * Number(o.probability || 0)) / 100;
       ownerMap.set(o.owner_id, entry);
     });
 
     // --- Project segmentation ---
     const projectMap = new Map<number, { name: string; count: number; value: number }>();
-    activeOpps.filter(o => o.project_id).forEach(o => {
-      const entry = projectMap.get(o.project_id!) || { name: o.project?.name || 'Unknown', count: 0, value: 0 };
-      entry.count++;
-      entry.value += Number(o.expected_value || 0);
-      projectMap.set(o.project_id!, entry);
-    });
+    activeOpps
+      .filter((o) => o.project_id)
+      .forEach((o) => {
+        const entry = projectMap.get(o.project_id!) || {
+          name: o.project?.name || 'Unknown',
+          count: 0,
+          value: 0,
+        };
+        entry.count++;
+        entry.value += Number(o.expected_value || 0);
+        projectMap.set(o.project_id!, entry);
+      });
 
     // --- Property segmentation ---
     const propertyMap = new Map<number, { title: string; count: number; value: number }>();
-    activeOpps.filter(o => o.property_id).forEach(o => {
-      const entry = propertyMap.get(o.property_id!) || { title: o.property?.title || 'Unknown', count: 0, value: 0 };
-      entry.count++;
-      entry.value += Number(o.expected_value || 0);
-      propertyMap.set(o.property_id!, entry);
-    });
+    activeOpps
+      .filter((o) => o.property_id)
+      .forEach((o) => {
+        const entry = propertyMap.get(o.property_id!) || {
+          title: o.property?.title || 'Unknown',
+          count: 0,
+          value: 0,
+        };
+        entry.count++;
+        entry.value += Number(o.expected_value || 0);
+        propertyMap.set(o.property_id!, entry);
+      });
 
     // --- Terminal states ---
-    const droppedOpps = allOpps.filter(o => o.lead?.status === 'DROPPED');
+    const droppedOpps = allOpps.filter((o) => o.lead?.status === 'DROPPED');
     const droppedReasons: Record<string, number> = {};
-    droppedOpps.forEach(o => {
+    droppedOpps.forEach((o) => {
       const reason = o.drop_reason || 'No reason provided';
       droppedReasons[reason] = (droppedReasons[reason] || 0) + 1;
     });
 
-    const bookingInitiatedCount = allOpps.filter(o => o.lead?.status === 'BOOKING_INITIATED').length;
-    const bookedCount = allOpps.filter(o => o.lead?.status === 'BOOKED').length;
+    const bookingInitiatedCount = allOpps.filter(
+      (o) => o.lead?.status === 'BOOKING_INITIATED',
+    ).length;
+    const bookedCount = allOpps.filter((o) => o.lead?.status === 'BOOKED').length;
 
     // --- Opportunity age ---
-    const ages = activeOpps.map(o => Math.round((now - new Date(o.created_at).getTime()) / 86400000));
-    const avgAgeDays = ages.length > 0 ? Math.round(ages.reduce((a, b) => a + b, 0) / ages.length) : 0;
+    const ages = activeOpps.map((o) =>
+      Math.round((now - new Date(o.created_at).getTime()) / 86400000),
+    );
+    const avgAgeDays =
+      ages.length > 0 ? Math.round(ages.reduce((a, b) => a + b, 0) / ages.length) : 0;
 
     return {
       activeCount: activeOpps.length,
@@ -435,7 +491,7 @@ export class OpportunityService {
     // 1. Verify Opportunity exists and is accessible
     const opp = await prisma.opportunity.findFirst({
       where: { id: opportunityId, company_id: user.companyId },
-      include: { property: true, lead: true }
+      include: { property: true, lead: true },
     });
 
     if (!opp) {
@@ -448,7 +504,10 @@ export class OpportunityService {
 
     // 2. Validate Stage (via Lead)
     if (opp.lead.status !== 'BOOKING_INITIATED') {
-      throw new AppError(400, 'Lead must be in BOOKING_INITIATED status to convert Opportunity to booking');
+      throw new AppError(
+        400,
+        'Lead must be in BOOKING_INITIATED status to convert Opportunity to booking',
+      );
     }
 
     // 3. Check existing booking (Idempotency)
@@ -478,16 +537,16 @@ export class OpportunityService {
         utm_source: dto.utm_source ?? opp.utm_source ?? null,
         utm_medium: dto.utm_medium ?? opp.utm_medium ?? null,
         utm_campaign: dto.utm_campaign ?? opp.utm_campaign ?? null,
-        // Override any provided amounts with the agreed opportunity value if needed, 
+        // Override any provided amounts with the agreed opportunity value if needed,
         // but typically DTO provides exact booking token/agreed price.
       };
-      
+
       const booking = await BookingService.createBooking(user, bookingDto, tx);
 
       // Step C: Atomically link Booking to Opportunity
       const oppUpdate = await tx.opportunity.updateMany({
         where: { id: opportunityId, booking_id: null },
-        data: { booking_id: booking.id }
+        data: { booking_id: booking.id },
       });
 
       if (oppUpdate.count === 0) {
@@ -499,4 +558,3 @@ export class OpportunityService {
     });
   }
 }
-

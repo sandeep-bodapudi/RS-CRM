@@ -1,4 +1,12 @@
-import { Prisma, ProjectUnit, Property, ProjectPricingRule, PropertyPricingRule, ProjectAmenity, Amenity } from '@prisma/client';
+import {
+  Prisma,
+  ProjectUnit,
+  Property,
+  ProjectPricingRule,
+  PropertyPricingRule,
+  ProjectAmenity,
+  Amenity,
+} from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { TokenPayload } from '../../utils/jwt';
 import { buildProjectScope, buildPropertyScope } from '../../authz/dataScope';
@@ -103,7 +111,10 @@ export function amenityToEngineRule(pa: ProjectAmenity & { amenity: Amenity }): 
 export async function getEffectiveRules(projectId: number): Promise<PricingRule[]> {
   const [rules, amenities] = await Promise.all([
     p.projectPricingRule.findMany({ where: { project_id: projectId, is_active: true } }),
-    p.projectAmenity.findMany({ where: { project_id: projectId, availability: 'CHARGEABLE' }, include: { amenity: true } }),
+    p.projectAmenity.findMany({
+      where: { project_id: projectId, availability: 'CHARGEABLE' },
+      include: { amenity: true },
+    }),
   ]);
   return [...rules.map(ruleToEngineRule), ...amenities.map(amenityToEngineRule)];
 }
@@ -147,7 +158,9 @@ export function ruleToEngineRuleProperty(r: PropertyPricingRule): PricingRule {
  * PropertyPricingRule rows. Every Property pricing entry point (create,
  * update, preview, recalculate) must go through this. */
 export async function getEffectiveRulesForProperty(propertyId: number): Promise<PricingRule[]> {
-  const rules = await p.propertyPricingRule.findMany({ where: { property_id: propertyId, is_active: true } });
+  const rules = await p.propertyPricingRule.findMany({
+    where: { property_id: propertyId, is_active: true },
+  });
   return rules.map(ruleToEngineRuleProperty);
 }
 
@@ -200,14 +213,24 @@ function baseEngineInput(row: {
 
 /** Reads a unit's persisted optional-rule/amenity selection (see schema.prisma's doc comment on ProjectUnit.selected_optional_rule_ids). */
 function selectedRuleIdsOf(unit: { selected_optional_rule_ids: Prisma.JsonValue }): number[] {
-  return Array.isArray(unit.selected_optional_rule_ids) ? (unit.selected_optional_rule_ids as number[]) : [];
+  return Array.isArray(unit.selected_optional_rule_ids)
+    ? (unit.selected_optional_rule_ids as number[])
+    : [];
 }
 
 async function manualLinesFor(kind: 'UNIT' | 'PROPERTY', id: number): Promise<ManualPriceLine[]> {
   const rows = await p.priceLine.findMany({
-    where: kind === 'UNIT' ? { project_unit_id: id, is_manual: true } : { property_id: id, is_manual: true },
+    where:
+      kind === 'UNIT'
+        ? { project_unit_id: id, is_manual: true }
+        : { property_id: id, is_manual: true },
   });
-  return rows.map((r) => ({ label: r.label, category: r.category, kind: r.kind, amount: r.amount }));
+  return rows.map((r) => ({
+    label: r.label,
+    category: r.category,
+    kind: r.kind,
+    amount: r.amount,
+  }));
 }
 
 async function persistComputation(
@@ -230,7 +253,8 @@ async function persistComputation(
         // instead — a separate FK column since Prisma has no polymorphic
         // relations (see PriceLine's schema comment).
         rule_id: kind === 'UNIT' && l.rule_id != null && l.rule_id > 0 ? l.rule_id : null,
-        property_rule_id: kind === 'PROPERTY' && l.rule_id != null && l.rule_id > 0 ? l.rule_id : null,
+        property_rule_id:
+          kind === 'PROPERTY' && l.rule_id != null && l.rule_id > 0 ? l.rule_id : null,
         label: l.label,
         kind: l.kind,
         category: l.category,
@@ -277,7 +301,9 @@ export class PricingService {
    * into) is deferred to the Amenities tab (build order phase 3) — every
    * mandatory rule is applied automatically; no optional rule auto-applies yet.
    */
-  static async recalculateUnit(unitId: number): Promise<ProjectUnit & { _computation: PriceComputation }> {
+  static async recalculateUnit(
+    unitId: number,
+  ): Promise<ProjectUnit & { _computation: PriceComputation }> {
     const unit = await p.projectUnit.findUnique({ where: { id: unitId } });
     if (!unit) throw { status: 404, message: 'Unit not found' };
 
@@ -303,7 +329,9 @@ export class PricingService {
   /** Same as recalculateUnit, for a standalone Property — now (§ Phase 3)
    * priced against its own PropertyPricingRule rows plus manual lines, the
    * same two-layer pattern Project/ProjectUnit already uses. */
-  static async recalculateProperty(propertyId: number): Promise<Property & { _computation: PriceComputation }> {
+  static async recalculateProperty(
+    propertyId: number,
+  ): Promise<Property & { _computation: PriceComputation }> {
     const property = await p.property.findUnique({ where: { id: propertyId } });
     if (!property) throw { status: 404, message: 'Property not found' };
 
@@ -332,7 +360,11 @@ export class PricingService {
    * live cost-sheet preview — the server is the sole source of truth for the
    * number shown, even before a row is created.
    */
-  static async previewForProject(user: TokenPayload, projectId: number, input: PricePreviewInput): Promise<PriceComputation> {
+  static async previewForProject(
+    user: TokenPayload,
+    projectId: number,
+    input: PricePreviewInput,
+  ): Promise<PriceComputation> {
     const scope = await buildProjectScope(user);
     const project = await p.project.findFirst({ where: { id: projectId, ...scope } });
     if (!project) throw { status: 404, message: 'Project not found' };
@@ -388,14 +420,19 @@ export class PricingService {
    * against before the first save — the create wizard's own lighter
    * client-side estimate covers that gap, same as it always has).
    */
-  static async previewForProperty(user: TokenPayload, propertyId: number, input: PricePreviewInput): Promise<PriceComputation> {
+  static async previewForProperty(
+    user: TokenPayload,
+    propertyId: number,
+    input: PricePreviewInput,
+  ): Promise<PriceComputation> {
     const scope = await buildPropertyScope(user);
     const property = await p.property.findFirst({ where: { id: propertyId, ...scope } });
     if (!property) throw { status: 404, message: 'Property not found' };
 
     const engineRules = await getEffectiveRulesForProperty(propertyId);
 
-    let areaSqft: number | null = input.area_value != null && input.area_unit == null ? input.area_value : null;
+    let areaSqft: number | null =
+      input.area_value != null && input.area_unit == null ? input.area_value : null;
     let plotAreaSqyd: number | null = input.plot_area_sqyd ?? null;
     if (input.area_value != null && input.area_unit) {
       const normalized = normalizeArea(input.area_value, input.area_unit as AreaUnitType);
@@ -451,7 +488,12 @@ export class PricingService {
     const diffs = await Promise.all(
       units.map(async (unit) => {
         const manual_lines = await manualLinesFor('UNIT', unit.id);
-        const input: PricingUnitInput = { unit_type: unit.unit_type, ...baseEngineInput(unit), manual_lines, selected_optional_rule_ids: selectedRuleIdsOf(unit) };
+        const input: PricingUnitInput = {
+          unit_type: unit.unit_type,
+          ...baseEngineInput(unit),
+          manual_lines,
+          selected_optional_rule_ids: selectedRuleIdsOf(unit),
+        };
         const computation = computePrice(input, engineRules);
         const newFinal = resolveFinalPrice(computation.calculated_price, unit.override_price);
         return {
@@ -480,7 +522,10 @@ export class PricingService {
     const project = await p.project.findFirst({ where: { id: projectId, ...scope } });
     if (!project) throw { status: 404, message: 'Project not found' };
 
-    const units = await p.projectUnit.findMany({ where: { project_id: projectId }, select: { id: true } });
+    const units = await p.projectUnit.findMany({
+      where: { project_id: projectId },
+      select: { id: true },
+    });
     let updated = 0;
     for (const u of units) {
       await PricingService.recalculateUnit(u.id);

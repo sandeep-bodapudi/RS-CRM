@@ -79,13 +79,15 @@ export const PUBLIC_PROPERTY_SELECT: Prisma.PropertySelect = {
       sort_order: true,
     },
     orderBy: [{ sort_order: 'asc' as const }, { created_at: 'asc' as const }],
-  }
+  },
 };
 
 /** Renames the selected `final_price` column back to `price` for the public
  * JSON response — keeps the external API contract unchanged even though the
  * internal Property model no longer has its own separate `price` column. */
-export function shapePublicProperty<T extends { final_price: number }>(row: T): Omit<T, 'final_price'> & { price: number } {
+export function shapePublicProperty<T extends { final_price: number }>(
+  row: T,
+): Omit<T, 'final_price'> & { price: number } {
   const { final_price, ...rest } = row;
   return { ...rest, price: final_price };
 }
@@ -158,11 +160,20 @@ const PUBLIC_PROJECT_DETAIL_SELECT: Prisma.ProjectSelect = {
  * knows how to render — avoids touching four downstream codebases for a
  * field-name difference. */
 function unitToPublicPropertyShape(unit: any) {
-  const categoryMap: Record<string, string> = { FLAT: 'APARTMENT', PLOT: 'PLOT', VILLA: 'VILLA', HOUSE: 'INDEPENDENT_HOUSE', COMMERCIAL: 'COMMERCIAL', OTHER: 'OTHER' };
-  const label = [unit.tower, unit.block, unit.unit_number].filter(Boolean).join(' ') || unit.unit_code;
+  const categoryMap: Record<string, string> = {
+    FLAT: 'APARTMENT',
+    PLOT: 'PLOT',
+    VILLA: 'VILLA',
+    HOUSE: 'INDEPENDENT_HOUSE',
+    COMMERCIAL: 'COMMERCIAL',
+    OTHER: 'OTHER',
+  };
+  const label =
+    [unit.tower, unit.block, unit.unit_number].filter(Boolean).join(' ') || unit.unit_code;
   return {
     id: unit.id,
-    title: `${unit.bhk ? unit.bhk + ' ' : ''}${categoryMap[unit.unit_type] === 'APARTMENT' ? 'Flat' : unit.unit_type} ${label}`.trim(),
+    title:
+      `${unit.bhk ? unit.bhk + ' ' : ''}${categoryMap[unit.unit_type] === 'APARTMENT' ? 'Flat' : unit.unit_type} ${label}`.trim(),
     property_code: unit.unit_code,
     category: categoryMap[unit.unit_type] || unit.unit_type,
     listing_type: 'NEW',
@@ -201,7 +212,22 @@ router.use(authenticatePublicKey);
 router.get('/:brand/properties', async (req: any, res: Response) => {
   try {
     const { brand } = req.params;
-    const { city, locality, location, listing_type, category, price_min, price_max, bedrooms, bedrooms_min, bedrooms_max, bathrooms, area_min, area_max, sort } = req.query;
+    const {
+      city,
+      locality,
+      location,
+      listing_type,
+      category,
+      price_min,
+      price_max,
+      bedrooms,
+      bedrooms_min,
+      bedrooms_max,
+      bathrooms,
+      area_min,
+      area_max,
+      sort,
+    } = req.query;
     let companyId: number | null = null;
 
     if (brand.toLowerCase() === 'rrh') {
@@ -212,7 +238,7 @@ router.get('/:brand/properties', async (req: any, res: Response) => {
       return res.status(400).json({ error: 'Invalid brand specified in URL' });
     }
 
-// Helper: safely convert query param to number, returns undefined for invalid
+    // Helper: safely convert query param to number, returns undefined for invalid
     const toNum = (v: any) => {
       if (v === null || v === undefined || v === '') return undefined;
       const n = Number(v);
@@ -326,7 +352,11 @@ router.get('/:brand/properties', async (req: any, res: Response) => {
       }
     }
 
-    if (finalBedroomsMin !== undefined && bedRoomsMax !== undefined && finalBedroomsMin > bedRoomsMax) {
+    if (
+      finalBedroomsMin !== undefined &&
+      bedRoomsMax !== undefined &&
+      finalBedroomsMin > bedRoomsMax
+    ) {
       return res.status(400).json({ error: 'effective bedrooms minimum must be <= bedrooms_max' });
     }
 
@@ -350,7 +380,10 @@ router.get('/:brand/properties', async (req: any, res: Response) => {
 
     // Phase 3: Location search (tokenized OR search across city/locality)
     if (location !== undefined && typeof location === 'string' && location.trim() !== '') {
-      const tokens = location.split(',').map((t: string) => t.trim()).filter(Boolean);
+      const tokens = location
+        .split(',')
+        .map((t: string) => t.trim())
+        .filter(Boolean);
       const uniqueTokens: string[] = [];
       const seenLower = new Set<string>();
       for (const t of tokens) {
@@ -361,16 +394,15 @@ router.get('/:brand/properties', async (req: any, res: Response) => {
         }
       }
       if (uniqueTokens.length > 2) {
-        return res.status(400).json({ error: 'Location search supports a maximum of 2 tokens (e.g., Locality, City)' });
+        return res
+          .status(400)
+          .json({ error: 'Location search supports a maximum of 2 tokens (e.g., Locality, City)' });
       }
       if (uniqueTokens.length > 0) {
         whereCondition.AND = whereCondition.AND || [];
         for (const token of uniqueTokens) {
           whereCondition.AND.push({
-            OR: [
-              { city: { equals: token } },
-              { locality: { equals: token } }
-            ]
+            OR: [{ city: { equals: token } }, { locality: { equals: token } }],
           });
         }
       }
@@ -378,7 +410,11 @@ router.get('/:brand/properties', async (req: any, res: Response) => {
     if (category !== undefined && typeof category === 'string' && category.trim() !== '') {
       whereCondition.category = category.trim();
     }
-    if (listing_type !== undefined && typeof listing_type === 'string' && listing_type.trim() !== '') {
+    if (
+      listing_type !== undefined &&
+      typeof listing_type === 'string' &&
+      listing_type.trim() !== ''
+    ) {
       whereCondition.listing_type = listing_type.trim();
     }
 
@@ -637,37 +673,42 @@ router.get('/:brand/projects/:id', async (req: any, res: Response) => {
 // so the required LeadActivity.actor_id FK has something real to point at,
 // while attribution (created_by_id) correctly stays null — a website lead
 // has no employee creator.
-router.post('/:brand/leads', publicWriteLimiter, validateRequestBody(PublicLeadCreateSchema), async (req: any, res: Response) => {
-  try {
-    const { brand } = req.params;
-    const companyId = req.apiKeyContext.company_id as number;
+router.post(
+  '/:brand/leads',
+  publicWriteLimiter,
+  validateRequestBody(PublicLeadCreateSchema),
+  async (req: any, res: Response) => {
+    try {
+      const { brand } = req.params;
+      const companyId = req.apiKeyContext.company_id as number;
 
-    if (brand.toLowerCase() !== 'rrh' && brand.toLowerCase() !== 'sonthillu') {
-      return res.status(400).json({ error: 'Invalid brand specified in URL' });
+      if (brand.toLowerCase() !== 'rrh' && brand.toLowerCase() !== 'sonthillu') {
+        return res.status(400).json({ error: 'Invalid brand specified in URL' });
+      }
+
+      const systemEmployee = await getOrCreateSystemEmployee(companyId);
+      const systemUser = {
+        employeeId: systemEmployee.id,
+        employeeCode: systemEmployee.employee_code,
+        companyId,
+        branchId: null,
+        roles: [] as string[],
+        permissions: [] as string[],
+      };
+
+      const { lead } = await createLead(
+        systemUser,
+        { ...req.body, source: 'WEBSITE' },
+        { isPublicSubmission: true },
+      );
+
+      res.status(201).json({ message: 'Lead captured successfully', leadId: lead.id });
+    } catch (error: any) {
+      if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
+      logger.error('Public lead creation error:', error);
+      res.status(500).json({ error: 'Failed to create lead' });
     }
-
-    const systemEmployee = await getOrCreateSystemEmployee(companyId);
-    const systemUser = {
-      employeeId: systemEmployee.id,
-      employeeCode: systemEmployee.employee_code,
-      companyId,
-      branchId: null,
-      roles: [] as string[],
-      permissions: [] as string[],
-    };
-
-    const { lead } = await createLead(
-      systemUser,
-      { ...req.body, source: 'WEBSITE' },
-      { isPublicSubmission: true },
-    );
-
-    res.status(201).json({ message: 'Lead captured successfully', leadId: lead.id });
-  } catch (error: any) {
-    if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
-    logger.error('Public lead creation error:', error);
-    res.status(500).json({ error: 'Failed to create lead' });
-  }
-});
+  },
+);
 
 export default router;

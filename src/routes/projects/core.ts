@@ -36,43 +36,49 @@ router.get(
   authenticateToken,
   requireAuthz(Permissions.PROJECTS_READ),
   async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const { status } = req.query;
-    const filters = {
-      status: typeof status === 'string' ? status : undefined,
-    };
+    try {
+      const { status } = req.query;
+      const filters = {
+        status: typeof status === 'string' ? status : undefined,
+      };
 
-    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 100);
-    const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 100);
+      const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
 
-    const projects = await ProjectService.listProjects(req.user!, filters, limit, offset);
-    return res.status(200).json({ projects, pagination: { limit, offset } });
-  } catch (error: any) {
-    logger.error('Fetch projects error:', error);
-    if (error.status) {
-      return res.status(error.status).json({ error: error.message });
+      const projects = await ProjectService.listProjects(req.user!, filters, limit, offset);
+      return res.status(200).json({ projects, pagination: { limit, offset } });
+    } catch (error: any) {
+      logger.error('Fetch projects error:', error);
+      if (error.status) {
+        return res.status(error.status).json({ error: error.message });
+      }
+      return res.status(500).json({ error: 'Failed to fetch projects' });
     }
-    return res.status(500).json({ error: 'Failed to fetch projects' });
-  }
-});
+  },
+);
 
 // GET /api/v1/projects/:id - Get single project
-router.get('/:id', authenticateToken, requireAuthz(Permissions.PROJECTS_READ, async (req) => {
-  const projectId = parseInt(req.params.id, 10);
-  return await p.project.findFirst({ where: { id: projectId } });
-}), async (req: AuthenticatedRequest, res: Response) => {
-  try {
+router.get(
+  '/:id',
+  authenticateToken,
+  requireAuthz(Permissions.PROJECTS_READ, async (req) => {
     const projectId = parseInt(req.params.id, 10);
-    const project = await ProjectService.getProject(req.user!, projectId);
-    return res.status(200).json({ project });
-  } catch (error: any) {
-    logger.error('Fetch project error:', error);
-    if (error.status) {
-      return res.status(error.status).json({ error: error.message });
+    return await p.project.findFirst({ where: { id: projectId } });
+  }),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const projectId = parseInt(req.params.id, 10);
+      const project = await ProjectService.getProject(req.user!, projectId);
+      return res.status(200).json({ project });
+    } catch (error: any) {
+      logger.error('Fetch project error:', error);
+      if (error.status) {
+        return res.status(error.status).json({ error: error.message });
+      }
+      return res.status(500).json({ error: 'Failed to fetch project' });
     }
-    return res.status(500).json({ error: 'Failed to fetch project' });
-  }
-});
+  },
+);
 
 // POST /api/v1/projects - Create Project
 router.post(
@@ -94,7 +100,7 @@ router.post(
       }
       return res.status(500).json({ error: 'Failed to create project' });
     }
-  }
+  },
 );
 
 // PUT /api/v1/projects/:id - Update Project
@@ -128,7 +134,7 @@ router.put(
       }
       return res.status(500).json({ error: 'Failed to update project' });
     }
-  }
+  },
 );
 
 // DELETE /api/v1/projects/:id - Delete Project (Status transition)
@@ -161,7 +167,7 @@ router.delete(
       }
       return res.status(500).json({ error: 'Failed to delete project' });
     }
-  }
+  },
 );
 
 // POST /api/v1/projects/:id/reassign - Reassign a project's PM, as a distinct
@@ -193,9 +199,8 @@ router.post(
       }
       return res.status(500).json({ error: 'Failed to reassign project' });
     }
-  }
+  },
 );
-
 
 // ─────────────────────────────────────────────────────────────
 // Project Verification Workflow
@@ -213,20 +218,29 @@ router.post(
       if (isNaN(projectId)) return res.status(400).json({ error: 'Invalid ID' });
       const project = await p.project.findFirst({ where: { id: projectId } });
       if (!project) return res.status(404).json({ error: 'Project not found' });
-      if (!['DRAFT', 'REJECTED'].includes(project.verification_status)) {
-        return res.status(400).json({ error: `Cannot submit: project is already ${project.verification_status}` });
+      if (!['DRAFT', 'REJECTED'].includes(project.status)) {
+        return res
+          .status(400)
+          .json({ error: `Cannot submit: project is already ${project.status}` });
       }
       const updated = await p.project.update({
         where: { id: projectId },
-        data: { verification_status: 'PENDING_VERIFICATION', verified_by_id: null, verified_at: null, verification_notes: null },
+        data: {
+          status: 'PENDING_VERIFICATION',
+          verified_by_id: null,
+          verified_at: null,
+          verification_notes: null,
+        },
       });
       logger.info(`Project ${projectId} submitted for review by employee ${req.user!.employeeId}`);
-      return res.status(200).json({ message: 'Project submitted for MD review.', project: updated });
+      return res
+        .status(200)
+        .json({ message: 'Project submitted for MD review.', project: updated });
     } catch (error: any) {
       logger.error('Submit project for review error:', error);
       return res.status(500).json({ error: 'Failed to submit project for review' });
     }
-  }
+  },
 );
 
 // POST /api/v1/projects/:id/verify
@@ -245,24 +259,32 @@ router.post(
       }
       const project = await p.project.findFirst({ where: { id: projectId } });
       if (!project) return res.status(404).json({ error: 'Project not found' });
-      if (project.verification_status !== 'PENDING_VERIFICATION') {
-        return res.status(400).json({ error: `Project is not pending verification (current: ${project.verification_status})` });
+      if (project.status !== 'PENDING_VERIFICATION') {
+        return res
+          .status(400)
+          .json({ error: `Project is not pending verification (current: ${project.status})` });
       }
       const newStatus = action === 'APPROVE' ? 'VERIFIED' : 'REJECTED';
       const updated = await p.project.update({
         where: { id: projectId },
-        data: { verification_status: newStatus, verified_by_id: req.user!.employeeId, verified_at: new Date(), verification_notes: notes || null },
+        data: {
+          status: newStatus,
+          verified_by_id: req.user!.employeeId,
+          verified_at: new Date(),
+          verification_notes: notes || null,
+        },
       });
       logger.info(`Project ${projectId} ${newStatus} by MD employee ${req.user!.employeeId}`);
-      const msg = action === 'APPROVE'
-        ? `Project "${project.name}" approved and is now visible to all staff.`
-        : `Project "${project.name}" rejected. The PM has been informed.`;
+      const msg =
+        action === 'APPROVE'
+          ? `Project "${project.name}" approved and is now visible to all staff.`
+          : `Project "${project.name}" rejected. The PM has been informed.`;
       return res.status(200).json({ message: msg, project: updated });
     } catch (error: any) {
       logger.error('Verify project error:', error);
       return res.status(500).json({ error: 'Failed to verify project' });
     }
-  }
+  },
 );
 
 // ─────────────────────────────────────────────────────────────
@@ -281,7 +303,12 @@ router.post(
       if (!req.file) {
         return res.status(400).json({ error: 'No image file provided' });
       }
-      const image = await ProjectService.uploadLayoutImage(req.user!, projectId, req.file, req.body?.title);
+      const image = await ProjectService.uploadLayoutImage(
+        req.user!,
+        projectId,
+        req.file,
+        req.body?.title,
+      );
       return res.status(201).json({ message: 'Layout image uploaded successfully', image });
     } catch (error: any) {
       logger.error('Upload layout image error:', error);
@@ -338,7 +365,12 @@ router.put(
     try {
       const projectId = parseInt(req.params.id, 10);
       const imageId = parseInt(req.params.imageId, 10);
-      const result = await ProjectService.upsertLayoutRegions(req.user!, projectId, imageId, req.body.regions);
+      const result = await ProjectService.upsertLayoutRegions(
+        req.user!,
+        projectId,
+        imageId,
+        req.body.regions,
+      );
       return res.status(200).json({
         message: `${result.saved} of ${result.total} region(s) saved successfully`,
         ...result,
@@ -396,7 +428,13 @@ router.post(
       const projectId = parseInt(req.params.id, 10);
       if (!req.file) return res.status(400).json({ error: 'No file provided' });
       const kind = req.body?.kind || 'GALLERY';
-      const media = await ProjectService.uploadMedia(req.user!, projectId, req.file, kind, req.body?.title);
+      const media = await ProjectService.uploadMedia(
+        req.user!,
+        projectId,
+        req.file,
+        kind,
+        req.body?.title,
+      );
       return res.status(201).json({ message: 'Media uploaded successfully', media });
     } catch (error: any) {
       logger.error('Upload project media error:', error);
@@ -454,7 +492,13 @@ router.post(
       const projectId = parseInt(req.params.id, 10);
       if (!req.file) return res.status(400).json({ error: 'No file provided' });
       const kind = req.body?.kind || 'OTHER';
-      const doc = await ProjectService.uploadDocument(req.user!, projectId, req.file, kind, req.body?.title);
+      const doc = await ProjectService.uploadDocument(
+        req.user!,
+        projectId,
+        req.file,
+        kind,
+        req.body?.title,
+      );
       return res.status(201).json({ message: 'Document uploaded successfully', document: doc });
     } catch (error: any) {
       logger.error('Upload project document error:', error);

@@ -2,7 +2,14 @@ import { logger } from '../utils/logger';
 import { Router, Response } from 'express';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 import { requireAuthz } from '../middleware/authz';
-import { Roles, LeadCreateSchema, LeadStatusUpdateSchema, LeadReassignSchema, Permissions, AddPropertyInterestSchema } from '../shared';
+import {
+  Roles,
+  LeadCreateSchema,
+  LeadStatusUpdateSchema,
+  LeadReassignSchema,
+  Permissions,
+  AddPropertyInterestSchema,
+} from '../shared';
 import { validateRequestBody } from '../middleware/validate';
 import { LeadService, AppError } from '../services/lead.service';
 import { syncLeadPreferredLocations } from '../services/lead/shared';
@@ -14,7 +21,9 @@ const router = Router();
 // Helper to catch and route AppErrors to HTTP responses
 const handleServiceError = (error: any, res: Response) => {
   if (error instanceof AppError || error.name === 'AppError' || error.statusCode) {
-    return res.status(error.statusCode || 400).json({ error: error.message, code: (error as any).code });
+    return res
+      .status(error.statusCode || 400)
+      .json({ error: error.message, code: (error as any).code });
   }
   logger.error('Unhandled route error:', error);
   return res.status(500).json({ error: 'Internal Server Error' });
@@ -26,16 +35,17 @@ router.get(
   authenticateToken,
   requireAuthz(Permissions.LEADS_READ),
   async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 100);
-    const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
-    
-    const leads = await LeadService.getLeads(req.user!, limit, offset);
-    return res.status(200).json({ leads, pagination: { limit, offset } });
-  } catch (error: any) {
-    return handleServiceError(error, res);
-  }
-});
+    try {
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 100);
+      const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
+
+      const leads = await LeadService.getLeads(req.user!, limit, offset);
+      return res.status(200).json({ leads, pagination: { limit, offset } });
+    } catch (error: any) {
+      return handleServiceError(error, res);
+    }
+  },
+);
 
 // GET /api/v1/leads/distribution-monitor - Telecaller load & intake monitor
 router.get(
@@ -43,13 +53,14 @@ router.get(
   authenticateToken,
   requireAuthz(Permissions.LEADS_DISTRIBUTION_MONITOR),
   async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const data = await LeadService.getDistributionMonitor(req.user!.companyId);
-    return res.status(200).json(data);
-  } catch (error: any) {
-    return handleServiceError(error, res);
-  }
-});
+    try {
+      const data = await LeadService.getDistributionMonitor(req.user!.companyId);
+      return res.status(200).json(data);
+    } catch (error: any) {
+      return handleServiceError(error, res);
+    }
+  },
+);
 
 // POST /api/v1/leads - Telecaller creates new lead
 router.post(
@@ -67,7 +78,7 @@ router.post(
     } catch (error: any) {
       return handleServiceError(error, res);
     }
-  }
+  },
 );
 
 // POST /api/v1/leads/:id/convert-to-customer
@@ -87,7 +98,7 @@ router.post(
     } catch (error: any) {
       return handleServiceError(error, res);
     }
-  }
+  },
 );
 
 // POST /api/v1/leads/bulk-upload - Bulk CSV/Excel importer (Digital Lead Operator / MD / Admin)
@@ -117,7 +128,7 @@ router.post(
     } catch (error: any) {
       return handleServiceError(error, res);
     }
-  }
+  },
 );
 
 // POST /api/v1/leads/:id/assign - Manual Re-assignment Override (Audited)
@@ -140,7 +151,7 @@ router.post(
     } catch (error: any) {
       return handleServiceError(error, res);
     }
-  }
+  },
 );
 
 // PATCH /api/v1/leads/:id/status - Update lead status (through the workflow engine)
@@ -152,15 +163,23 @@ router.patch(
   async (req: AuthenticatedRequest, res: Response) => {
     try {
       const leadId = parseInt(req.params.id, 10);
-      const { status, notes, exit_reason, exit_reason_detail, demo_scheduled_at, demo_handler_id, qualification } = req.body;
-
-      const updated = await LeadService.updateLeadStatus(
-        req.user!,
-        leadId,
+      const {
         status,
         notes,
-        { exit_reason, exit_reason_detail, demo_scheduled_at, demo_handler_id, qualification }
-      );
+        exit_reason,
+        exit_reason_detail,
+        demo_scheduled_at,
+        demo_handler_id,
+        qualification,
+      } = req.body;
+
+      const updated = await LeadService.updateLeadStatus(req.user!, leadId, status, notes, {
+        exit_reason,
+        exit_reason_detail,
+        demo_scheduled_at,
+        demo_handler_id,
+        qualification,
+      });
 
       return res.status(200).json({
         message: `Lead ${updated.lead_code} status updated to ${status}`,
@@ -169,7 +188,7 @@ router.patch(
     } catch (error: any) {
       return handleServiceError(error, res);
     }
-  }
+  },
 );
 
 // PATCH /api/v1/leads/:id - Generic lead update (for qualification, budget, notes, etc.)
@@ -181,35 +200,43 @@ router.patch(
     try {
       const leadId = parseInt(req.params.id, 10);
       const updateData = req.body;
-      
+
       const existingLead = await LeadService.getLeadById(req.user!, leadId);
       if (!existingLead) {
         return res.status(404).json({ error: 'Lead not found' });
       }
 
       // Basic update using prisma
-      const updated = await prisma.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
-        const lead = await tx.lead.update({
-          where: { id: leadId },
-          data: {
-            budget_min: updateData.budget_min !== undefined ? updateData.budget_min : undefined,
-            budget_max: updateData.budget_max !== undefined ? updateData.budget_max : undefined,
-            property_type_preference: updateData.property_type_preference !== undefined ? updateData.property_type_preference : undefined,
-            // Full multi-location list (§ Phase 2) wins over the legacy single
-            // field when both are sent — its first entry becomes the primary.
-            preferred_location: updateData.preferred_locations && updateData.preferred_locations.length > 0
-              ? updateData.preferred_locations[0]
-              : (updateData.preferred_location !== undefined ? updateData.preferred_location : undefined),
-            notes: updateData.notes !== undefined ? updateData.notes : undefined,
+      const updated = await prisma.$transaction(
+        async (tx: import('@prisma/client').Prisma.TransactionClient) => {
+          const lead = await tx.lead.update({
+            where: { id: leadId },
+            data: {
+              budget_min: updateData.budget_min !== undefined ? updateData.budget_min : undefined,
+              budget_max: updateData.budget_max !== undefined ? updateData.budget_max : undefined,
+              property_type_preference:
+                updateData.property_type_preference !== undefined
+                  ? updateData.property_type_preference
+                  : undefined,
+              // Full multi-location list (§ Phase 2) wins over the legacy single
+              // field when both are sent — its first entry becomes the primary.
+              preferred_location:
+                updateData.preferred_locations && updateData.preferred_locations.length > 0
+                  ? updateData.preferred_locations[0]
+                  : updateData.preferred_location !== undefined
+                    ? updateData.preferred_location
+                    : undefined,
+              notes: updateData.notes !== undefined ? updateData.notes : undefined,
+            },
+          });
+
+          if (updateData.preferred_locations !== undefined) {
+            await syncLeadPreferredLocations(tx, leadId, updateData.preferred_locations || []);
           }
-        });
 
-        if (updateData.preferred_locations !== undefined) {
-          await syncLeadPreferredLocations(tx, leadId, updateData.preferred_locations || []);
-        }
-
-        return lead;
-      });
+          return lead;
+        },
+      );
 
       // Log activity for qualification update if provided
       if (updateData.budget_min !== undefined || updateData.property_type_preference) {
@@ -219,7 +246,7 @@ router.patch(
             actor_id: req.user!.employeeId,
             activity_type: 'QUALIFIED',
             notes: 'Lead qualification details updated manually.',
-          }
+          },
         });
       }
 
@@ -230,7 +257,7 @@ router.patch(
     } catch (error: any) {
       return handleServiceError(error, res);
     }
-  }
+  },
 );
 
 // GET /api/v1/leads/:id - Fetch single lead
@@ -244,7 +271,7 @@ router.get(
       if (isNaN(leadId)) {
         return res.status(400).json({ error: 'Invalid Lead ID' });
       }
-      
+
       const lead = await LeadService.getLeadById(req.user!, leadId);
       if (!lead) {
         return res.status(404).json({ error: 'Lead not found' });
@@ -256,7 +283,7 @@ router.get(
     } catch (error: any) {
       return handleServiceError(error, res);
     }
-  }
+  },
 );
 
 router.get('/:id/matches', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
@@ -270,20 +297,24 @@ router.get('/:id/matches', authenticateToken, async (req: AuthenticatedRequest, 
 });
 
 // GET /api/v1/leads/:id/opportunities
-router.get('/:id/opportunities', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const leadId = parseInt(req.params.id, 10);
-    // Enforce Lead read authorization (ensure Lead belongs to company, etc)
-    const existingLead = await LeadService.getLeadById(req.user!, leadId);
-    if (!existingLead) {
-      return res.status(404).json({ error: 'Lead not found' });
+router.get(
+  '/:id/opportunities',
+  authenticateToken,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const leadId = parseInt(req.params.id, 10);
+      // Enforce Lead read authorization (ensure Lead belongs to company, etc)
+      const existingLead = await LeadService.getLeadById(req.user!, leadId);
+      if (!existingLead) {
+        return res.status(404).json({ error: 'Lead not found' });
+      }
+      const opportunities = await OpportunityService.getOpportunitiesByLead(req.user!, leadId);
+      return res.status(200).json({ opportunities });
+    } catch (error: any) {
+      return handleServiceError(error, res);
     }
-    const opportunities = await OpportunityService.getOpportunitiesByLead(req.user!, leadId);
-    return res.status(200).json({ opportunities });
-  } catch (error: any) {
-    return handleServiceError(error, res);
-  }
-});
+  },
+);
 
 // POST /api/v1/leads/:id/whatsapp-proposal/:propertyId - Send WhatsApp Proposal Payload & Log Activity
 router.post(
@@ -304,7 +335,7 @@ router.post(
     } catch (error: any) {
       return handleServiceError(error, res);
     }
-  }
+  },
 );
 
 // POST /api/v1/leads/:id/properties - Add a property interest
@@ -327,7 +358,7 @@ router.post(
     } catch (error: any) {
       return handleServiceError(error, res);
     }
-  }
+  },
 );
 
 // DELETE /api/v1/leads/:id/properties/:propertyId - Remove a property interest
@@ -346,7 +377,7 @@ router.delete(
     } catch (error: any) {
       return handleServiceError(error, res);
     }
-  }
+  },
 );
 
 // GET /api/v1/leads/:id/properties - Get properties the lead is interested in
@@ -363,7 +394,7 @@ router.get(
     } catch (error: any) {
       return handleServiceError(error, res);
     }
-  }
+  },
 );
 
 // GET /api/v1/leads/:id/tasks - Get tasks associated with the lead
@@ -380,7 +411,7 @@ router.get(
     } catch (error: any) {
       return handleServiceError(error, res);
     }
-  }
+  },
 );
 
 // POST /api/v1/leads/:id/recover-manual - Manually recover a dropped/cancelled lead (Same ID)
@@ -395,12 +426,12 @@ router.post(
 
       return res.status(200).json({
         message: 'Lead manually recovered successfully',
-        lead: recovered
+        lead: recovered,
       });
     } catch (error: any) {
       return handleServiceError(error, res);
     }
-  }
+  },
 );
 
 // POST /api/v1/leads/:id/recover-fresh - Start a fresh lead from a dropped/cancelled one (New ID)
@@ -415,12 +446,12 @@ router.post(
 
       return res.status(201).json({
         message: 'Fresh lead created successfully from history',
-        lead: freshLead
+        lead: freshLead,
       });
     } catch (error: any) {
       return handleServiceError(error, res);
     }
-  }
+  },
 );
 
 export default router;

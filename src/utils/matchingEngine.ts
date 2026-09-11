@@ -8,7 +8,10 @@ const p = prisma;
  * full list when present; falls back to the legacy single scalar for leads
  * created before this feature (or that never used the multi-location UI).
  */
-function getLeadLocationCandidates(lead: { preferred_location: string | null; preferred_locations?: { location: string }[] }): string[] {
+function getLeadLocationCandidates(lead: {
+  preferred_location: string | null;
+  preferred_locations?: { location: string }[];
+}): string[] {
   if (lead.preferred_locations && lead.preferred_locations.length > 0) {
     return lead.preferred_locations.map((l) => l.location);
   }
@@ -76,9 +79,7 @@ export const findMatchingPropertiesForLead = async (
           bestLocationScore = Math.max(bestLocationScore, 40);
         } else {
           const prefWords = prefLoc.split(/[\s,/]+/);
-          const hasWordMatch = prefWords.some(
-            (w: string) => w.length > 3 && propLoc.includes(w),
-          );
+          const hasWordMatch = prefWords.some((w: string) => w.length > 3 && propLoc.includes(w));
           if (hasWordMatch) {
             bestLocationScore = Math.max(bestLocationScore, 25);
           }
@@ -172,10 +173,7 @@ export const findMatchingPropertiesForLead = async (
  * template table yet. Admin screen (routes/messageTemplates.ts) is the single
  * place to edit templates.
  */
-async function resolveWhatsAppTextForProperty(
-  lead: any,
-  prop: any,
-): Promise<string> {
+async function resolveWhatsAppTextForProperty(lead: any, prop: any): Promise<string> {
   const templateKey = 'LEAD_QUALIFIED_PROPERTIES';
 
   const resolved = await MessageTemplateService.resolve(templateKey, {
@@ -200,10 +198,7 @@ async function resolveWhatsAppTextForProperty(
   // Do NOT hardcode the production template here — this is only a
   // no-broken-experience stopgap. The real content lives in the
   // MessageTemplate table row for LEAD_QUALIFIED_PROPERTIES.
-  const brandName =
-    prop.brand_type === 'SONTHILLU'
-      ? 'SONTHILLU RESIDENTIAL'
-      : 'RADHA REAL HOMES';
+  const brandName = prop.brand_type === 'SONTHILLU' ? 'SONTHILLU RESIDENTIAL' : 'RADHA REAL HOMES';
 
   return `🏡 *EXCLUSIVE PROPERTY PROPOSAL FROM ${brandName}*
 
@@ -213,25 +208,18 @@ We found a premium property matching your exact requirements!
 
 📌 *Title*: ${prop.title}
 📍 *Location*: ${prop.location}
-📐 *Area*: ${prop.area_sqft} sq.ft (${
-    prop.bedrooms ? prop.bedrooms + ' BHK' : prop.category
-  })
+📐 *Area*: ${prop.area_sqft} sq.ft (${prop.bedrooms ? prop.bedrooms + ' BHK' : prop.category})
 🧭 *Facing*: ${prop.facing || 'East'}
 💰 *Asking Price*: ₹${(prop.final_price / 100000).toFixed(1)} Lakhs
 
 📝 *Highlights*: ${
-    prop.description ||
-    'Prime location with high growth potential and immediate registration.'
+    prop.description || 'Prime location with high growth potential and immediate registration.'
   }
 
 📞 *Your Dedicated Relationship Manager*:
 ${
-  lead.assigned_to?.full_name ||
-  lead.assigned_to?.employee_code ||
-  'Radha Real Homes Advisory Desk'
-} (${
-  lead.assigned_to?.phone || '+91 99000 11222'
-})
+  lead.assigned_to?.full_name || lead.assigned_to?.employee_code || 'Radha Real Homes Advisory Desk'
+} (${lead.assigned_to?.phone || '+91 99000 11222'})
 
 Reply to this message or call us directly to schedule an exclusive site visit!`;
 }
@@ -243,7 +231,7 @@ Reply to this message or call us directly to schedule an exclusive site visit!`;
  */
 export const matchDroppedLeadsToProperty = async (propertyId: number): Promise<number[]> => {
   const prop = await p.property.findUnique({
-    where: { id: propertyId }
+    where: { id: propertyId },
   });
 
   if (!prop || prop.status !== 'LIVE') return [];
@@ -253,7 +241,7 @@ export const matchDroppedLeadsToProperty = async (propertyId: number): Promise<n
     where: {
       company_id: prop.company_id,
       status: 'DROPPED',
-      exit_reason: 'NO_MATCHING_INVENTORY'
+      exit_reason: 'NO_MATCHING_INVENTORY',
     },
     include: { preferred_locations: true },
   });

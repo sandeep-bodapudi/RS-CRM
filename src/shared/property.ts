@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { AreaUnitEnum, PriceBasisEnum, ChargeCalcMethodEnum, ChargeCategoryEnum, PricingRuleKindEnum } from './projectUnit';
+import {
+  AreaUnitEnum,
+  PriceBasisEnum,
+  ChargeCalcMethodEnum,
+  ChargeCategoryEnum,
+  PricingRuleKindEnum,
+} from './projectUnit';
 
 // § Phase 3: a Property's own conditional pricing rules — mirrors
 // ProjectPricingRuleCreateSchema, minus applies_to_unit_type (a property
@@ -50,18 +56,30 @@ export const PropertyPricePreviewSchema = z.object({
   discount_amount: z.number().optional().nullable(),
   discount_reason: z.string().optional().nullable(),
   manual_lines: z
-    .array(z.object({ label: z.string().min(1), category: ChargeCategoryEnum.optional(), amount: z.number() }))
+    .array(
+      z.object({
+        label: z.string().min(1),
+        category: ChargeCategoryEnum.optional(),
+        amount: z.number(),
+      }),
+    )
     .optional(),
 });
 export type PropertyPricePreviewInput = z.infer<typeof PropertyPricePreviewSchema>;
 
-export const OverridePropertyPriceSchema = z.object({
-  override_price: z.number().positive().nullable(),
-  override_reason: z.string().min(3, 'A reason is required when overriding the calculated price').optional().nullable(),
-}).refine((data) => data.override_price === null || !!data.override_reason, {
-  message: 'A reason is required when setting an override price',
-  path: ['override_reason'],
-});
+export const OverridePropertyPriceSchema = z
+  .object({
+    override_price: z.number().positive().nullable(),
+    override_reason: z
+      .string()
+      .min(3, 'A reason is required when overriding the calculated price')
+      .optional()
+      .nullable(),
+  })
+  .refine((data) => data.override_price === null || !!data.override_reason, {
+    message: 'A reason is required when setting an override price',
+    path: ['override_reason'],
+  });
 
 // Property Constants & Schemas
 
@@ -103,7 +121,13 @@ const PropertyPricingFields = {
   discount_amount: z.number().optional().nullable(),
   discount_reason: z.string().optional().nullable(),
   manual_lines: z
-    .array(z.object({ label: z.string().min(1), category: ChargeCategoryEnum.optional(), amount: z.number() }))
+    .array(
+      z.object({
+        label: z.string().min(1),
+        category: ChargeCategoryEnum.optional(),
+        amount: z.number(),
+      }),
+    )
     .optional(),
 };
 
@@ -310,7 +334,7 @@ export const PropertyStatus = {
   ARCHIVED: 'ARCHIVED',
 } as const;
 
-export type PropertyStatusType = typeof PropertyStatus[keyof typeof PropertyStatus];
+export type PropertyStatusType = (typeof PropertyStatus)[keyof typeof PropertyStatus];
 
 export const PropertyAvailability = {
   AVAILABLE: 'AVAILABLE',
@@ -319,63 +343,75 @@ export const PropertyAvailability = {
   UNAVAILABLE: 'UNAVAILABLE',
 } as const;
 
-export type PropertyAvailabilityType = typeof PropertyAvailability[keyof typeof PropertyAvailability];
+export type PropertyAvailabilityType =
+  (typeof PropertyAvailability)[keyof typeof PropertyAvailability];
 
 export const PropertyBrand = {
   SONTHILLU: 'SONTHILLU', // Residential Villas & Apartments
   RADHA_REAL_HOMES: 'RADHA_REAL_HOMES', // Commercial Plots & Land
 } as const;
 
-export const PropertyCreateSchema = z.object({
-  title: z.string().min(3, 'Title is required'),
-  description: z.string().optional().nullable(),
-  brand_type: z.enum(['SONTHILLU', 'RADHA_REAL_HOMES']),
-  category: z.enum([
-    'APARTMENT', 'INDEPENDENT_HOUSE', 'DUPLEX', 'INDEPENDENT_FLOOR',
-    'VILLA', 'PENTHOUSE', 'STUDIO', 'PLOT', 'FARM_HOUSE', 'AGRICULTURAL_LAND',
-    // Were missing entirely — propertyWizardShared.tsx's PROPERTY_CATEGORIES
-    // has always listed these two, but the schema stripped them before they
-    // ever reached the service, so a Commercial Shop/Office could never
-    // actually be created.
-    'COMMERCIAL_SHOP', 'COMMERCIAL_OFFICE',
-  ]),
-  area_sqft: z.number().positive('Area in sqft is required'),
-  location: z.string().min(2, 'Location is required'),
-  address: z.string().optional(),
-  bedrooms: z.number().int().optional().nullable(),
-  bathrooms: z.number().int().optional().nullable(),
-  facing: z.string().optional(),
-  amenities: z.string().optional(),
-  possession_status: z.enum(['READY_TO_MOVE', 'UNDER_CONSTRUCTION']).optional(),
-  assigned_pm_id: z.number().int().optional().nullable(),
-  // Was missing entirely — validateRequestBody's schema.parse() strips any key not
-  // listed here, so a property could never actually be linked to a project via this
-  // endpoint despite property.service.ts's createProperty always reading data.project_id.
-  project_id: z.number().int().positive().optional().nullable(),
-  details: z.any().optional(), // kept for backward compatibility if needed temporarily
-  pricing: z.any().optional(),
-  // WR-2: Structured location fields
-  state: z.string().optional().nullable(),
-  city: z.string().optional().nullable(),
-  locality: z.string().optional().nullable(),
-  pincode: z.string().optional().nullable(),
-  latitude: z.number().optional().nullable(),
-  longitude: z.number().optional().nullable(),
-  listing_type: z.enum(['NEW', 'RESALE']).optional(),
-  source: z.enum(['INTERNAL', 'WEBSITE_SELLER']).optional(),
-  ...PropertyPricingFields,
-  ...CategoryDetailFields,
-}).superRefine((data, ctx) => {
-  // § Phase 3: base_rate is now the sole required pricing input — it replaced
-  // the removed manual `price` field as what actually drives final_price.
-  if (data.base_rate == null || data.base_rate <= 0) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['base_rate'],
-      message: 'Base rate is required and must be greater than 0',
-    });
-  }
-});
+export const PropertyCreateSchema = z
+  .object({
+    title: z.string().min(3, 'Title is required'),
+    description: z.string().optional().nullable(),
+    brand_type: z.enum(['SONTHILLU', 'RADHA_REAL_HOMES']),
+    category: z.enum([
+      'APARTMENT',
+      'INDEPENDENT_HOUSE',
+      'DUPLEX',
+      'INDEPENDENT_FLOOR',
+      'VILLA',
+      'PENTHOUSE',
+      'STUDIO',
+      'PLOT',
+      'FARM_HOUSE',
+      'AGRICULTURAL_LAND',
+      // Were missing entirely — propertyWizardShared.tsx's PROPERTY_CATEGORIES
+      // has always listed these two, but the schema stripped them before they
+      // ever reached the service, so a Commercial Shop/Office could never
+      // actually be created.
+      'COMMERCIAL_SHOP',
+      'COMMERCIAL_OFFICE',
+    ]),
+    area_sqft: z.number().positive('Area in sqft is required'),
+    location: z.string().min(2, 'Location is required'),
+    address: z.string().optional(),
+    bedrooms: z.number().int().optional().nullable(),
+    bathrooms: z.number().int().optional().nullable(),
+    facing: z.string().optional(),
+    amenities: z.string().optional(),
+    possession_status: z.enum(['READY_TO_MOVE', 'UNDER_CONSTRUCTION']).optional(),
+    assigned_pm_id: z.number().int().optional().nullable(),
+    // Was missing entirely — validateRequestBody's schema.parse() strips any key not
+    // listed here, so a property could never actually be linked to a project via this
+    // endpoint despite property.service.ts's createProperty always reading data.project_id.
+    project_id: z.number().int().positive().optional().nullable(),
+    details: z.any().optional(), // kept for backward compatibility if needed temporarily
+    pricing: z.any().optional(),
+    // WR-2: Structured location fields
+    state: z.string().optional().nullable(),
+    city: z.string().optional().nullable(),
+    locality: z.string().optional().nullable(),
+    pincode: z.string().optional().nullable(),
+    latitude: z.number().optional().nullable(),
+    longitude: z.number().optional().nullable(),
+    listing_type: z.enum(['NEW', 'RESALE']).optional(),
+    source: z.enum(['INTERNAL', 'WEBSITE_SELLER']).optional(),
+    ...PropertyPricingFields,
+    ...CategoryDetailFields,
+  })
+  .superRefine((data, ctx) => {
+    // § Phase 3: base_rate is now the sole required pricing input — it replaced
+    // the removed manual `price` field as what actually drives final_price.
+    if (data.base_rate == null || data.base_rate <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['base_rate'],
+        message: 'Base rate is required and must be greater than 0',
+      });
+    }
+  });
 
 export type PropertyCreateInput = z.infer<typeof PropertyCreateSchema>;
 
@@ -388,7 +424,10 @@ export const PropertyVerificationSchema = z.object({
 export type PropertyVerificationInput = z.infer<typeof PropertyVerificationSchema>;
 
 export const PropertyDMUpdateSchema = z.object({
-  digital_marketing_executive_id: z.number().int().positive('Must select a Digital Marketing Executive'),
+  digital_marketing_executive_id: z
+    .number()
+    .int()
+    .positive('Must select a Digital Marketing Executive'),
   seo_title: z.string().optional(),
   seo_keywords: z.string().optional(),
   description: z.string().optional(),
@@ -480,10 +519,16 @@ export type PropertyReassignInput = z.infer<typeof PropertyReassignSchema>;
 
 export const PropertyImageMetadataSchema = z.object({
   alt_text: z.string().optional(),
-  sort_order: z.union([z.string().regex(/^\d+$/).transform(Number), z.number().int().nonnegative()]).optional(),
-  is_primary: z.union([
-    z.string().toLowerCase().transform(v => v === 'true'),
-    z.boolean()
-  ]).optional(),
+  sort_order: z
+    .union([z.string().regex(/^\d+$/).transform(Number), z.number().int().nonnegative()])
+    .optional(),
+  is_primary: z
+    .union([
+      z
+        .string()
+        .toLowerCase()
+        .transform((v) => v === 'true'),
+      z.boolean(),
+    ])
+    .optional(),
 });
-

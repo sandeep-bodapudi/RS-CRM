@@ -1,9 +1,9 @@
-import { logger } from '../utils/logger';
+import { logger } from '../../utils/logger';
 import { Router, Response } from 'express';
-import { prisma } from '../lib/prisma';
-import { authenticateToken, AuthenticatedRequest, requireRole } from '../middleware/auth';
-import { Roles, Permissions } from '../shared';
-import { validateRequestBody } from '../middleware/validate';
+import { prisma } from '../../lib/prisma';
+import { authenticateToken, AuthenticatedRequest, requireRole } from '../../middleware/auth';
+import { Roles, Permissions } from '../../shared';
+import { validateRequestBody } from '../../middleware/validate';
 import { z } from 'zod';
 import { setRolePermissionOverrideCacheDirty } from '../../authz/dbPermissions';
 
@@ -43,11 +43,11 @@ router.get(
       // Also fetch all known permission keys from the shared enum for the UI dropdowns
       const allPermissionKeys = Object.values(Permissions);
 
-      const rolePerms = roles.map(r => ({
+      const rolePerms = roles.map((r: any) => ({
         id: r.id,
         name: r.name,
         is_system: r.is_system,
-        permissions: r.permissions.map(rp => rp.permission.name),
+        permissions: r.permissions.map((rp: any) => rp.permission.name),
       }));
 
       return res.status(200).json({
@@ -87,7 +87,7 @@ router.get(
         id: role.id,
         name: role.name,
         is_system: role.is_system,
-        permissions: role.permissions.map(rp => rp.permission.name),
+        permissions: role.permissions.map((rp: any) => rp.permission.name),
       });
     } catch (error) {
       logger.error('[Admin] Single role permissions fetch failed:', error);
@@ -122,18 +122,18 @@ router.patch(
         where: { role_id: role.id },
         select: { permission: { select: { name: true } } },
       });
-      const existingPerms = new Set(existingPermRecords.map(rp => rp.permission.name));
+      const existingPerms = new Set(existingPermRecords.map((rp: any) => rp.permission.name));
 
-      const toAdd = granted?.filter(p => !existingPerms.has(p)) ?? [];
-      const toRemove = denied?.filter(p => existingPerms.has(p)) ?? [];
+      const toAdd = granted?.filter((p: string) => !existingPerms.has(p)) ?? [];
+      const toRemove = denied?.filter((p: string) => existingPerms.has(p)) ?? [];
 
       // Look up permission records by name
       const permRecords = await p.permission.findMany({
         where: { name: { in: [...toAdd, ...toRemove] } },
       });
-      const permMap = new Map(permRecords.map(p => [p.name, p.id]));
+      const permMap = new Map(permRecords.map((p: any) => [p.name, p.id]));
 
-      await p.$transaction(async (tx) => {
+      await p.$transaction(async (tx: any) => {
         for (const permName of toAdd) {
           const permId = permMap.get(permName);
           if (permId) {
@@ -195,12 +195,14 @@ router.patch(
         role: {
           id: updated!.id,
           name: updated!.name,
-          permissions: updated!.permissions.map(rp => rp.permission.name),
+          permissions: updated!.permissions.map((rp: any) => rp.permission.name),
         },
       });
     } catch (error: any) {
       logger.error('[Admin] Role permissions update failed:', error);
-      return res.status(500).json({ error: 'Failed to update role permissions', detail: error?.message });
+      return res
+        .status(500)
+        .json({ error: 'Failed to update role permissions', detail: error?.message });
     }
   },
 );
@@ -270,10 +272,10 @@ router.get(
       });
 
       const matrix: Record<string, Record<string, boolean>> = {};
-      roles.forEach(role => {
-        const granted = new Set(role.permissions.map(rp => rp.permission.name));
+      roles.forEach((role: any) => {
+        const granted = new Set(role.permissions.map((rp: any) => rp.permission.name));
         matrix[role.name] = {};
-        allPermissionKeys.forEach(key => {
+        allPermissionKeys.forEach((key: any) => {
           matrix[role.name][key] = granted.has(key);
         });
       });
@@ -281,7 +283,7 @@ router.get(
       return res.status(200).json({
         matrix,
         permissionKeys: allPermissionKeys,
-        roleNames: roles.map(r => r.name),
+        roleNames: roles.map((r: any) => r.name),
       });
     } catch (error) {
       logger.error('[Admin] Permissions matrix fetch failed:', error);

@@ -8,6 +8,8 @@ const workflowEngine_1 = require("../../workflows/workflowEngine");
 const types_1 = require("../../workflows/types");
 const siteVisit_policy_1 = require("../../policies/siteVisit.policy");
 const shared_2 = require("./shared");
+const notifyEmployee_1 = require("../../utils/notifyEmployee");
+const logger_1 = require("../../utils/logger");
 const p = prisma_1.prisma;
 async function listVisits(user, filters) {
     const whereCondition = siteVisit_policy_1.SiteVisitPolicy.canList(user);
@@ -41,6 +43,7 @@ async function listVisits(user, filters) {
             project_manager: { select: { id: true, employee_code: true, full_name: true, phone: true } },
             assigned_agent: { select: { id: true, employee_code: true, full_name: true, phone: true } },
             property: { select: { id: true, property_code: true, title: true, status: true } },
+            project: { select: { id: true, project_code: true, name: true, status: true } },
             site_visit_properties: {
                 include: { property: { select: { id: true, property_code: true, title: true } } },
             },
@@ -157,6 +160,7 @@ async function bookVisit(user, data) {
             include: {
                 lead: true,
                 property: true,
+                project: true,
                 telecaller: true,
                 project_manager: true,
                 assigned_agent: true
@@ -182,6 +186,12 @@ async function bookVisit(user, data) {
                     message: `Site visit ${updatedBooking.booking_code} requires your acceptance.`,
                 },
             });
+            // Web push to PM (outside transaction)
+            (0, notifyEmployee_1.notifyEmployee)(notifyId, {
+                type: 'TARGET_ASSIGNED',
+                title: 'New Site Visit to Accept',
+                message: `Site visit ${updatedBooking.booking_code} requires your acceptance.`,
+            }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] Site visit route PM:', err));
         }
         else {
             // Immediate Escalation Fallback for unmapped PM
@@ -204,6 +214,14 @@ async function bookVisit(user, data) {
                         message: `Site visit ${updatedBooking.booking_code} has no active project PM. Please reassign manually.`,
                     }))
                 });
+                // Web push to marketing directors (outside transaction)
+                for (const md of marketingDirectors) {
+                    (0, notifyEmployee_1.notifyEmployee)(md.id, {
+                        type: 'SYSTEM_ALERT',
+                        title: 'Unassigned Site Visit',
+                        message: `Site visit ${updatedBooking.booking_code} has no active project PM — please reassign.`,
+                    }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] Site visit escalation MD:', err));
+                }
             }
         }
         return updatedBooking;

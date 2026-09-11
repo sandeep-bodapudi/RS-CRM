@@ -47,7 +47,11 @@ export async function optionalWebsiteAccount(req: any, _res: Response, next: Nex
   try {
     const payload = verifyWebsiteAccessToken(token);
     const account = await p.websiteAccount.findUnique({ where: { id: payload.accountId } });
-    if (account && account.token_version === payload.tokenVersion && account.company_id === req.apiKeyContext?.company_id) {
+    if (
+      account &&
+      account.token_version === payload.tokenVersion &&
+      account.company_id === req.apiKeyContext?.company_id
+    ) {
       req.websiteAccount = account;
     }
   } catch {

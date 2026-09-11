@@ -104,7 +104,8 @@ router.get(
     try {
       const projectId = parseInt(req.params.id, 10);
       const { unit_type, sales_status, tower, bhk, facing, search } = req.query;
-      const floor = req.query.floor !== undefined ? parseInt(req.query.floor as string, 10) : undefined;
+      const floor =
+        req.query.floor !== undefined ? parseInt(req.query.floor as string, 10) : undefined;
       const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 200);
       const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
 
@@ -217,7 +218,12 @@ router.post(
   async (req: AuthenticatedRequest, res: Response) => {
     try {
       const unitId = parseInt(req.params.unitId, 10);
-      const unit = await ProjectUnitService.changeStatus(req.user!, unitId, req.body.sales_status, req.body.reason);
+      const unit = await ProjectUnitService.changeStatus(
+        req.user!,
+        unitId,
+        req.body.sales_status,
+        req.body.reason,
+      );
       return res.status(200).json({ message: 'Unit status updated', unit });
     } catch (error: any) {
       logger.error('Change unit status error:', error);
@@ -237,7 +243,12 @@ router.post(
   async (req: AuthenticatedRequest, res: Response) => {
     try {
       const unitId = parseInt(req.params.unitId, 10);
-      const unit = await ProjectUnitService.overridePrice(req.user!, unitId, req.body.override_price, req.body.override_reason);
+      const unit = await ProjectUnitService.overridePrice(
+        req.user!,
+        unitId,
+        req.body.override_price,
+        req.body.override_reason,
+      );
       return res.status(200).json({ message: 'Price override applied', unit });
     } catch (error: any) {
       logger.error('Override unit price error:', error);
@@ -257,7 +268,12 @@ router.post(
   async (req: AuthenticatedRequest, res: Response) => {
     try {
       const unitId = parseInt(req.params.unitId, 10);
-      const feature = await ProjectUnitService.addFeature(req.user!, unitId, req.body.label, req.body.charge_amount);
+      const feature = await ProjectUnitService.addFeature(
+        req.user!,
+        unitId,
+        req.body.label,
+        req.body.charge_amount,
+      );
       return res.status(201).json({ message: 'Feature added', feature });
     } catch (error: any) {
       logger.error('Add unit feature error:', error);

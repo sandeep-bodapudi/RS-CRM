@@ -94,8 +94,8 @@ export class CustomerPortalService {
       data: {
         password_hash: passwordHash,
         temp_password_expiry: new Date(Date.now() + 24 * 60 * 60 * 1000), // expires in 24 hours
-        force_password_reset: true
-      }
+        force_password_reset: true,
+      },
     });
 
     // 4. Provision via the (stub) portal provisioner.
@@ -119,8 +119,8 @@ export class CustomerPortalService {
         lead_id: lead.id,
         actor_id: user.employeeId,
         activity_type: 'CREDENTIALS_GENERATED',
-        notes: `Customer portal credentials generated. PM must send this message manually: ${whatsappLink}`
-      }
+        notes: `Customer portal credentials generated. PM must send this message manually: ${whatsappLink}`,
+      },
     });
 
     return result;

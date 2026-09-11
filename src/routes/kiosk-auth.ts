@@ -35,78 +35,85 @@ export const KioskCredentialUpdateSchema = z.object({
 // ── POST /api/v1/kiosk-auth/login ──────────────────────────────────────────
 // No auth middleware — this IS the login endpoint.
 
-router.post('/login', validateRequestBody(KioskLoginSchema), async (req: Request, res: Response) => {
-  try {
-    const body = req.body as { username: string; password: string };
-    const { username, password } = body;
+router.post(
+  '/login',
+  validateRequestBody(KioskLoginSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const body = req.body as { username: string; password: string };
+      const { username, password } = body;
 
-    const creds = await p.kioskCredential.findMany({
-      where: { username },
-      include: { branch: true, company: true },
-    });
+      const creds = await p.kioskCredential.findMany({
+        where: { username },
+        include: { branch: true, company: true },
+      });
 
-    if (creds.length === 0) {
-      return res.status(401).json({ error: 'Invalid kiosk credentials', code: 'UNAUTHORIZED' });
-    }
-
-    let matchedCred: any = null;
-    for (const c of creds) {
-      if (!c.is_active) continue;
-      const match = await bcrypt.compare(password, c.password_hash);
-      if (match) {
-        matchedCred = c;
-        break;
+      if (creds.length === 0) {
+        return res.status(401).json({ error: 'Invalid kiosk credentials', code: 'UNAUTHORIZED' });
       }
+
+      let matchedCred: any = null;
+      for (const c of creds) {
+        if (!c.is_active) continue;
+        const match = await bcrypt.compare(password, c.password_hash);
+        if (match) {
+          matchedCred = c;
+          break;
+        }
+      }
+
+      if (!matchedCred) {
+        return res.status(401).json({ error: 'Invalid kiosk credentials', code: 'UNAUTHORIZED' });
+      }
+
+      const companyId = matchedCred.company_id;
+
+      const tokenPayload = {
+        type: 'KIOSK' as const,
+        companyId,
+        branchId: matchedCred.branch_id,
+        kioskCredentialId: matchedCred.id,
+        credentialVersion: matchedCred.credential_version,
+        createdAt: Date.now(),
+      };
+
+      // § Phase 6: kiosk tokens have no refresh flow at all (they're not staff
+      // sessions), so they used to just die after the shared 24h default and
+      // need re-login. Confirmed acceptable to extend indefinitely: a kiosk
+      // token carries no employee identity/permissions, is scoped only to
+      // attendance-scan endpoints (authenticateKioskToken), and revocation
+      // stays instant via credential_version (rotating the kiosk password or
+      // toggling it inactive immediately invalidates every outstanding token
+      // for that device) — "never expires by time" here still means
+      // "always revocable on demand."
+      const accessToken = generateAccessToken(tokenPayload as unknown as TokenPayload, '3650d');
+
+      await p.auditEvent.create({
+        data: {
+          actor_id: matchedCred.id,
+          action: 'KIOSK_LOGIN',
+          entity_type: 'KIOSK_CREDENTIAL',
+          entity_id: matchedCred.id,
+          new_value: JSON.stringify({
+            branch_name: matchedCred.branch.name,
+            label: matchedCred.label,
+          }),
+        },
+      });
+
+      return res.status(200).json({
+        message: 'Kiosk login successful',
+        accessToken,
+        branchId: matchedCred.branch_id,
+        branchName: matchedCred.branch.name,
+        label: matchedCred.label,
+      });
+    } catch (error: any) {
+      logger.error('Kiosk login error:', error);
+      return res.status(500).json({ error: 'Kiosk authentication failed' });
     }
-
-    if (!matchedCred) {
-      return res.status(401).json({ error: 'Invalid kiosk credentials', code: 'UNAUTHORIZED' });
-    }
-
-    const companyId = matchedCred.company_id;
-
-    const tokenPayload = {
-      type: 'KIOSK' as const,
-      companyId,
-      branchId: matchedCred.branch_id,
-      kioskCredentialId: matchedCred.id,
-      credentialVersion: matchedCred.credential_version,
-      createdAt: Date.now(),
-    };
-
-    // § Phase 6: kiosk tokens have no refresh flow at all (they're not staff
-    // sessions), so they used to just die after the shared 24h default and
-    // need re-login. Confirmed acceptable to extend indefinitely: a kiosk
-    // token carries no employee identity/permissions, is scoped only to
-    // attendance-scan endpoints (authenticateKioskToken), and revocation
-    // stays instant via credential_version (rotating the kiosk password or
-    // toggling it inactive immediately invalidates every outstanding token
-    // for that device) — "never expires by time" here still means
-    // "always revocable on demand."
-    const accessToken = generateAccessToken(tokenPayload as unknown as TokenPayload, '3650d');
-
-    await p.auditEvent.create({
-      data: {
-        actor_id: matchedCred.id,
-        action: 'KIOSK_LOGIN',
-        entity_type: 'KIOSK_CREDENTIAL',
-        entity_id: matchedCred.id,
-        new_value: JSON.stringify({ branch_name: matchedCred.branch.name, label: matchedCred.label }),
-      },
-    });
-
-    return res.status(200).json({
-      message: 'Kiosk login successful',
-      accessToken,
-      branchId: matchedCred.branch_id,
-      branchName: matchedCred.branch.name,
-      label: matchedCred.label,
-    });
-  } catch (error: any) {
-    logger.error('Kiosk login error:', error);
-    return res.status(500).json({ error: 'Kiosk authentication failed' });
-  }
-});
+  },
+);
 
 // ── POST /api/v1/kiosk-credentials ──────────────────────────────────────────
 
@@ -117,7 +124,12 @@ router.post(
   validateRequestBody(KioskCredentialCreateSchema),
   async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const body = req.body as { branch_id: number; label: string; username: string; password: string };
+      const body = req.body as {
+        branch_id: number;
+        label: string;
+        username: string;
+        password: string;
+      };
       const { branch_id, label, username, password } = body;
       const companyId = req.user!.companyId as number;
       const employeeId = req.user!.employeeId as number;
@@ -157,7 +169,13 @@ router.post(
           action: 'KIOSK_CREDENTIAL_CREATED',
           entity_type: 'KIOSK_CREDENTIAL',
           entity_id: cred.id,
-          new_value: JSON.stringify({ branch_id, branch_name: branchName, label, username, company_id: companyId }),
+          new_value: JSON.stringify({
+            branch_id,
+            branch_name: branchName,
+            label,
+            username,
+            company_id: companyId,
+          }),
         },
       });
 
@@ -195,7 +213,12 @@ router.patch(
   async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
-      const body = req.body as { label?: string; password?: string; is_active?: boolean; branch_id?: number };
+      const body = req.body as {
+        label?: string;
+        password?: string;
+        is_active?: boolean;
+        branch_id?: number;
+      };
       const { label, password, is_active, branch_id } = body;
       const companyId = req.user!.companyId as number;
 
@@ -250,9 +273,10 @@ router.patch(
         data: updateData,
       });
 
-      const newBranchName = branch_id !== undefined
-        ? (await p.branch.findUnique({ where: { id: branch_id } }))!.name
-        : existing.branch.name;
+      const newBranchName =
+        branch_id !== undefined
+          ? (await p.branch.findUnique({ where: { id: branch_id } }))!.name
+          : existing.branch.name;
 
       await p.auditEvent.create({
         data: {
@@ -316,12 +340,12 @@ router.get(
       });
 
       // Fetch branch names for all credentials in one query
-      const branchIds = credentials.map(c => c.branch_id);
+      const branchIds = credentials.map((c) => c.branch_id);
       const branches = await p.branch.findMany({
         where: { id: { in: branchIds } },
         select: { id: true, name: true },
       });
-      const branchMap = new Map(branches.map(b => [b.id, b.name]));
+      const branchMap = new Map(branches.map((b) => [b.id, b.name]));
 
       return res.status(200).json({
         credentials: credentials.map((c) => ({

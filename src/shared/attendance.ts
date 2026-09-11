@@ -11,7 +11,7 @@ export const AttendanceStatus = {
   LEAVE: 'LEAVE',
 } as const;
 
-export type AttendanceStatusType = typeof AttendanceStatus[keyof typeof AttendanceStatus];
+export type AttendanceStatusType = (typeof AttendanceStatus)[keyof typeof AttendanceStatus];
 
 // Password Change Schema (Forced first login)
 export const ChangePasswordSchema = z.object({
@@ -46,11 +46,11 @@ export type LeaveProposalInput = z.infer<typeof LeaveProposalSchema>;
 export const AttendanceQRPayloadSchema = z.object({
   qrPayload: z.string().optional(),
   qr_token: z.string().optional(),
-  payload: z.string().optional()
+  payload: z.string().optional(),
 });
 
 export const AttendanceHolidaySchema = z.object({
   date: z.string(),
   name: z.string(),
-  description: z.string().optional()
+  description: z.string().optional(),
 });

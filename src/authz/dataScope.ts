@@ -65,10 +65,7 @@ export async function buildLeadScope(user: TokenPayload): Promise<Prisma.LeadWhe
   const downstreamIds = await getDownstreamEmployeeIds(user.companyId, user.employeeId);
   return {
     ...baseScope,
-    OR: [
-      { assigned_to_id: { in: downstreamIds } },
-      { created_by_id: { in: downstreamIds } },
-    ],
+    OR: [{ assigned_to_id: { in: downstreamIds } }, { created_by_id: { in: downstreamIds } }],
   };
 }
 
@@ -82,7 +79,6 @@ export async function buildEmployeeScope(user: TokenPayload): Promise<Prisma.Emp
   }
 
   const baseScope = await getBaseScope(user);
-
 
   // Hide system/invisible roles for everyone except Admin
   const invisibleFilter = {
@@ -126,10 +122,7 @@ export async function buildPropertyScope(user: TokenPayload): Promise<Prisma.Pro
   if (user.roles.includes(Roles.PROJECT_MANAGER)) {
     return {
       ...propertyBaseScope,
-      OR: [
-        { assigned_pm_id: user.employeeId },
-        { status: 'LIVE' },
-      ],
+      OR: [{ assigned_pm_id: user.employeeId }, { status: 'LIVE' }],
     };
   }
 
@@ -173,10 +166,7 @@ export async function buildProjectScope(user: TokenPayload): Promise<Prisma.Proj
   if (user.roles.includes(Roles.PROJECT_MANAGER)) {
     return {
       ...baseScope,
-      OR: [
-        { assigned_pm_id: user.employeeId },
-        { verification_status: 'VERIFIED' },
-      ],
+      OR: [{ assigned_pm_id: user.employeeId }, { verification_status: 'VERIFIED' }],
     };
   }
 

@@ -6,11 +6,21 @@ import type { MatchCandidate } from './types';
  * mirrors the frontends' own dto.ts fallback. */
 function mapCategoryToPropertyType(category: string): string {
   const normalized = (category || '').toUpperCase().replace(/[\s-]/g, '_');
-  if (normalized.includes('APARTMENT') || normalized.includes('FLAT') || normalized.includes('STUDIO') || normalized.includes('PENTHOUSE')) {
+  if (
+    normalized.includes('APARTMENT') ||
+    normalized.includes('FLAT') ||
+    normalized.includes('STUDIO') ||
+    normalized.includes('PENTHOUSE')
+  ) {
     return 'APARTMENT';
   }
   if (normalized.includes('VILLA')) return 'VILLA';
-  if (normalized.includes('INDEPENDENT') || normalized.includes('HOUSE') || normalized.includes('DUPLEX')) return 'INDEPENDENT_HOUSE';
+  if (
+    normalized.includes('INDEPENDENT') ||
+    normalized.includes('HOUSE') ||
+    normalized.includes('DUPLEX')
+  )
+    return 'INDEPENDENT_HOUSE';
   return 'APARTMENT';
 }
 
@@ -22,7 +32,10 @@ function parseAmenities(amenities: string | null | undefined): string[] {
   } catch {
     // not JSON — fall through to comma-split
   }
-  return amenities.split(',').map((a) => a.trim()).filter(Boolean);
+  return amenities
+    .split(',')
+    .map((a) => a.trim())
+    .filter(Boolean);
 }
 
 function formatINR(price: number): string {

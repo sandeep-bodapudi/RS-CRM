@@ -38,23 +38,25 @@ if (VAPID_PUBLIC && VAPID_PRIVATE) {
 /**
  * Notify one or more employees by their DB IDs.
  */
-async function notifyEmployee(employeeIds, payload) {
+async function notifyEmployee(employeeIds, payload, options) {
     const ids = Array.isArray(employeeIds) ? employeeIds : [employeeIds];
     for (const employeeId of ids) {
-        // 1. Create in-app notification record
-        try {
-            await p.notification.create({
-                data: {
-                    employee_id: employeeId,
-                    type: payload.type,
-                    title: payload.title,
-                    message: payload.message,
-                    is_read: false,
-                },
-            });
-        }
-        catch (err) {
-            logger_1.logger.error(`[NotifyEmployee] Failed to create in-app notification for employee ${employeeId}:`, err);
+        // 1. Create in-app notification record (unless skipped — already done in transaction)
+        if (!options?.skipDbNotification) {
+            try {
+                await p.notification.create({
+                    data: {
+                        employee_id: employeeId,
+                        type: payload.type,
+                        title: payload.title,
+                        message: payload.message,
+                        is_read: false,
+                    },
+                });
+            }
+            catch (err) {
+                logger_1.logger.error(`[NotifyEmployee] Failed to create in-app notification for employee ${employeeId}:`, err);
+            }
         }
         // 2. Send Web Push to all subscribed devices
         try {

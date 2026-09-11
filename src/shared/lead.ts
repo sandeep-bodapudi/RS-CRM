@@ -17,7 +17,7 @@ export const LeadStatus = {
   RECOVERED_TO_POOL: 'RECOVERED_TO_POOL',
 } as const;
 
-export type LeadStatusType = typeof LeadStatus[keyof typeof LeadStatus];
+export type LeadStatusType = (typeof LeadStatus)[keyof typeof LeadStatus];
 
 // Mirrors the Prisma `LeadExitReason` enum (schema.prisma) — kept as a
 // runtime const + label map so the frontend dropdown and this validation
@@ -41,7 +41,7 @@ export const LeadExitReason = {
   OTHER: 'OTHER',
 } as const;
 
-export type LeadExitReasonType = typeof LeadExitReason[keyof typeof LeadExitReason];
+export type LeadExitReasonType = (typeof LeadExitReason)[keyof typeof LeadExitReason];
 
 export const LEAD_EXIT_REASON_VALUES = Object.values(LeadExitReason) as [string, ...string[]];
 
@@ -118,8 +118,12 @@ export const PublicLeadCreateSchema = z.object({
   property_type_preference: z.string().optional(),
   preferred_location: z.string().optional(),
   preferred_locations: z.array(z.string().trim().min(1)).max(10).optional(),
-  enquiry_type: z.enum(['appraisal', 'call', 'project', 'property', 'consultation', 'other']).optional(),
-  preferred_contact_time: z.enum(['immediate', 'business_hours', 'after_hours', 'anytime']).optional(),
+  enquiry_type: z
+    .enum(['appraisal', 'call', 'project', 'property', 'consultation', 'other'])
+    .optional(),
+  preferred_contact_time: z
+    .enum(['immediate', 'business_hours', 'after_hours', 'anytime'])
+    .optional(),
   property_ids: z.array(z.number().int().positive()).max(10).optional(),
   project_id: z.number().int().positive().optional().nullable(),
   budget_max: z.number().positive('Budget must be a positive number').optional().nullable(),
@@ -128,58 +132,62 @@ export const PublicLeadCreateSchema = z.object({
 
 export type PublicLeadCreateInput = z.infer<typeof PublicLeadCreateSchema>;
 
-export const LeadStatusUpdateSchema = z.object({
-  status: z.enum([
-    'NEW',
-    'ASSIGNED',
-    'CONTACTED',
-    'QUALIFIED',
-    'DEMO_SCHEDULED',
-    'DEMO_COMPLETED',
-    'SITE_VISIT_SCHEDULED',
-    'SITE_VISIT_COMPLETED',
-    'NEGOTIATION',
-    'BOOKING_INITIATED',
-    'BOOKED',
-    'DROPPED',
-    'RECOVERED_TO_POOL',
-  ]),
-  notes: z.string().optional(),
-  // §1 guard fields — required for specific transitions (enforced in service)
-  // Was a loose z.string() — the drop-reason dropdown (Phase 2) needs this to
-  // actually be validated against the real enum, not accept any string.
-  exit_reason: z.enum(LEAD_EXIT_REASON_VALUES).optional(), // required when status -> DROPPED
-  // Required (enforced below) only when exit_reason === 'OTHER'.
-  exit_reason_detail: z.string().trim().min(1).max(500).optional(),
-  demo_scheduled_at: z.string().datetime().optional(), // required when status -> DEMO_SCHEDULED
-  demo_handler_id: z.number().int().positive().optional(), // required when status -> DEMO_SCHEDULED
-  qualification: z.object({
-    budget_min: z.number().nonnegative().optional(),
-    budget_max: z.number().nonnegative().optional(),
-    property_type_preference: z.string().optional(),
-    preferred_location: z.string().optional(),
-    preferred_locations: z.array(z.string().trim().min(1)).max(10).optional(),
-  }).partial().optional(),
-}).superRefine((data, ctx) => {
-  if (data.exit_reason === 'OTHER' && !data.exit_reason_detail) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['exit_reason_detail'],
-      message: 'Please specify the reason when "Other" is selected',
-    });
-  }
-  // Demo handler assignment is now a required manual pick (PM/Agent/Sales
-  // Manager/CPM, or MD self-assign) — the old automatic territory-fallback
-  // chain in status.ts is gone, so this can no longer be silently filled in.
-  if (data.status === 'DEMO_SCHEDULED' && !data.demo_handler_id) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['demo_handler_id'],
-      message: 'Please select who will handle this demo',
-    });
-  }
-});
-
+export const LeadStatusUpdateSchema = z
+  .object({
+    status: z.enum([
+      'NEW',
+      'ASSIGNED',
+      'CONTACTED',
+      'QUALIFIED',
+      'DEMO_SCHEDULED',
+      'DEMO_COMPLETED',
+      'SITE_VISIT_SCHEDULED',
+      'SITE_VISIT_COMPLETED',
+      'NEGOTIATION',
+      'BOOKING_INITIATED',
+      'BOOKED',
+      'DROPPED',
+      'RECOVERED_TO_POOL',
+    ]),
+    notes: z.string().optional(),
+    // §1 guard fields — required for specific transitions (enforced in service)
+    // Was a loose z.string() — the drop-reason dropdown (Phase 2) needs this to
+    // actually be validated against the real enum, not accept any string.
+    exit_reason: z.enum(LEAD_EXIT_REASON_VALUES).optional(), // required when status -> DROPPED
+    // Required (enforced below) only when exit_reason === 'OTHER'.
+    exit_reason_detail: z.string().trim().min(1).max(500).optional(),
+    demo_scheduled_at: z.string().datetime().optional(), // required when status -> DEMO_SCHEDULED
+    demo_handler_id: z.number().int().positive().optional(), // required when status -> DEMO_SCHEDULED
+    qualification: z
+      .object({
+        budget_min: z.number().nonnegative().optional(),
+        budget_max: z.number().nonnegative().optional(),
+        property_type_preference: z.string().optional(),
+        preferred_location: z.string().optional(),
+        preferred_locations: z.array(z.string().trim().min(1)).max(10).optional(),
+      })
+      .partial()
+      .optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.exit_reason === 'OTHER' && !data.exit_reason_detail) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['exit_reason_detail'],
+        message: 'Please specify the reason when "Other" is selected',
+      });
+    }
+    // Demo handler assignment is now a required manual pick (PM/Agent/Sales
+    // Manager/CPM, or MD self-assign) — the old automatic territory-fallback
+    // chain in status.ts is gone, so this can no longer be silently filled in.
+    if (data.status === 'DEMO_SCHEDULED' && !data.demo_handler_id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['demo_handler_id'],
+        message: 'Please select who will handle this demo',
+      });
+    }
+  });
 
 export type LeadStatusUpdateInput = z.infer<typeof LeadStatusUpdateSchema>;
 

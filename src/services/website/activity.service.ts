@@ -30,7 +30,11 @@ export class WebsiteActivityService {
    * ids this visitor has recently viewed, so those get excluded from (or
    * used to seed) their recommendations. Looks up by account when logged in,
    * else by the client-supplied anonymous id. */
-  static async recentlyViewedIds(companyId: number, accountId: number | null, anonymousId?: string): Promise<number[]> {
+  static async recentlyViewedIds(
+    companyId: number,
+    accountId: number | null,
+    anonymousId?: string,
+  ): Promise<number[]> {
     if (!accountId && !anonymousId) return [];
     const events = await p.websiteActivityEvent.findMany({
       where: {

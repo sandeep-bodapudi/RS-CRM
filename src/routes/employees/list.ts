@@ -29,13 +29,13 @@ router.get(
             some: {
               role: {
                 name: {
-                  equals: roleQuery
-                }
-              }
-            }
-          }
+                  equals: roleQuery,
+                },
+              },
+            },
+          },
         };
-        
+
         if (whereClause.AND) {
           whereClause.AND.push(roleCondition);
         } else {
@@ -123,7 +123,7 @@ router.get(
 router.get('/branches', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const branches = await prisma.branch.findMany({
-      where: { },
+      where: {},
     });
     return res.status(200).json({ branches });
   } catch (error) {
@@ -176,47 +176,51 @@ router.get('/managers', authenticateToken, async (req: AuthenticatedRequest, res
 // GET /api/v1/employees/demo-assignees - Eligible employees for manual demo-handler
 // assignment (§ Phase 2/6): PM, Agent, Sales Manager, Channel Partner Manager, and
 // the Managing Director (self-assign) — explicitly excludes Telecaller.
-router.get('/demo-assignees', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const assignees = await prisma.employee.findMany({
-      where: {
-        company_id: req.user!.companyId,
-        status: 'ACTIVE',
-        roles: {
-          some: {
-            role: {
-              name: {
-                in: [
-                  Roles.PROJECT_MANAGER,
-                  Roles.AGENT,
-                  Roles.SALES_MANAGER,
-                  Roles.CHANNEL_PARTNER_MANAGER,
-                  Roles.MD,
-                ],
+router.get(
+  '/demo-assignees',
+  authenticateToken,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const assignees = await prisma.employee.findMany({
+        where: {
+          company_id: req.user!.companyId,
+          status: 'ACTIVE',
+          roles: {
+            some: {
+              role: {
+                name: {
+                  in: [
+                    Roles.PROJECT_MANAGER,
+                    Roles.AGENT,
+                    Roles.SALES_MANAGER,
+                    Roles.CHANNEL_PARTNER_MANAGER,
+                    Roles.MD,
+                  ],
+                },
               },
             },
           },
         },
-      },
-      select: {
-        id: true,
-        employee_code: true,
-        full_name: true,
-        job_title: true,
-        roles: { include: { role: true } },
-      },
-    });
+        select: {
+          id: true,
+          employee_code: true,
+          full_name: true,
+          job_title: true,
+          roles: { include: { role: true } },
+        },
+      });
 
-    const formatted = assignees.map((e) => ({
-      id: e.id,
-      label: `${e.full_name || e.employee_code} (${e.job_title || e.roles.map((r) => r.role.name).join(', ')})`,
-    }));
+      const formatted = assignees.map((e) => ({
+        id: e.id,
+        label: `${e.full_name || e.employee_code} (${e.job_title || e.roles.map((r) => r.role.name).join(', ')})`,
+      }));
 
-    return res.status(200).json({ assignees: formatted });
-  } catch (error) {
-    logger.error('Fetch demo assignees error:', error);
-    return res.status(500).json({ error: 'Failed to fetch eligible demo assignees' });
-  }
-});
+      return res.status(200).json({ assignees: formatted });
+    } catch (error) {
+      logger.error('Fetch demo assignees error:', error);
+      return res.status(500).json({ error: 'Failed to fetch eligible demo assignees' });
+    }
+  },
+);
 
 export default router;

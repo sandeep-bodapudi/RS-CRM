@@ -31,10 +31,22 @@ export function buildRecommendations(
 
   const loosened: RequirementModel = { requirements: [] };
   if (query.propertyType) {
-    loosened.requirements.push({ field: 'propertyType', operator: 'EQUALS', value: query.propertyType, importance: 'STRONG_PREFERENCE', priority: 'HIGH' });
+    loosened.requirements.push({
+      field: 'propertyType',
+      operator: 'EQUALS',
+      value: query.propertyType,
+      importance: 'STRONG_PREFERENCE',
+      priority: 'HIGH',
+    });
   }
   if (query.location) {
-    loosened.requirements.push({ field: 'location', operator: 'EQUALS', value: query.location, importance: 'SOFT_PREFERENCE', priority: 'MEDIUM' });
+    loosened.requirements.push({
+      field: 'location',
+      operator: 'EQUALS',
+      value: query.location,
+      importance: 'SOFT_PREFERENCE',
+      priority: 'MEDIUM',
+    });
   }
   if (query.minBudget != null || query.maxBudget != null) {
     loosened.requirements.push({

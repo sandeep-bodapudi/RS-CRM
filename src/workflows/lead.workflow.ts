@@ -41,8 +41,6 @@ export class LeadWorkflow implements DomainWorkflow {
     LeadStatus.BOOKING_INITIATED,
   ]);
 
-
-
   /** Which qualification fields must be non-null to count as "qualified". */
   private static isFullyQualified(lead: any): boolean {
     return !!(
@@ -61,10 +59,7 @@ export class LeadWorkflow implements DomainWorkflow {
 
     [LeadStatus.ASSIGNED]: [LeadStatus.CONTACTED, LeadStatus.DROPPED],
 
-    [LeadStatus.CONTACTED]: [
-      LeadStatus.QUALIFIED,
-      LeadStatus.DROPPED,
-    ],
+    [LeadStatus.CONTACTED]: [LeadStatus.QUALIFIED, LeadStatus.DROPPED],
 
     [LeadStatus.QUALIFIED]: [
       LeadStatus.DEMO_SCHEDULED,
@@ -72,35 +67,17 @@ export class LeadWorkflow implements DomainWorkflow {
       LeadStatus.DROPPED,
     ],
 
-    [LeadStatus.DEMO_SCHEDULED]: [
-      LeadStatus.DEMO_COMPLETED,
-      LeadStatus.DROPPED,
-    ],
+    [LeadStatus.DEMO_SCHEDULED]: [LeadStatus.DEMO_COMPLETED, LeadStatus.DROPPED],
 
-    [LeadStatus.DEMO_COMPLETED]: [
-      LeadStatus.SITE_VISIT_SCHEDULED,
-      LeadStatus.DROPPED,
-    ],
+    [LeadStatus.DEMO_COMPLETED]: [LeadStatus.SITE_VISIT_SCHEDULED, LeadStatus.DROPPED],
 
-    [LeadStatus.SITE_VISIT_SCHEDULED]: [
-      LeadStatus.SITE_VISIT_COMPLETED,
-      LeadStatus.DROPPED,
-    ],
+    [LeadStatus.SITE_VISIT_SCHEDULED]: [LeadStatus.SITE_VISIT_COMPLETED, LeadStatus.DROPPED],
 
-    [LeadStatus.SITE_VISIT_COMPLETED]: [
-      LeadStatus.NEGOTIATION,
-      LeadStatus.DROPPED,
-    ],
+    [LeadStatus.SITE_VISIT_COMPLETED]: [LeadStatus.NEGOTIATION, LeadStatus.DROPPED],
 
-    [LeadStatus.NEGOTIATION]: [
-      LeadStatus.BOOKING_INITIATED,
-      LeadStatus.DROPPED,
-    ],
+    [LeadStatus.NEGOTIATION]: [LeadStatus.BOOKING_INITIATED, LeadStatus.DROPPED],
 
-    [LeadStatus.BOOKING_INITIATED]: [
-      LeadStatus.BOOKED,
-      LeadStatus.DROPPED,
-    ],
+    [LeadStatus.BOOKING_INITIATED]: [LeadStatus.BOOKED, LeadStatus.DROPPED],
 
     [LeadStatus.BOOKED]: [], // Terminal won state
 
@@ -127,24 +104,27 @@ export class LeadWorkflow implements DomainWorkflow {
 
     // ── Field-level guards (spec §1) ──
 
-
-
     // §1 row 4: CONTACTED → QUALIFIED is only valid when all
     // qualification fields are present.
     if (newStatus === LeadStatus.QUALIFIED) {
       if (!LeadWorkflow.isFullyQualified(entity)) {
         return {
           allowed: false,
-          reason: 'Transition to QUALIFIED requires all qualification fields (budget_min, budget_max, property_type_preference, preferred_location) to be present.',
+          reason:
+            'Transition to QUALIFIED requires all qualification fields (budget_min, budget_max, property_type_preference, preferred_location) to be present.',
         };
       }
     }
 
     // §1 row 5: DEMO_SCHEDULED requires a scheduled date and a handler.
     if (newStatus === LeadStatus.DEMO_SCHEDULED) {
-      const hasPendingDemo = entity && entity.pending_demo && entity.pending_demo.scheduled_at && entity.pending_demo.handler_id;
+      const hasPendingDemo =
+        entity &&
+        entity.pending_demo &&
+        entity.pending_demo.scheduled_at &&
+        entity.pending_demo.handler_id;
       const hasExistingDemo = entity && entity.demos && entity.demos.length > 0;
-      
+
       if (!hasPendingDemo && !hasExistingDemo) {
         return {
           allowed: false,
@@ -160,8 +140,7 @@ export class LeadWorkflow implements DomainWorkflow {
       if (visits.length === 0) {
         return {
           allowed: false,
-          reason:
-            'Transition to SITE_VISIT_SCHEDULED requires at least one SiteVisitBooking',
+          reason: 'Transition to SITE_VISIT_SCHEDULED requires at least one SiteVisitBooking',
         };
       }
     }
@@ -180,7 +159,8 @@ export class LeadWorkflow implements DomainWorkflow {
       if (!allCompleted) {
         return {
           allowed: false,
-          reason: 'Transition to SITE_VISIT_COMPLETED requires ALL linked SiteVisitBooking rows to have status COMPLETED',
+          reason:
+            'Transition to SITE_VISIT_COMPLETED requires ALL linked SiteVisitBooking rows to have status COMPLETED',
         };
       }
     }
@@ -196,21 +176,23 @@ export class LeadWorkflow implements DomainWorkflow {
         };
       }
       const allNotInterested = siteVisitProperties.every(
-        (sp: any) => sp.outcome === 'NOT_INTERESTED'
+        (sp: any) => sp.outcome === 'NOT_INTERESTED',
       );
       if (!allNotInterested) {
         return {
           allowed: false,
-          reason: 'Transition to DROPPED from SITE_VISIT_COMPLETED requires ALL properties to be marked NOT_INTERESTED',
+          reason:
+            'Transition to DROPPED from SITE_VISIT_COMPLETED requires ALL properties to be marked NOT_INTERESTED',
         };
       }
       const allHaveReason = siteVisitProperties.every(
-        (sp: any) => sp.outcome_reason && sp.outcome_reason.trim() !== ''
+        (sp: any) => sp.outcome_reason && sp.outcome_reason.trim() !== '',
       );
       if (!allHaveReason) {
         return {
           allowed: false,
-          reason: 'Transition to DROPPED from SITE_VISIT_COMPLETED requires a non-empty outcome_reason for every NOT_INTERESTED property',
+          reason:
+            'Transition to DROPPED from SITE_VISIT_COMPLETED requires a non-empty outcome_reason for every NOT_INTERESTED property',
         };
       }
     }
@@ -221,9 +203,8 @@ export class LeadWorkflow implements DomainWorkflow {
     // Opportunity has expected_value).
     if (newStatus === LeadStatus.NEGOTIATION) {
       const opps = entity?.opportunities || [];
-      const opp = Array.isArray(opps) && opps.length > 0 ? opps[0] : (entity?.opportunity || null);
-      const expected =
-        opp && (opp.expected_value ?? opp.expectedValue);
+      const opp = Array.isArray(opps) && opps.length > 0 ? opps[0] : entity?.opportunity || null;
+      const expected = opp && (opp.expected_value ?? opp.expectedValue);
       if (expected === undefined || expected === null) {
         return {
           allowed: false,
@@ -236,11 +217,9 @@ export class LeadWorkflow implements DomainWorkflow {
     // (expected_value + target property).
     if (newStatus === LeadStatus.BOOKING_INITIATED) {
       const opps = entity?.opportunities || [];
-      const opp = Array.isArray(opps) && opps.length > 0 ? opps[0] : (entity?.opportunity || null);
-      const expected =
-        opp && (opp.expected_value ?? opp.expectedValue);
-      const propertyId =
-        opp && (opp.property_id ?? opp.propertyId);
+      const opp = Array.isArray(opps) && opps.length > 0 ? opps[0] : entity?.opportunity || null;
+      const expected = opp && (opp.expected_value ?? opp.expectedValue);
+      const propertyId = opp && (opp.property_id ?? opp.propertyId);
       if (expected === undefined || expected === null || !propertyId) {
         return {
           allowed: false,
@@ -258,8 +237,7 @@ export class LeadWorkflow implements DomainWorkflow {
           reason: `Cannot drop a lead from ${currentState}`,
         };
       }
-      const reason =
-        (entity && (entity.exit_reason ?? entity.exitReason)) || '';
+      const reason = (entity && (entity.exit_reason ?? entity.exitReason)) || '';
       if (!reason || reason.trim() === '') {
         return {
           allowed: false,
@@ -276,7 +254,9 @@ export class LeadWorkflow implements DomainWorkflow {
     if (currentStatus === newStatus) return;
     const allowedTransitions = this.transitionMatrix[currentStatus] || [];
     if (!allowedTransitions.includes(newStatus)) {
-      const error = new Error(`Invalid lead status transition from ${currentStatus} to ${newStatus}`);
+      const error = new Error(
+        `Invalid lead status transition from ${currentStatus} to ${newStatus}`,
+      );
       (error as any).code = 'INVALID_STATE_TRANSITION';
       throw error;
     }

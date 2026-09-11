@@ -4,11 +4,13 @@ import { KycPolicy } from '../policies/kyc.policy';
 import { encryptData, decryptData } from '../utils/crypto';
 import { KycStatus } from '../shared';
 
-
 const p = prisma;
 
 export class AppError extends Error {
-  constructor(public statusCode: number, message: string) {
+  constructor(
+    public statusCode: number,
+    message: string,
+  ) {
     super(message);
     this.name = 'AppError';
   }
@@ -40,7 +42,11 @@ export class KycService {
    * Encrypts PAN/Aadhaar, recomputes the derived kyc_status atomically, and
    * emits a CUSTOMER_KYC_STATUS_CHANGED outbox event on status change.
    */
-  static async writeCustomerKyc(user: TokenPayload, customerId: number, dto: { pan_number?: string; aadhaar_number?: string }) {
+  static async writeCustomerKyc(
+    user: TokenPayload,
+    customerId: number,
+    dto: { pan_number?: string; aadhaar_number?: string },
+  ) {
     const customer = await p.customer.findFirst({
       where: { id: customerId, company_id: user.companyId },
     });
@@ -52,14 +58,16 @@ export class KycService {
     }
 
     const encryptedPan = dto.pan_number !== undefined ? encryptData(dto.pan_number) : undefined;
-    const encryptedAadhaar = dto.aadhaar_number !== undefined ? encryptData(dto.aadhaar_number) : undefined;
+    const encryptedAadhaar =
+      dto.aadhaar_number !== undefined ? encryptData(dto.aadhaar_number) : undefined;
 
     return await p.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
       await tx.customer.update({
         where: { id: customerId },
         data: {
           pan_number: encryptedPan !== undefined ? encryptedPan : customer.pan_number,
-          aadhaar_number: encryptedAadhaar !== undefined ? encryptedAadhaar : customer.aadhaar_number,
+          aadhaar_number:
+            encryptedAadhaar !== undefined ? encryptedAadhaar : customer.aadhaar_number,
         },
       });
 
@@ -75,7 +83,8 @@ export class KycService {
           }),
           new_value: JSON.stringify({
             pan: encryptedPan !== undefined ? !!encryptedPan : !!customer.pan_number,
-            aadhaar: encryptedAadhaar !== undefined ? !!encryptedAadhaar : !!customer.aadhaar_number,
+            aadhaar:
+              encryptedAadhaar !== undefined ? !!encryptedAadhaar : !!customer.aadhaar_number,
           }),
         },
       });
@@ -94,13 +103,13 @@ export class KycService {
     tx: any,
     customerId: number,
     companyId: number,
-    actorId: number
+    actorId: number,
   ) {
     const cust = await tx.customer.findUnique({ where: { id: customerId } });
     if (!cust) return null;
 
     let newStatus = cust.kyc_status;
-    
+
     // Simple logic: If either is present and status is not VERIFIED, it becomes PARTIAL.
     if ((cust.pan_number || cust.aadhaar_number) && cust.kyc_status !== 'VERIFIED') {
       newStatus = 'PARTIAL';
@@ -109,13 +118,13 @@ export class KycService {
     if (newStatus !== cust.kyc_status) {
       await tx.customer.update({
         where: { id: customerId },
-        data: { kyc_status: newStatus }
+        data: { kyc_status: newStatus },
       });
       cust.kyc_status = newStatus;
     }
 
     const maskedPan = this.maskPan(cust.pan_number ? decryptData(cust.pan_number) : null);
-    
+
     await tx.integrationEvent.create({
       data: {
         event_type: KYC_EVENT_TYPE,
@@ -126,10 +135,10 @@ export class KycService {
           company_id: companyId,
           crms_customer_id: customerId,
           kyc_status: newStatus,
-          masked_pan: maskedPan
+          masked_pan: maskedPan,
         }),
-        status: 'CREATED'
-      }
+        status: 'CREATED',
+      },
     });
 
     return cust;

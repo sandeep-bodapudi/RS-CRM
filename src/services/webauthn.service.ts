@@ -23,7 +23,11 @@ import {
   generateAuthenticationOptions,
   verifyAuthenticationResponse,
 } from '@simplewebauthn/server';
-import type { RegistrationResponseJSON, AuthenticationResponseJSON, WebAuthnCredential as SimpleWebAuthnCredential } from '@simplewebauthn/server';
+import type {
+  RegistrationResponseJSON,
+  AuthenticationResponseJSON,
+  WebAuthnCredential as SimpleWebAuthnCredential,
+} from '@simplewebauthn/server';
 import { isoBase64URL, isoUint8Array } from '@simplewebauthn/server/helpers';
 import { prisma } from '../lib/prisma';
 
@@ -74,7 +78,9 @@ export class WebAuthnService {
   }
 
   static async deleteCredential(employeeId: number, credentialRowId: number) {
-    const cred = await p.webAuthnCredential.findFirst({ where: { id: credentialRowId, employee_id: employeeId } });
+    const cred = await p.webAuthnCredential.findFirst({
+      where: { id: credentialRowId, employee_id: employeeId },
+    });
     if (!cred) throw { status: 404, message: 'Credential not found' };
     await p.webAuthnCredential.delete({ where: { id: cred.id } });
     return { deleted: true };
@@ -83,7 +89,10 @@ export class WebAuthnService {
   /** Step 1 of enabling app lock: generate options for navigator.credentials.create(). */
   static async startRegistration(employeeId: number, employeeName: string) {
     const { rpID, rpName } = getRpConfig();
-    const existing = await p.webAuthnCredential.findMany({ where: { employee_id: employeeId }, select: { credential_id: true, transports: true } });
+    const existing = await p.webAuthnCredential.findMany({
+      where: { employee_id: employeeId },
+      select: { credential_id: true, transports: true },
+    });
 
     const options = await generateRegistrationOptions({
       rpName,
@@ -106,7 +115,11 @@ export class WebAuthnService {
   }
 
   /** Step 2: verify the browser's attestation and persist the credential. */
-  static async finishRegistration(employeeId: number, response: RegistrationResponseJSON, deviceLabel?: string) {
+  static async finishRegistration(
+    employeeId: number,
+    response: RegistrationResponseJSON,
+    deviceLabel?: string,
+  ) {
     const { rpID, origin } = getRpConfig();
     const expectedChallenge = takeChallenge(registrationChallenges, employeeId);
 
@@ -140,7 +153,10 @@ export class WebAuthnService {
   /** Step 1 of unlocking: generate options for navigator.credentials.get(). */
   static async startAuthentication(employeeId: number) {
     const { rpID } = getRpConfig();
-    const credentials = await p.webAuthnCredential.findMany({ where: { employee_id: employeeId }, select: { credential_id: true, transports: true } });
+    const credentials = await p.webAuthnCredential.findMany({
+      where: { employee_id: employeeId },
+      select: { credential_id: true, transports: true },
+    });
     if (credentials.length === 0) {
       throw { status: 404, message: 'No app-lock device registered for this account.' };
     }
@@ -165,7 +181,9 @@ export class WebAuthnService {
     const { rpID, origin } = getRpConfig();
     const expectedChallenge = takeChallenge(authenticationChallenges, employeeId);
 
-    const stored = await p.webAuthnCredential.findFirst({ where: { employee_id: employeeId, credential_id: response.id } });
+    const stored = await p.webAuthnCredential.findFirst({
+      where: { employee_id: employeeId, credential_id: response.id },
+    });
     if (!stored) {
       throw { status: 400, message: 'Unrecognized device for this account.' };
     }
@@ -187,7 +205,10 @@ export class WebAuthnService {
     });
 
     if (!verification.verified) {
-      throw { status: 401, message: 'Could not verify — try again or use a different registered device.' };
+      throw {
+        status: 401,
+        message: 'Could not verify — try again or use a different registered device.',
+      };
     }
 
     // Replay-attack defense: the authenticator's own signature counter must

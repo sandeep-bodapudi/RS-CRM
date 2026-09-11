@@ -36,43 +36,65 @@ router.get('/status', authenticateToken, async (req: AuthenticatedRequest, res: 
   }
 });
 
-router.post('/register-options', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const employee = await p.employee.findUnique({ where: { id: req.user!.employeeId }, select: { full_name: true, employee_code: true } });
-    if (!employee) return res.status(404).json({ error: 'Employee not found' });
-    const options = await WebAuthnService.startRegistration(req.user!.employeeId, employee.full_name || employee.employee_code);
-    res.status(200).json(options);
-  } catch (error: any) {
-    logger.error('App-lock register-options error:', error);
-    if (error.status) return res.status(error.status).json({ error: error.message });
-    res.status(500).json({ error: 'Failed to start device registration' });
-  }
-});
+router.post(
+  '/register-options',
+  authenticateToken,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const employee = await p.employee.findUnique({
+        where: { id: req.user!.employeeId },
+        select: { full_name: true, employee_code: true },
+      });
+      if (!employee) return res.status(404).json({ error: 'Employee not found' });
+      const options = await WebAuthnService.startRegistration(
+        req.user!.employeeId,
+        employee.full_name || employee.employee_code,
+      );
+      res.status(200).json(options);
+    } catch (error: any) {
+      logger.error('App-lock register-options error:', error);
+      if (error.status) return res.status(error.status).json({ error: error.message });
+      res.status(500).json({ error: 'Failed to start device registration' });
+    }
+  },
+);
 
-router.post('/register-verify', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const { response, deviceLabel } = req.body;
-    if (!response) return res.status(400).json({ error: 'Missing WebAuthn response' });
-    const result = await WebAuthnService.finishRegistration(req.user!.employeeId, response, deviceLabel);
-    res.status(200).json(result);
-  } catch (error: any) {
-    logger.error('App-lock register-verify error:', error);
-    if (error.status) return res.status(error.status).json({ error: error.message });
-    res.status(500).json({ error: 'Failed to verify device registration' });
-  }
-});
+router.post(
+  '/register-verify',
+  authenticateToken,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { response, deviceLabel } = req.body;
+      if (!response) return res.status(400).json({ error: 'Missing WebAuthn response' });
+      const result = await WebAuthnService.finishRegistration(
+        req.user!.employeeId,
+        response,
+        deviceLabel,
+      );
+      res.status(200).json(result);
+    } catch (error: any) {
+      logger.error('App-lock register-verify error:', error);
+      if (error.status) return res.status(error.status).json({ error: error.message });
+      res.status(500).json({ error: 'Failed to verify device registration' });
+    }
+  },
+);
 
-router.delete('/credentials/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const credentialId = parseInt(req.params.id, 10);
-    const result = await WebAuthnService.deleteCredential(req.user!.employeeId, credentialId);
-    res.status(200).json(result);
-  } catch (error: any) {
-    logger.error('App-lock delete-credential error:', error);
-    if (error.status) return res.status(error.status).json({ error: error.message });
-    res.status(500).json({ error: 'Failed to remove device' });
-  }
-});
+router.delete(
+  '/credentials/:id',
+  authenticateToken,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const credentialId = parseInt(req.params.id, 10);
+      const result = await WebAuthnService.deleteCredential(req.user!.employeeId, credentialId);
+      res.status(200).json(result);
+    } catch (error: any) {
+      logger.error('App-lock delete-credential error:', error);
+      if (error.status) return res.status(error.status).json({ error: error.message });
+      res.status(500).json({ error: 'Failed to remove device' });
+    }
+  },
+);
 
 // ── Unlock (unauthenticated by design — see file header) ───────────────────
 
@@ -81,8 +103,12 @@ router.post('/unlock-options', appLockRateLimiter, async (req, res: Response) =>
     const employeeId = parseInt(req.body?.employeeId, 10);
     if (!employeeId) return res.status(400).json({ error: 'Missing employeeId' });
 
-    const employee = await p.employee.findFirst({ where: { id: employeeId, status: 'ACTIVE' }, select: { id: true } });
-    if (!employee) return res.status(404).json({ error: 'No active app-lock device for this account' });
+    const employee = await p.employee.findFirst({
+      where: { id: employeeId, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    if (!employee)
+      return res.status(404).json({ error: 'No active app-lock device for this account' });
 
     const options = await WebAuthnService.startAuthentication(employeeId);
     res.status(200).json(options);
@@ -97,7 +123,8 @@ router.post('/unlock-verify', appLockRateLimiter, async (req, res: Response) => 
   try {
     const employeeId = parseInt(req.body?.employeeId, 10);
     const { response } = req.body;
-    if (!employeeId || !response) return res.status(400).json({ error: 'Missing employeeId or response' });
+    if (!employeeId || !response)
+      return res.status(400).json({ error: 'Missing employeeId or response' });
 
     const employee = await p.employee.findFirst({ where: { id: employeeId, status: 'ACTIVE' } });
     if (!employee) return res.status(404).json({ error: 'Account not found or inactive' });

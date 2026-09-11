@@ -11,7 +11,7 @@ import { Permission } from '../shared';
  */
 export const requireAuthz = (
   action: Permission,
-  getResource?: (req: AuthenticatedRequest) => Promise<any>
+  getResource?: (req: AuthenticatedRequest) => Promise<any>,
 ) => {
   return async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
@@ -36,7 +36,9 @@ export const requireAuthz = (
       // 2. Fall back to static token-based authorization
       const isAuthorized = can(req.user, action, resource);
       if (!isAuthorized) {
-        return res.status(403).json({ error: 'Forbidden: Insufficient access or out of scope', code: 'FORBIDDEN' });
+        return res
+          .status(403)
+          .json({ error: 'Forbidden: Insufficient access or out of scope', code: 'FORBIDDEN' });
       }
 
       if (resource) {

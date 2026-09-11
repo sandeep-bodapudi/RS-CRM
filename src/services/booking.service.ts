@@ -105,7 +105,6 @@ interface InitiateBookingInput extends CreateBookingInput, BookingFormInput {
   };
 }
 
-
 export class BookingService {
   /** List bookings scoped to the user's company. */
   static async getBookings(user: TokenPayload) {
@@ -148,12 +147,19 @@ export class BookingService {
    * - When `tx` is supplied (opportunity conversion), operates inside that transaction.
    * - Otherwise it opens its own transaction with a bounded P2002 retry.
    */
-  static async createBooking(user: TokenPayload, dto: CreateBookingInput, tx?: Prisma.TransactionClient) {
+  static async createBooking(
+    user: TokenPayload,
+    dto: CreateBookingInput,
+    tx?: Prisma.TransactionClient,
+  ) {
     // Tenant scope is ALWAYS derived from the authenticated caller, never trusted
     // from client/caller input — a caller-supplied company_id would let a user
     // (or a buggy internal caller) create a booking, and lock a property, under
     // a company they don't belong to.
-    const scopedDto: CreateBookingInput & { company_id: number } = { ...dto, company_id: user.companyId };
+    const scopedDto: CreateBookingInput & { company_id: number } = {
+      ...dto,
+      company_id: user.companyId,
+    };
 
     if (tx) {
       return BookingService.claimAndCreate(tx, user, scopedDto);
@@ -161,7 +167,9 @@ export class BookingService {
 
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        return await prisma.$transaction((client) => BookingService.claimAndCreate(client, user, scopedDto));
+        return await prisma.$transaction((client) =>
+          BookingService.claimAndCreate(client, user, scopedDto),
+        );
       } catch (err: any) {
         if ((err?.code === 'P2002' || err?.code === 'P2034') && attempt < 2) continue;
         throw err;
@@ -171,7 +179,11 @@ export class BookingService {
   }
 
   // company_id is guaranteed set by createBooking() before this internal method ever runs.
-  private static async claimAndCreate(client: Prisma.TransactionClient, user: TokenPayload, dto: CreateBookingInput & { company_id: number }) {
+  private static async claimAndCreate(
+    client: Prisma.TransactionClient,
+    user: TokenPayload,
+    dto: CreateBookingInput & { company_id: number },
+  ) {
     // Serialize concurrent requests and read the property state via the same locking
     // (FOR UPDATE) read. A locking read always returns the latest committed row, so the
     // claim decision is never stale behind a REPEATABLE-READ snapshot (needed when this
@@ -211,10 +223,12 @@ export class BookingService {
     const booking = await client.booking.create({
       data: {
         booking_code,
-        company:   { connect: { id: dto.company_id } },
-        customer:  { connect: { id: dto.customer_id } },
+        company: { connect: { id: dto.company_id } },
+        customer: { connect: { id: dto.customer_id } },
         ...inventoryConnect(ref),
-        ...(assignedEmployeeId ? { assigned_employee: { connect: { id: assignedEmployeeId } } } : {}),
+        ...(assignedEmployeeId
+          ? { assigned_employee: { connect: { id: assignedEmployeeId } } }
+          : {}),
         agreed_price: Number(dto.agreed_price),
         booking_amount: Number(dto.booking_amount),
         balance_amount: balance,
@@ -341,15 +355,15 @@ export class BookingService {
       if (opp) {
         await tx.opportunity.update({
           where: { id: opp.id },
-          data: { 
+          data: {
             expected_value: booking.agreed_price,
-            probability: 100 
+            probability: 100,
           },
         });
-        
+
         await tx.lead.update({
           where: { id: opp.lead_id },
-          data: { status: 'BOOKED' }
+          data: { status: 'BOOKED' },
         });
       }
 
@@ -394,7 +408,7 @@ export class BookingService {
             entity_id: id,
             reason: 'Contributed to a Lead/Opportunity that converted to a CONFIRMED Booking.',
             created_at: new Date(),
-          }
+          },
         });
       }
 
@@ -420,14 +434,17 @@ export class BookingService {
     });
     // Cancelled bookings don't directly manipulate Opportunity.stage since it no longer exists.
     // Instead we transition the lead status.
-    const opp = await p.opportunity.findFirst({ where: { booking_id: id }, include: { lead: true } });
+    const opp = await p.opportunity.findFirst({
+      where: { booking_id: id },
+      include: { lead: true },
+    });
     if (opp && opp.lead && opp.lead.status !== 'DROPPED') {
       await WorkflowEngine.transitionLead(
         p,
         opp.lead_id,
         'DROPPED',
         { actor: user, entity: { ...opp.lead, exit_reason: reason } },
-        { exit_reason: reason }
+        { exit_reason: reason },
       );
     }
     return updated;
@@ -472,7 +489,10 @@ export class BookingService {
       if (!customerId) throw new AppError(400, 'customer_id or new_customer is required');
 
       // 2. Inventory lock (same logic as createBooking)
-      const ref = resolveInventoryRef({ property_id: dto.property_id, project_unit_id: dto.project_unit_id });
+      const ref = resolveInventoryRef({
+        property_id: dto.property_id,
+        project_unit_id: dto.project_unit_id,
+      });
       const locked = await lockInventoryRow(tx, ref);
       if (locked.company_id !== user.companyId) {
         throw new AppError(404, `${locked.label} not found`);
@@ -491,10 +511,12 @@ export class BookingService {
       const booking = await tx.booking.create({
         data: {
           booking_code,
-          company:   { connect: { id: user.companyId } },
-          customer:  { connect: { id: customerId } },
+          company: { connect: { id: user.companyId } },
+          customer: { connect: { id: customerId } },
           ...inventoryConnect(ref),
-          ...(dto.assigned_employee_id ? { assigned_employee: { connect: { id: dto.assigned_employee_id } } } : {}),
+          ...(dto.assigned_employee_id
+            ? { assigned_employee: { connect: { id: dto.assigned_employee_id } } }
+            : {}),
           agreed_price: Number(dto.agreed_price),
           booking_amount: Number(dto.booking_amount),
           balance_amount: balance,
@@ -530,7 +552,6 @@ export class BookingService {
           legacy_notes: dto.legacy_notes ?? null,
         } as any,
       });
-
 
       // 5. Claim inventory lock
       await claimInventoryLock(tx, ref, booking.id, new Date(now.getTime() + LOCK_DURATION_MS));
@@ -568,7 +589,9 @@ export class BookingService {
       data: {
         ...formData,
         receipt_date: formData.receipt_date ? new Date(formData.receipt_date) : undefined,
-        legacy_booking_date: formData.legacy_booking_date ? new Date(formData.legacy_booking_date) : undefined,
+        legacy_booking_date: formData.legacy_booking_date
+          ? new Date(formData.legacy_booking_date)
+          : undefined,
         form_status: 'SUBMITTED',
         form_submitted_at: now,
         form_submitted_by_id: user.employeeId ?? null,
@@ -576,7 +599,6 @@ export class BookingService {
         md_rejection_reason: null, // clear any previous rejection
       } as any,
     });
-
 
     await prisma.auditEvent.create({
       data: {
@@ -604,7 +626,16 @@ export class BookingService {
         form_status: 'SUBMITTED',
       },
       include: {
-        customer: { select: { id: true, first_name: true, last_name: true, phone: true, pan_number: true, aadhaar_number: true } },
+        customer: {
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+            phone: true,
+            pan_number: true,
+            aadhaar_number: true,
+          },
+        },
         property: { select: { id: true, title: true, status: true } },
         project_unit: { select: { id: true, unit_number: true } },
         form_submitted_by: { select: { id: true, full_name: true, employee_code: true } },
@@ -625,7 +656,10 @@ export class BookingService {
     const booking = await BookingService.getBookingById(user, id);
 
     if (booking.form_status !== 'SUBMITTED') {
-      throw new AppError(400, `Booking form is not in SUBMITTED state (current: ${booking.form_status})`);
+      throw new AppError(
+        400,
+        `Booking form is not in SUBMITTED state (current: ${booking.form_status})`,
+      );
     }
 
     // Delegate to the existing confirmBooking which handles KYC gate, portal handoff, etc.
@@ -639,7 +673,6 @@ export class BookingService {
         md_approved_by_id: user.employeeId ?? null,
       } as any,
     });
-
 
     // Run the full confirmation (KYC gate, inventory BOOKED, audit, portal handoff)
     return BookingService.confirmBooking(user, id);
@@ -672,7 +705,6 @@ export class BookingService {
       } as any,
     });
 
-
     await prisma.auditEvent.create({
       data: {
         actor_id: user.employeeId,
@@ -689,4 +721,3 @@ export class BookingService {
     return updated;
   }
 }
-

@@ -9,6 +9,8 @@ const types_1 = require("../../workflows/types");
 const siteVisit_policy_1 = require("../../policies/siteVisit.policy");
 const shared_2 = require("./shared");
 const feedback_service_1 = require("../feedback.service");
+const notifyEmployee_1 = require("../../utils/notifyEmployee");
+const logger_1 = require("../../utils/logger");
 const p = prisma_1.prisma;
 /** accept: PM/Agent accepts the routed visit. */
 async function acceptVisit(user, visitId, notes) {
@@ -89,6 +91,12 @@ async function reassignVisit(user, visitId, toEmployeeId, reason) {
                 message: `Site visit ${visit.booking_code} has been reassigned to you for acceptance.`,
             },
         });
+        // Web push to reassigned employee (outside transaction)
+        (0, notifyEmployee_1.notifyEmployee)(toEmployeeId, {
+            type: 'TARGET_ASSIGNED',
+            title: 'Site Visit Reassigned to You',
+            message: `Site visit ${visit.booking_code} has been reassigned to you for acceptance.`,
+        }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] Site visit reassign:', err));
         return updated;
     });
 }
@@ -132,6 +140,12 @@ async function escalateVisit(user, visitId, reason) {
                     message: `Site visit ${visit.booking_code} could not be assigned to a PM/Agent. Reason: ${reason}`,
                 },
             });
+            // Web push to Marketing Director (outside transaction)
+            (0, notifyEmployee_1.notifyEmployee)(md.id, {
+                type: 'SYSTEM_ALERT',
+                title: 'Site Visit Escalated',
+                message: `Site visit ${visit.booking_code} escalated — no PM/Agent available.`,
+            }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] Site visit escalate:', err));
         }
         return updated;
     });

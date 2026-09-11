@@ -3,7 +3,10 @@ import { TokenPayload } from '../../utils/jwt';
 import { buildPropertyScope } from '../../authz/dataScope';
 import { can } from '../../authz/authorization';
 import { Permissions } from '../../shared';
-import { PropertyPricingRuleCreateInput, PropertyPricingRuleUpdateInput } from '../../shared/property';
+import {
+  PropertyPricingRuleCreateInput,
+  PropertyPricingRuleUpdateInput,
+} from '../../shared/property';
 
 const p = prisma;
 
@@ -27,7 +30,11 @@ export class PropertyPricingRulesService {
     });
   }
 
-  static async createRule(user: TokenPayload, propertyId: number, data: PropertyPricingRuleCreateInput) {
+  static async createRule(
+    user: TokenPayload,
+    propertyId: number,
+    data: PropertyPricingRuleCreateInput,
+  ) {
     const property = await this.assertPropertyInScope(user, propertyId);
     if (!can(user, Permissions.PROPERTIES_UPDATE, property)) {
       throw { status: 403, message: 'Forbidden: Missing properties.update permission' };
@@ -37,12 +44,19 @@ export class PropertyPricingRulesService {
     });
   }
 
-  static async updateRule(user: TokenPayload, propertyId: number, ruleId: number, data: PropertyPricingRuleUpdateInput) {
+  static async updateRule(
+    user: TokenPayload,
+    propertyId: number,
+    ruleId: number,
+    data: PropertyPricingRuleUpdateInput,
+  ) {
     const property = await this.assertPropertyInScope(user, propertyId);
     if (!can(user, Permissions.PROPERTIES_UPDATE, property)) {
       throw { status: 403, message: 'Forbidden: Missing properties.update permission' };
     }
-    const rule = await p.propertyPricingRule.findFirst({ where: { id: ruleId, property_id: propertyId } });
+    const rule = await p.propertyPricingRule.findFirst({
+      where: { id: ruleId, property_id: propertyId },
+    });
     if (!rule) throw { status: 404, message: 'Pricing rule not found' };
     return p.propertyPricingRule.update({ where: { id: ruleId }, data });
   }
@@ -52,7 +66,9 @@ export class PropertyPricingRulesService {
     if (!can(user, Permissions.PROPERTIES_UPDATE, property)) {
       throw { status: 403, message: 'Forbidden: Missing properties.update permission' };
     }
-    const rule = await p.propertyPricingRule.findFirst({ where: { id: ruleId, property_id: propertyId } });
+    const rule = await p.propertyPricingRule.findFirst({
+      where: { id: ruleId, property_id: propertyId },
+    });
     if (!rule) throw { status: 404, message: 'Pricing rule not found' };
     // Soft-deactivate rather than hard delete — PriceLine.property_rule_id
     // (onDelete: SetNull) keeps a past cost sheet legible even after the rule

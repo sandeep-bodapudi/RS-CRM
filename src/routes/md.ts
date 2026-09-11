@@ -59,7 +59,7 @@ router.get(
       logger.error('MD employees fetch error:', error);
       return res.status(500).json({ error: 'Failed to fetch employee list' });
     }
-  }
+  },
 );
 
 // PATCH /api/v1/md/employees/:id/attendance-requirement - Toggle attendance requirement
@@ -117,7 +117,7 @@ router.patch(
     } catch (error: any) {
       next(error);
     }
-  }
+  },
 );
 
 // GET /api/v1/md/executive-metrics - Real DB Metrics Aggregator for MD Executive Dashboard
@@ -137,7 +137,7 @@ router.get(
       logger.error('Fetch executive metrics error:', error);
       return res.status(500).json({ error: 'Failed to fetch executive metrics' });
     }
-  }
+  },
 );
 
 // GET /api/v1/md/recent-activity - Portal-wide activity feed for the MD dashboard
@@ -154,7 +154,7 @@ router.get(
       logger.error('Fetch recent activity error:', error);
       return res.status(500).json({ error: 'Failed to fetch recent activity' });
     }
-  }
+  },
 );
 
 export default router;

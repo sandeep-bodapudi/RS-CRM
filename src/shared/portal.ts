@@ -9,7 +9,8 @@ export const PortalCallbackStatus = {
   FAILED: 'failed',
 } as const;
 
-export type PortalCallbackStatusValue = typeof PortalCallbackStatus[keyof typeof PortalCallbackStatus];
+export type PortalCallbackStatusValue =
+  (typeof PortalCallbackStatus)[keyof typeof PortalCallbackStatus];
 
 export const PortalCallbackSchema = z.object({
   idempotency_key: z.string().min(1),
@@ -35,7 +36,7 @@ export const KycStatus = {
   REJECTED: 'REJECTED',
 } as const;
 
-export type KycStatusValue = typeof KycStatus[keyof typeof KycStatus];
+export type KycStatusValue = (typeof KycStatus)[keyof typeof KycStatus];
 
 export const KYC_STATUSES = Object.values(KycStatus) as string[];
 
@@ -44,8 +45,14 @@ export const KYC_STATUSES = Object.values(KycStatus) as string[];
  * Raw PAN/Aadhaar NEVER cross the CRM ↔ Portal boundary (Packet 3C §3.4).
  */
 export const CustomerKycWriteSchema = z.object({
-  pan_number: z.string().regex(/^[A-Z0-9]{10}$/, 'PAN must be 10 alphanumeric characters').optional(),
-  aadhaar_number: z.string().regex(/^\d{12}$/, 'Aadhaar must be 12 digits').optional(),
+  pan_number: z
+    .string()
+    .regex(/^[A-Z0-9]{10}$/, 'PAN must be 10 alphanumeric characters')
+    .optional(),
+  aadhaar_number: z
+    .string()
+    .regex(/^\d{12}$/, 'Aadhaar must be 12 digits')
+    .optional(),
 });
 
 export type CustomerKycWriteInput = z.infer<typeof CustomerKycWriteSchema>;
@@ -76,15 +83,17 @@ export type KycStatusChangedInput = z.infer<typeof KycStatusChangedSchema>;
  * exclusively in CRM. Raw PAN/Aadhaar/bank/document data is NEVER part of
  * this contract (Packet 3C §3.4 / §4.2).
  */
-export const KycCallbackSchema = z.object({
-  idempotency_key: z.string().min(1),
-  event_type: z.literal('CUSTOMER_KYC_STATUS_CHANGED'),
-  status: z.literal('submitted'),
-  portal_customer_id: z.string().optional().nullable(),
-  company_id: z.number().int().positive(),
-  crms_customer_id: z.number().int().positive(),
-  crms_booking_id: z.number().int().positive().optional().nullable(),
-}).strict();
+export const KycCallbackSchema = z
+  .object({
+    idempotency_key: z.string().min(1),
+    event_type: z.literal('CUSTOMER_KYC_STATUS_CHANGED'),
+    status: z.literal('submitted'),
+    portal_customer_id: z.string().optional().nullable(),
+    company_id: z.number().int().positive(),
+    crms_customer_id: z.number().int().positive(),
+    crms_booking_id: z.number().int().positive().optional().nullable(),
+  })
+  .strict();
 
 export type KycCallbackInput = z.infer<typeof KycCallbackSchema>;
 
@@ -122,17 +131,19 @@ export type PaymentStatusChangedInput = z.infer<typeof PaymentStatusChangedSchem
  * References the outbound PAYMENT_STATUS_CHANGED IntegrationEvent via its
  * idempotency key; it NEVER creates a new IntegrationEvent.
  */
-export const PaymentCallbackSchema = z.object({
-  idempotency_key: z.string().min(1),
-  event_type: z.literal(PAYMENT_EVENT_TYPE),
-  status: z.enum(['completed', 'failed']),
-  company_id: z.number().int().positive(),
-  crms_customer_id: z.number().int().positive(),
-  crms_booking_id: z.number().int().positive(),
-  payment_id: z.number().int().positive(),
-  portal_payment_id: z.string().optional().nullable(),
-  message: z.string().optional().nullable(),
-}).strict();
+export const PaymentCallbackSchema = z
+  .object({
+    idempotency_key: z.string().min(1),
+    event_type: z.literal(PAYMENT_EVENT_TYPE),
+    status: z.enum(['completed', 'failed']),
+    company_id: z.number().int().positive(),
+    crms_customer_id: z.number().int().positive(),
+    crms_booking_id: z.number().int().positive(),
+    payment_id: z.number().int().positive(),
+    portal_payment_id: z.string().optional().nullable(),
+    message: z.string().optional().nullable(),
+  })
+  .strict();
 
 export type PaymentCallbackInput = z.infer<typeof PaymentCallbackSchema>;
 
@@ -182,19 +193,22 @@ export const CustomerNotificationType = {
   PAYMENT_STATUS_UPDATED: 'PAYMENT_STATUS_UPDATED', // Phase 11 Packet 3F
 } as const;
 
-export type CustomerNotificationTypeValue = typeof CustomerNotificationType[keyof typeof CustomerNotificationType];
+export type CustomerNotificationTypeValue =
+  (typeof CustomerNotificationType)[keyof typeof CustomerNotificationType];
 
 /**
  * Read-only query for the Portal-facing customer-notifications API (Packet 3E).
  * The Portal may only READ; it can never create/update/delete notifications.
  * company_id + crms_customer_id are tenant/customer-scoped (both required).
  */
-export const CustomerNotificationReadSchema = z.object({
-  company_id: z.number().int().positive(),
-  crms_customer_id: z.number().int().positive(),
-  page: z.number().int().positive().default(1),
-  limit: z.number().int().positive().max(100).default(20),
-}).strict();
+export const CustomerNotificationReadSchema = z
+  .object({
+    company_id: z.number().int().positive(),
+    crms_customer_id: z.number().int().positive(),
+    page: z.number().int().positive().default(1),
+    limit: z.number().int().positive().max(100).default(20),
+  })
+  .strict();
 
 export type CustomerNotificationReadInput = z.infer<typeof CustomerNotificationReadSchema>;
 
@@ -202,15 +216,17 @@ export type CustomerNotificationReadInput = z.infer<typeof CustomerNotificationR
  * Single customer-notification item returned by the read API (Packet 3E).
  * Carries ONLY low-sensitivity fields — never raw PAN/Aadhaar/bank/salary.
  */
-export const CustomerNotificationResponseSchema = z.object({
-  id: z.number().int().positive(),
-  type: z.string().min(1),
-  title: z.string().min(1),
-  message: z.string().min(1),
-  is_read: z.boolean(),
-  booking_id: z.number().int().positive().nullable(),
-  created_at: z.string().datetime(),
-}).strict();
+export const CustomerNotificationResponseSchema = z
+  .object({
+    id: z.number().int().positive(),
+    type: z.string().min(1),
+    title: z.string().min(1),
+    message: z.string().min(1),
+    is_read: z.boolean(),
+    booking_id: z.number().int().positive().nullable(),
+    created_at: z.string().datetime(),
+  })
+  .strict();
 
 export type CustomerNotificationResponse = z.infer<typeof CustomerNotificationResponseSchema>;
 
@@ -229,11 +245,19 @@ export type CustomerNotificationResponse = z.infer<typeof CustomerNotificationRe
  * - Authenticated via a user JWT + ADMIN_SYSTEM_METRICS — NEVER the Portal
  *   service token (the Portal must not read cross-tenant aggregate data).
  */
-export const IntegrationMetricsQuerySchema = z.object({
-  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'from must be YYYY-MM-DD (IST)').optional(),
-  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'to must be YYYY-MM-DD (IST)').optional(),
-  includeTimeseries: z.enum(['true', 'false']).optional(),
-}).strict();
+export const IntegrationMetricsQuerySchema = z
+  .object({
+    from: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'from must be YYYY-MM-DD (IST)')
+      .optional(),
+    to: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'to must be YYYY-MM-DD (IST)')
+      .optional(),
+    includeTimeseries: z.enum(['true', 'false']).optional(),
+  })
+  .strict();
 
 export type IntegrationMetricsQueryInput = z.infer<typeof IntegrationMetricsQuerySchema>;
 
@@ -242,42 +266,52 @@ export type IntegrationMetricsQueryInput = z.infer<typeof IntegrationMetricsQuer
  * IntegrationEvent payloads, PAN/Aadhaar, bank data, or other sensitive
  * information ever crosses this contract (3A–3G sensitive-data policy).
  */
-export const IntegrationMetricsResponseSchema = z.object({
-  generated_at: z.string().datetime(),
-  company_id: z.number().int().positive(),
-  range: z.object({
-    from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
-    to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
-  }),
-  handoffs: z.object({
-    total: z.number().int().nonnegative(),
-    byStatus: z.record(z.number().int().nonnegative()),
-    activationRate: z.number().min(0).max(100).nullable(),
-  }),
-  outbox: z.object({
-    total: z.number().int().nonnegative(),
-    byEventType: z.record(z.number().int().nonnegative()),
-    byStatus: z.record(z.number().int().nonnegative()),
-    retried: z.number().int().nonnegative(),
-    terminalFailures: z.number().int().nonnegative(),
-  }),
-  payments: z.object({
-    total: z.number().int().nonnegative(),
-    bySyncStatus: z.record(z.number().int().nonnegative()),
-    bySource: z.record(z.number().int().nonnegative()),
-  }),
-  kyc: z.object({
-    total: z.number().int().nonnegative(),
-    byStatus: z.record(z.number().int().nonnegative()),
-    submissions: z.number().int().nonnegative(),
-  }),
-  notifications: z.object({
-    total: z.number().int().nonnegative(),
-    byType: z.record(z.number().int().nonnegative()),
-  }),
-  timeseries: z.object({
-    days: z.array(z.record(z.any())),
-  }).optional(),
-}).strict();
+export const IntegrationMetricsResponseSchema = z
+  .object({
+    generated_at: z.string().datetime(),
+    company_id: z.number().int().positive(),
+    range: z.object({
+      from: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .nullable(),
+      to: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .nullable(),
+    }),
+    handoffs: z.object({
+      total: z.number().int().nonnegative(),
+      byStatus: z.record(z.number().int().nonnegative()),
+      activationRate: z.number().min(0).max(100).nullable(),
+    }),
+    outbox: z.object({
+      total: z.number().int().nonnegative(),
+      byEventType: z.record(z.number().int().nonnegative()),
+      byStatus: z.record(z.number().int().nonnegative()),
+      retried: z.number().int().nonnegative(),
+      terminalFailures: z.number().int().nonnegative(),
+    }),
+    payments: z.object({
+      total: z.number().int().nonnegative(),
+      bySyncStatus: z.record(z.number().int().nonnegative()),
+      bySource: z.record(z.number().int().nonnegative()),
+    }),
+    kyc: z.object({
+      total: z.number().int().nonnegative(),
+      byStatus: z.record(z.number().int().nonnegative()),
+      submissions: z.number().int().nonnegative(),
+    }),
+    notifications: z.object({
+      total: z.number().int().nonnegative(),
+      byType: z.record(z.number().int().nonnegative()),
+    }),
+    timeseries: z
+      .object({
+        days: z.array(z.record(z.any())),
+      })
+      .optional(),
+  })
+  .strict();
 
 export type IntegrationMetricsResponse = z.infer<typeof IntegrationMetricsResponseSchema>;

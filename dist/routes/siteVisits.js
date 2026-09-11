@@ -7,6 +7,7 @@ const shared_1 = require("../shared");
 const shared_2 = require("../shared");
 const validate_1 = require("../middleware/validate");
 const siteVisit_service_1 = require("../services/siteVisit.service");
+const prisma_1 = require("../lib/prisma");
 const router = (0, express_1.Router)();
 // GET /api/v1/site-visits - List site visits (role and company-aware)
 router.get('/', auth_1.authenticateToken, (0, auth_1.requirePermission)([shared_1.Permissions.SITE_VISITS_READ]), async (req, res, next) => {
@@ -22,6 +23,35 @@ router.get('/', auth_1.authenticateToken, (0, auth_1.requirePermission)([shared_
     }
     catch (error) {
         logger_1.logger.error('Fetch site visits error:', error);
+        next(error);
+    }
+});
+// GET /api/v1/site-visits/:id/history - Get reassignment/routing history
+router.get('/:id/history', auth_1.authenticateToken, (0, auth_1.requirePermission)([shared_1.Permissions.SITE_VISITS_READ]), async (req, res, next) => {
+    try {
+        const visitId = parseInt(req.params.id, 10);
+        if (isNaN(visitId))
+            return next({ name: 'AppError', statusCode: 400, message: 'Invalid ID format' });
+        // First check if user can access the visit
+        const filters = { leadId: '' }; // Just to pass valid type
+        // Check access implicitly by fetching from db directly but constrained to company
+        const visit = await prisma_1.prisma.siteVisitBooking.findFirst({
+            where: { id: visitId, lead: { company_id: req.user.companyId } },
+        });
+        if (!visit)
+            throw { status: 404, message: 'Site visit not found' };
+        const history = await prisma_1.prisma.siteVisitReassignment.findMany({
+            where: { visit_id: visitId },
+            include: {
+                from_employee: { select: { id: true, full_name: true, employee_code: true } },
+                to_employee: { select: { id: true, full_name: true, employee_code: true } },
+            },
+            orderBy: { created_at: 'asc' },
+        });
+        return res.status(200).json({ history });
+    }
+    catch (error) {
+        logger_1.logger.error('Fetch site visit history error:', error);
         next(error);
     }
 });

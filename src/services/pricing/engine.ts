@@ -204,12 +204,18 @@ export interface PriceComputation {
 // Rule matching
 // ---------------------------------------------------------------------------
 
-function matchesBool(ruleValue: boolean | null | undefined, unitValue: boolean | null | undefined): boolean {
+function matchesBool(
+  ruleValue: boolean | null | undefined,
+  unitValue: boolean | null | undefined,
+): boolean {
   if (ruleValue === null || ruleValue === undefined) return true;
   return Boolean(unitValue) === ruleValue;
 }
 
-function matchesString(ruleValue: string | null | undefined, unitValue: string | null | undefined): boolean {
+function matchesString(
+  ruleValue: string | null | undefined,
+  unitValue: string | null | undefined,
+): boolean {
   if (ruleValue === null || ruleValue === undefined || ruleValue === '') return true;
   if (unitValue === null || unitValue === undefined) return false;
   return String(unitValue).toUpperCase() === String(ruleValue).toUpperCase();
@@ -232,10 +238,12 @@ export function ruleMatchesUnit(rule: PricingRule, unit: PricingUnitInput): bool
   if (!matchesBool(rule.match_main_road_facing, unit.is_main_road_facing)) return false;
 
   if (rule.match_floor_min !== null && rule.match_floor_min !== undefined) {
-    if (unit.floor === null || unit.floor === undefined || unit.floor < rule.match_floor_min) return false;
+    if (unit.floor === null || unit.floor === undefined || unit.floor < rule.match_floor_min)
+      return false;
   }
   if (rule.match_floor_max !== null && rule.match_floor_max !== undefined) {
-    if (unit.floor === null || unit.floor === undefined || unit.floor > rule.match_floor_max) return false;
+    if (unit.floor === null || unit.floor === undefined || unit.floor > rule.match_floor_max)
+      return false;
   }
 
   // An optional rule only applies when explicitly selected for this unit.
@@ -319,7 +327,9 @@ function computeBasePrice(
   const baseRule = rules.find((r) => r.kind === 'BASE_RATE' && ruleMatchesUnit(r, unit));
   const rate = unit.base_rate ?? baseRule?.rate ?? 0;
   const method: CalcMethodType =
-    unit.base_rate_unit ?? baseRule?.calc_method ?? (unit.price_basis === 'PLOT_AREA' ? 'PER_SQYD' : 'PER_SQFT');
+    unit.base_rate_unit ??
+    baseRule?.calc_method ??
+    (unit.price_basis === 'PLOT_AREA' ? 'PER_SQYD' : 'PER_SQFT');
   const areaBasis: PriceBasisType = baseRule?.area_basis ?? unit.price_basis;
 
   if (!rate) {
@@ -392,7 +402,14 @@ export function computePrice(unit: PricingUnitInput, rules: PricingRule[] = []):
 
   for (const rule of applicable) {
     const areaBasis: PriceBasisType = rule.area_basis ?? unit.price_basis;
-    const quantity = quantityForMethod(rule.calc_method, unit, areaBasis, basePrice, warnings, rule.label);
+    const quantity = quantityForMethod(
+      rule.calc_method,
+      unit,
+      areaBasis,
+      basePrice,
+      warnings,
+      rule.label,
+    );
     const amount = amountFor(rule.calc_method, rule.rate, quantity);
     if (amount === 0 && rule.calc_method !== 'FIXED') {
       // A zero-value premium is noise on a cost sheet; skip it silently.
@@ -406,7 +423,8 @@ export function computePrice(unit: PricingUnitInput, rules: PricingRule[] = []):
       calc_method: rule.calc_method,
       rate: round(rule.rate, 4),
       quantity: round(quantity, 4),
-      area_basis: rule.calc_method === 'PER_SQFT' || rule.calc_method === 'PER_SQYD' ? areaBasis : null,
+      area_basis:
+        rule.calc_method === 'PER_SQFT' || rule.calc_method === 'PER_SQYD' ? areaBasis : null,
       amount,
       is_manual: false,
       is_refundable: Boolean(rule.is_refundable),
@@ -433,7 +451,10 @@ export function computePrice(unit: PricingUnitInput, rules: PricingRule[] = []):
   }
 
   const sumOf = (predicate: (l: ComputedPriceLine) => boolean) =>
-    round(lines.filter(predicate).reduce((acc, l) => acc + l.amount, 0), 2);
+    round(
+      lines.filter(predicate).reduce((acc, l) => acc + l.amount, 0),
+      2,
+    );
 
   const premiums_total = sumOf((l) => l.kind === 'PREMIUM');
   const charges_total = sumOf((l) => l.kind === 'CHARGE');
@@ -464,5 +485,7 @@ export function computePrice(unit: PricingUnitInput, rules: PricingRule[] = []):
 
 /** final_price is the override when one is set, else the computed figure. */
 export function resolveFinalPrice(calculatedPrice: number, overridePrice?: number | null): number {
-  return overridePrice != null && overridePrice > 0 ? round(overridePrice, 2) : round(calculatedPrice, 2);
+  return overridePrice != null && overridePrice > 0
+    ? round(overridePrice, 2)
+    : round(calculatedPrice, 2);
 }

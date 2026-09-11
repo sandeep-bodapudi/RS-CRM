@@ -28,6 +28,8 @@ const prisma_1 = require("../../lib/prisma");
 const distributionService_1 = require("../../utils/distributionService");
 const errors_1 = require("./errors");
 const shared_1 = require("./shared");
+const notifyEmployee_1 = require("../../utils/notifyEmployee");
+const logger_1 = require("../../utils/logger");
 const p = prisma_1.prisma;
 async function distributeUnassignedPoolLeads(companyId) {
     const unassignedLeads = await p.lead.findMany({
@@ -122,6 +124,12 @@ async function triggerLeadRecoveryForProperty(propertyId) {
                         message: `Lead ${recoveredLead.lead_code} (${recoveredLead.customer_name}) has been automatically recovered because new matching inventory became available.`,
                     }
                 });
+                // Web push to recovered lead owner (outside transaction)
+                (0, notifyEmployee_1.notifyEmployee)(recoveredLead.assigned_to_id, {
+                    type: 'SYSTEM_ALERT',
+                    title: 'Lead Recovered',
+                    message: `Lead ${recoveredLead.lead_code} (${recoveredLead.customer_name}) has been recovered — new inventory is available.`,
+                }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] Lead recovery notify:', err));
                 await p.leadActivity.create({
                     data: {
                         lead_id: leadId,

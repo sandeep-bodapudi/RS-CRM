@@ -5,7 +5,11 @@ import { requireAuthz } from '../../middleware/authz';
 import { validateRequestBody } from '../../middleware/validate';
 import { prisma } from '../../lib/prisma';
 import { buildProjectScope } from '../../authz/dataScope';
-import { Permissions, ProjectPricingRuleCreateSchema, ProjectPricingRuleUpdateSchema } from '../../shared';
+import {
+  Permissions,
+  ProjectPricingRuleCreateSchema,
+  ProjectPricingRuleUpdateSchema,
+} from '../../shared';
 import { PricingRulesService } from '../../services/pricing/rules.service';
 import { PricingService } from '../../services/pricing/pricing.service';
 
@@ -125,7 +129,9 @@ router.post(
     try {
       const projectId = parseInt(req.params.id, 10);
       const result = await PricingService.applyRecalculateProject(req.user!, projectId);
-      return res.status(200).json({ message: `Recalculated ${result.updated_count} unit(s)`, ...result });
+      return res
+        .status(200)
+        .json({ message: `Recalculated ${result.updated_count} unit(s)`, ...result });
     } catch (error: any) {
       logger.error('Apply recalculation error:', error);
       if (error.status) return res.status(error.status).json({ error: error.message });

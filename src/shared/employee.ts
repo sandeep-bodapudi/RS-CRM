@@ -14,11 +14,23 @@ export const EmployeeSelfUpdateSchema = z.object({
   emergency_contact_phone: z.string().optional().nullable(),
   blood_group: z.string().optional().nullable(),
   social_links: z.string().optional().nullable(),
-  pan_number: z.string().regex(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, 'Invalid PAN format').optional().nullable(),
-  aadhaar_number: z.string().regex(/^\d{12}$/, 'Aadhaar must be 12 digits').optional().nullable(),
+  pan_number: z
+    .string()
+    .regex(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, 'Invalid PAN format')
+    .optional()
+    .nullable(),
+  aadhaar_number: z
+    .string()
+    .regex(/^\d{12}$/, 'Aadhaar must be 12 digits')
+    .optional()
+    .nullable(),
   bank_name: z.string().optional().nullable(),
   bank_account_number: z.string().optional().nullable(),
-  bank_ifsc: z.string().regex(/^[A-Z]{4}0[A-Z0-9]{6}$/, 'Invalid IFSC format').optional().nullable(),
+  bank_ifsc: z
+    .string()
+    .regex(/^[A-Z]{4}0[A-Z0-9]{6}$/, 'Invalid IFSC format')
+    .optional()
+    .nullable(),
   bank_branch: z.string().optional().nullable(),
 });
 
@@ -37,11 +49,23 @@ export const EmployeeCreateSchema = z.object({
   emergency_contact_name: z.string().optional().nullable(),
   emergency_contact_relation: z.string().optional().nullable(),
   emergency_contact_phone: z.string().optional().nullable(),
-  pan_number: z.string().regex(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, 'Invalid PAN format').optional().nullable(),
-  aadhaar_number: z.string().regex(/^\d{12}$/, 'Aadhaar must be 12 digits').optional().nullable(),
+  pan_number: z
+    .string()
+    .regex(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, 'Invalid PAN format')
+    .optional()
+    .nullable(),
+  aadhaar_number: z
+    .string()
+    .regex(/^\d{12}$/, 'Aadhaar must be 12 digits')
+    .optional()
+    .nullable(),
   bank_name: z.string().optional().nullable(),
   bank_account_number: z.string().optional().nullable(),
-  bank_ifsc: z.string().regex(/^[A-Z]{4}0[A-Z0-9]{6}$/, 'Invalid IFSC format').optional().nullable(),
+  bank_ifsc: z
+    .string()
+    .regex(/^[A-Z]{4}0[A-Z0-9]{6}$/, 'Invalid IFSC format')
+    .optional()
+    .nullable(),
   bank_branch: z.string().optional().nullable(),
   job_title: z.string().optional().nullable(),
   department: z.string().optional().nullable(),
@@ -51,13 +75,15 @@ export const EmployeeCreateSchema = z.object({
   salary_ctc: z.union([z.string(), z.number()]).optional().nullable(),
   background_education: z.string().optional().nullable(),
   additional_branch_ids: z.array(z.union([z.string(), z.number()])).optional(),
-  initial_password: z.string()
+  initial_password: z
+    .string()
     .min(8, 'Password must be at least 8 characters long')
     .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
     .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
     .regex(/[0-9]/, 'Password must contain at least one number')
     .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character')
-    .optional().nullable(),
+    .optional()
+    .nullable(),
   company_id: z.union([z.string(), z.number()]).optional().nullable(),
 });
 
@@ -78,7 +104,7 @@ export const EmployeeUpdateSchema = EmployeeSelfUpdateSchema.extend({
 });
 
 export const EmployeeRolesUpdateSchema = z.object({
-  role_names: z.array(z.string()).min(1, 'At least one role is required')
+  role_names: z.array(z.string()).min(1, 'At least one role is required'),
 });
 
 export const EmployeeResignSchema = z.object({
@@ -87,14 +113,16 @@ export const EmployeeResignSchema = z.object({
   reason: z.string().optional(),
 });
 
-export const EmployeePromoteSchema = z.object({
-  job_title: z.string().min(1).optional(),
-  salary_ctc: z.union([z.string(), z.number()]).optional(),
-  role_name: z.string().optional(),
-  reason: z.string().optional(),
-}).refine((data) => data.job_title || data.salary_ctc !== undefined || data.role_name, {
-  message: 'At least one of job_title, salary_ctc, or role_name must be provided',
-});
+export const EmployeePromoteSchema = z
+  .object({
+    job_title: z.string().min(1).optional(),
+    salary_ctc: z.union([z.string(), z.number()]).optional(),
+    role_name: z.string().optional(),
+    reason: z.string().optional(),
+  })
+  .refine((data) => data.job_title || data.salary_ctc !== undefined || data.role_name, {
+    message: 'At least one of job_title, salary_ctc, or role_name must be provided',
+  });
 
 export const EmployeeConvertEmploymentTypeSchema = z.object({
   employment_type: z.enum(['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN']),

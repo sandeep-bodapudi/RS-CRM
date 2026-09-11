@@ -98,7 +98,7 @@ app.use(
         // Malformed origin header — fall through and reject below.
       }
       const matchesApexDomain = allowedPublicApexDomains.some(
-        (domain) => originHost === domain || originHost.endsWith(`.${domain}`)
+        (domain) => originHost === domain || originHost.endsWith(`.${domain}`),
       );
       if (allowedOrigins.includes(origin) || matchesApexDomain) {
         return callback(null, true);
@@ -178,7 +178,9 @@ const PROCESS_ROLE = (process.env.PROCESS_ROLE || 'all') as ProcessRole;
 const mountInternal = PROCESS_ROLE === 'all' || PROCESS_ROLE === 'internal';
 const mountPublic = PROCESS_ROLE === 'all' || PROCESS_ROLE === 'public';
 const mountPortal = PROCESS_ROLE === 'all' || PROCESS_ROLE === 'portal';
-logger.info(`[server] PROCESS_ROLE=${PROCESS_ROLE} (internal=${mountInternal} public=${mountPublic} portal=${mountPortal})`);
+logger.info(
+  `[server] PROCESS_ROLE=${PROCESS_ROLE} (internal=${mountInternal} public=${mountPublic} portal=${mountPortal})`,
+);
 
 // Every role needs a health check (deployment platforms poll this).
 app.use('/api/v1/health', healthRoutes);

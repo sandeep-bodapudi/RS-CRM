@@ -10,7 +10,12 @@ import { PropertyPolicy } from '../policies/property.policy';
 import { buildPropertyScope, buildProjectScope } from '../authz/dataScope';
 import { slugify, generateUniqueSlug } from '../utils/slugify';
 import { logger } from '../utils/logger';
-import { normalizeArea, areaFromDimensions, dimensionsDisagree, AreaUnitType } from '../shared/measurement';
+import {
+  normalizeArea,
+  areaFromDimensions,
+  dimensionsDisagree,
+  AreaUnitType,
+} from '../shared/measurement';
 import { PricingService } from './pricing/pricing.service';
 import { notifyEmployee } from '../utils/notifyEmployee';
 
@@ -50,10 +55,20 @@ function resolvePropertyPricingFields(data: Record<string, any>): Record<string,
   if (data.plot_width_ft != null) out.plot_width_ft = data.plot_width_ft;
 
   for (const key of [
-    'carpet_area_sqft', 'built_up_area_sqft', 'super_built_up_area_sqft',
-    'ground_floor_area_sqft', 'first_floor_area_sqft', 'total_floors', 'construction_year',
-    'price_basis', 'view', 'road_width_ft', 'base_rate', 'base_rate_unit',
-    'discount_amount', 'discount_reason',
+    'carpet_area_sqft',
+    'built_up_area_sqft',
+    'super_built_up_area_sqft',
+    'ground_floor_area_sqft',
+    'first_floor_area_sqft',
+    'total_floors',
+    'construction_year',
+    'price_basis',
+    'view',
+    'road_width_ft',
+    'base_rate',
+    'base_rate_unit',
+    'discount_amount',
+    'discount_reason',
   ]) {
     if (data[key] !== undefined) out[key] = data[key];
   }
@@ -82,7 +97,10 @@ function subRecordUpdate(key: string, incoming: any, existing: any) {
 
 /** Delete-and-recreate manual PriceLine rows for a property — mirrors
  * ProjectUnitService's identical pattern for units. */
-async function replaceManualPriceLines(propertyId: number, manualLines: { label: string; category?: string; amount: number }[]) {
+async function replaceManualPriceLines(
+  propertyId: number,
+  manualLines: { label: string; category?: string; amount: number }[],
+) {
   await p.priceLine.deleteMany({ where: { property_id: propertyId, is_manual: true } });
   if (manualLines.length) {
     await p.priceLine.createMany({
@@ -111,7 +129,10 @@ async function replaceManualPriceLines(propertyId: number, manualLines: { label:
  *
  * Expired locks resolve to AVAILABLE — the property is effectively free inventory.
  */
-export function deriveAvailability(property: { status: string; locked_until: Date | null }): PropertyAvailabilityType {
+export function deriveAvailability(property: {
+  status: string;
+  locked_until: Date | null;
+}): PropertyAvailabilityType {
   if (property.status === 'LIVE') return 'AVAILABLE';
   if (property.status === 'LOCKED') {
     if (property.locked_until && property.locked_until < new Date()) return 'AVAILABLE';
@@ -129,7 +150,20 @@ export class PropertyService {
     return `RRH-PR-${currentYear}-${seq}`;
   }
 
-  static async listProperties(user: TokenPayload, filters: { brand?: string; category?: string; status?: string; sales_status?: string; project_id?: number; unassigned?: boolean; dm_executive_id?: number }, take: number = 20, skip: number = 0) {
+  static async listProperties(
+    user: TokenPayload,
+    filters: {
+      brand?: string;
+      category?: string;
+      status?: string;
+      sales_status?: string;
+      project_id?: number;
+      unassigned?: boolean;
+      dm_executive_id?: number;
+    },
+    take: number = 20,
+    skip: number = 0,
+  ) {
     const whereCondition = await buildPropertyScope(user);
 
     if (filters.brand) {
@@ -189,7 +223,7 @@ export class PropertyService {
         },
         publications: true,
         _count: {
-          select: { interested_leads: true }
+          select: { interested_leads: true },
         },
       },
       orderBy: { created_at: 'desc' },
@@ -305,7 +339,7 @@ export class PropertyService {
     let project = null;
     if (data.project_id) {
       project = await p.project.findFirst({
-        where: { id: data.project_id, company_id: companyId }
+        where: { id: data.project_id, company_id: companyId },
       });
       if (!project) {
         throw { status: 400, message: 'Invalid or unauthorized project reference' };
@@ -318,7 +352,7 @@ export class PropertyService {
     if (data.assigned_pm_id) {
       // Explicit PM assignment
       const pm = await p.employee.findFirst({
-        where: { id: data.assigned_pm_id, company_id: companyId, status: 'ACTIVE' }
+        where: { id: data.assigned_pm_id, company_id: companyId, status: 'ACTIVE' },
       });
       if (!pm) {
         throw { status: 400, message: 'Invalid or unauthorized project manager assigned' };
@@ -333,7 +367,7 @@ export class PropertyService {
       // Find PMs assigned to this city
       const assignments = await p.pMLocationAssignment.findMany({
         where: { location: data.city, company_id: companyId },
-        select: { pm_id: true }
+        select: { pm_id: true },
       });
 
       if (assignments.length === 1) {
@@ -344,13 +378,13 @@ export class PropertyService {
         const loads = await p.property.groupBy({
           by: ['assigned_pm_id'],
           where: { assigned_pm_id: { in: pmIds }, status: 'PENDING_VERIFICATION' },
-          _count: { assigned_pm_id: true }
+          _count: { assigned_pm_id: true },
         });
 
         // Initialize all PMs with 0 load
         const loadMap = new Map<number, number>();
         pmIds.forEach((id: number) => loadMap.set(id, 0));
-        
+
         loads.forEach((l: any) => {
           if (l.assigned_pm_id !== null) {
             loadMap.set(l.assigned_pm_id, l._count.assigned_pm_id);
@@ -370,131 +404,153 @@ export class PropertyService {
       }
     }
 
-    return await p.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
-      const baseSlug = slugify(`${data.title} ${data.location} ${data.category}`);
-      const slug = await generateUniqueSlug(baseSlug, companyId, async (s: string, cId: number) => {
-        const existing = await tx.property.findFirst({ where: { slug: s, company_id: cId } });
-        return !!existing;
-      });
-
-      const property = await tx.property.create({
-        data: {
-          property_code: propertyCode,
-          company_id: companyId,
-          branch_id: branchId,
-          title: data.title,
-          description: data.description || null,
-          brand_type: data.brand_type,
-          category: data.category,
-          area_sqft: data.area_sqft,
-          location: data.location,
-          address: data.address || null,
-          bedrooms: data.bedrooms ? Number(data.bedrooms) : null,
-          bathrooms: data.bathrooms ? Number(data.bathrooms) : null,
-          // Intentionally nullable (requirement: standalone properties are never
-          // implicitly forced into a project) — do not default this to a project.
-          project_id: data.project_id || null,
-          facing: data.facing || null,
-          amenities: data.amenities || null,
-          possession_status: data.possession_status || null,
-          pricing: data.pricing ? { create: data.pricing } : undefined,
-          plot_details: data.plot_details ? { create: data.plot_details } : undefined,
-          apartment_details: data.apartment_details ? { create: data.apartment_details } : undefined,
-          villa_details: data.villa_details ? { create: data.villa_details } : undefined,
-          house_details: data.house_details ? { create: data.house_details } : undefined,
-          commercial_shop_details: data.commercial_shop_details ? { create: data.commercial_shop_details } : undefined,
-          commercial_office_details: data.commercial_office_details ? { create: data.commercial_office_details } : undefined,
-          farm_land_details: data.farm_land_details ? { create: data.farm_land_details } : undefined,
-          assigned_pm_id: finalPmId,
-          status: 'PENDING_VERIFICATION',
-          created_by_id: employeeId,
-          ...resolvePropertyPricingFields(data),
-          // WR-2: Structured location fields
-          state: data.state || null,
-          city: data.city || null,
-          locality: data.locality || null,
-          pincode: data.pincode || null,
-          latitude: data.latitude != null ? Number(data.latitude) : null,
-          longitude: data.longitude != null ? Number(data.longitude) : null,
-          listing_type: data.listing_type || 'NEW',
-          source: data.source || 'INTERNAL',
-          // WR-6: SEO slug
-          slug,
-        },
-      });
-
-      await tx.propertyVerificationLog.create({
-        data: {
-          property_id: property.id,
-          actor_id: employeeId,
-          from_status: 'DRAFT',
-          to_status: 'PENDING_VERIFICATION',
-          notes: `Property ${propertyCode} submitted. Assigned to PM ID ${finalPmId || 'Queue'} for On-Site Verification.`,
-        },
-      });
-
-      if (!finalPmId) {
-        const mdEmployees = await tx.employee.findMany({
-          where: {
-            company_id: companyId,
-            status: 'ACTIVE',
-            roles: {
-              some: {
-                role: {
-                  name: Roles.MD
-                }
-              }
-            }
+    return await p
+      .$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
+        const baseSlug = slugify(`${data.title} ${data.location} ${data.category}`);
+        const slug = await generateUniqueSlug(
+          baseSlug,
+          companyId,
+          async (s: string, cId: number) => {
+            const existing = await tx.property.findFirst({ where: { slug: s, company_id: cId } });
+            return !!existing;
           },
-          select: { id: true }
+        );
+
+        const property = await tx.property.create({
+          data: {
+            property_code: propertyCode,
+            company_id: companyId,
+            branch_id: branchId,
+            title: data.title,
+            description: data.description || null,
+            brand_type: data.brand_type,
+            category: data.category,
+            area_sqft: data.area_sqft,
+            location: data.location,
+            address: data.address || null,
+            bedrooms: data.bedrooms ? Number(data.bedrooms) : null,
+            bathrooms: data.bathrooms ? Number(data.bathrooms) : null,
+            // Intentionally nullable (requirement: standalone properties are never
+            // implicitly forced into a project) — do not default this to a project.
+            project_id: data.project_id || null,
+            facing: data.facing || null,
+            amenities: data.amenities || null,
+            possession_status: data.possession_status || null,
+            pricing: data.pricing ? { create: data.pricing } : undefined,
+            plot_details: data.plot_details ? { create: data.plot_details } : undefined,
+            apartment_details: data.apartment_details
+              ? { create: data.apartment_details }
+              : undefined,
+            villa_details: data.villa_details ? { create: data.villa_details } : undefined,
+            house_details: data.house_details ? { create: data.house_details } : undefined,
+            commercial_shop_details: data.commercial_shop_details
+              ? { create: data.commercial_shop_details }
+              : undefined,
+            commercial_office_details: data.commercial_office_details
+              ? { create: data.commercial_office_details }
+              : undefined,
+            farm_land_details: data.farm_land_details
+              ? { create: data.farm_land_details }
+              : undefined,
+            assigned_pm_id: finalPmId,
+            status: 'PENDING_VERIFICATION',
+            created_by_id: employeeId,
+            ...resolvePropertyPricingFields(data),
+            // WR-2: Structured location fields
+            state: data.state || null,
+            city: data.city || null,
+            locality: data.locality || null,
+            pincode: data.pincode || null,
+            latitude: data.latitude != null ? Number(data.latitude) : null,
+            longitude: data.longitude != null ? Number(data.longitude) : null,
+            listing_type: data.listing_type || 'NEW',
+            source: data.source || 'INTERNAL',
+            // WR-6: SEO slug
+            slug,
+          },
         });
 
-        if (mdEmployees.length > 0) {
-          await tx.notification.createMany({
-            data: mdEmployees.map((md: any) => ({
-              employee_id: md.id,
-              type: 'SYSTEM_ALERT',
-              title: 'Property Requires PM Assignment',
-              message: `Property ${propertyCode} (${data.title}) was created without an assigned PM. Location: ${data.city || 'Unknown'}`
-            }))
+        await tx.propertyVerificationLog.create({
+          data: {
+            property_id: property.id,
+            actor_id: employeeId,
+            from_status: 'DRAFT',
+            to_status: 'PENDING_VERIFICATION',
+            notes: `Property ${propertyCode} submitted. Assigned to PM ID ${finalPmId || 'Queue'} for On-Site Verification.`,
+          },
+        });
+
+        if (!finalPmId) {
+          const mdEmployees = await tx.employee.findMany({
+            where: {
+              company_id: companyId,
+              status: 'ACTIVE',
+              roles: {
+                some: {
+                  role: {
+                    name: Roles.MD,
+                  },
+                },
+              },
+            },
+            select: { id: true },
           });
-          // Web push to MDs (outside transaction)
-          for (const md of mdEmployees) {
-            notifyEmployee(md.id, {
-              type: 'SYSTEM_ALERT',
-              title: 'Property Requires PM Assignment',
-              message: `Property ${propertyCode} (${data.title}) needs a PM assignment.`,
-            }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] PM assign notify:', err));
+
+          if (mdEmployees.length > 0) {
+            await tx.notification.createMany({
+              data: mdEmployees.map((md: any) => ({
+                employee_id: md.id,
+                type: 'SYSTEM_ALERT',
+                title: 'Property Requires PM Assignment',
+                message: `Property ${propertyCode} (${data.title}) was created without an assigned PM. Location: ${data.city || 'Unknown'}`,
+              })),
+            });
+            // Web push to MDs (outside transaction)
+            for (const md of mdEmployees) {
+              notifyEmployee(
+                md.id,
+                {
+                  type: 'SYSTEM_ALERT',
+                  title: 'Property Requires PM Assignment',
+                  message: `Property ${propertyCode} (${data.title}) needs a PM assignment.`,
+                },
+                { skipDbNotification: true },
+              ).catch((err) => logger.error('[WebPush] PM assign notify:', err));
+            }
           }
         }
-      }
 
-      // Also notify assigned PM if one was set
-      if (finalPmId) {
-        notifyEmployee(finalPmId, {
-          type: 'PROPERTY_ASSIGNED',
-          title: `Property Assigned: ${propertyCode}`,
-          message: `Property "${data.title}" (${propertyCode}) has been assigned to you.`,
-        }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] Create property PM notify:', err));
-      }
+        // Also notify assigned PM if one was set
+        if (finalPmId) {
+          notifyEmployee(
+            finalPmId,
+            {
+              type: 'PROPERTY_ASSIGNED',
+              title: `Property Assigned: ${propertyCode}`,
+              message: `Property "${data.title}" (${propertyCode}) has been assigned to you.`,
+            },
+            { skipDbNotification: true },
+          ).catch((err) => logger.error('[WebPush] Create property PM notify:', err));
+        }
 
-      return property;
-    }).then(async (property) => {
-      // Outside the create transaction, same as ProjectUnitService.createUnit:
-      // manual lines + the initial price computation both do their own reads
-      // and writes, and recalculateProperty already wraps its own in a
-      // transaction — nesting it inside the create transaction above buys
-      // nothing and only holds that transaction open longer.
-      if (data.manual_lines?.length) {
-        await replaceManualPriceLines(property.id, data.manual_lines);
-      }
-      await PricingService.recalculateProperty(property.id);
-      // Re-fetch with the full include set (category details, images, price
-      // lines, ...) rather than returning recalculateProperty's bare row —
-      // the caller (PropertyForm.tsx) needs the just-created category detail
-      // record back to render immediately, not just the updated price fields.
-      return this.getProperty(user, property.id);
-    });
+        return property;
+      })
+      .then(async (property) => {
+        // Outside the create transaction, same as ProjectUnitService.createUnit:
+        // manual lines + the initial price computation both do their own reads
+        // and writes, and recalculateProperty already wraps its own in a
+        // transaction — nesting it inside the create transaction above buys
+        // nothing and only holds that transaction open longer.
+        if (data.manual_lines?.length) {
+          await replaceManualPriceLines(property.id, data.manual_lines);
+        }
+        await PricingService.recalculateProperty(property.id);
+        // Re-fetch with the full include set (category details, images, price
+        // lines, ...) rather than returning recalculateProperty's bare row —
+        // the caller (PropertyForm.tsx) needs the just-created category detail
+        // record back to render immediately, not just the updated price fields.
+        return this.getProperty(user, property.id);
+      });
   }
 
   static async updateProperty(user: TokenPayload, propertyId: number, data: any) {
@@ -519,7 +575,9 @@ export class PropertyService {
       // never there throws (Prisma P2025), so this must be conditional on
       // the row actually existing.
       select: {
-        id: true, status: true, assigned_pm_id: true,
+        id: true,
+        status: true,
+        assigned_pm_id: true,
         pricing: { select: { property_id: true } },
         plot_details: { select: { property_id: true } },
         apartment_details: { select: { property_id: true } },
@@ -536,26 +594,44 @@ export class PropertyService {
     // Validate project_id cross-company reference if provided
     if (data.project_id) {
       const project = await p.project.findFirst({
-        where: { id: data.project_id, company_id: companyId }
+        where: { id: data.project_id, company_id: companyId },
       });
       if (!project) throw { status: 400, message: 'Invalid or unauthorized project reference' };
     }
 
     if (data.assigned_pm_id && data.assigned_pm_id !== property.assigned_pm_id) {
       const pm = await p.employee.findFirst({
-        where: { id: data.assigned_pm_id, company_id: companyId }
+        where: { id: data.assigned_pm_id, company_id: companyId },
       });
-      if (!pm) throw { status: 400, message: 'Invalid assigned_pm_id or does not belong to your company' };
+      if (!pm)
+        throw { status: 400, message: 'Invalid assigned_pm_id or does not belong to your company' };
     }
 
     // Explicitly exclude workflow fields
     const safeData: any = {};
     const safeKeys = [
-      'title', 'description', 'brand_type', 'category', 'area_sqft',
-      'location', 'address', 'bedrooms', 'bathrooms', 'facing', 'amenities',
-      'possession_status', 'assigned_pm_id', 'project_id',
+      'title',
+      'description',
+      'brand_type',
+      'category',
+      'area_sqft',
+      'location',
+      'address',
+      'bedrooms',
+      'bathrooms',
+      'facing',
+      'amenities',
+      'possession_status',
+      'assigned_pm_id',
+      'project_id',
       // WR-2: Structured location fields
-      'state', 'city', 'locality', 'pincode', 'latitude', 'longitude', 'listing_type'
+      'state',
+      'city',
+      'locality',
+      'pincode',
+      'latitude',
+      'longitude',
+      'listing_type',
     ];
 
     for (const key of safeKeys) {
@@ -586,16 +662,24 @@ export class PropertyService {
         ...subRecordUpdate('apartment_details', data.apartment_details, property.apartment_details),
         ...subRecordUpdate('villa_details', data.villa_details, property.villa_details),
         ...subRecordUpdate('house_details', data.house_details, property.house_details),
-        ...subRecordUpdate('commercial_shop_details', data.commercial_shop_details, property.commercial_shop_details),
-        ...subRecordUpdate('commercial_office_details', data.commercial_office_details, property.commercial_office_details),
+        ...subRecordUpdate(
+          'commercial_shop_details',
+          data.commercial_shop_details,
+          property.commercial_shop_details,
+        ),
+        ...subRecordUpdate(
+          'commercial_office_details',
+          data.commercial_office_details,
+          property.commercial_office_details,
+        ),
         ...subRecordUpdate('farm_land_details', data.farm_land_details, property.farm_land_details),
       },
     });
 
     if (updatedProperty.status === 'LIVE') {
       import('./lead.service').then(({ LeadService }) => {
-        LeadService.triggerLeadRecoveryForProperty(updatedProperty.id).catch(err =>
-          logger.error(`Error triggering lead recovery for property ${updatedProperty.id}:`, err)
+        LeadService.triggerLeadRecoveryForProperty(updatedProperty.id).catch((err) =>
+          logger.error(`Error triggering lead recovery for property ${updatedProperty.id}:`, err),
         );
       });
     }
@@ -638,7 +722,11 @@ export class PropertyService {
     return this.getProperty(user, propertyId);
   }
 
-  static async verifyProperty(user: TokenPayload, propertyId: number, data: { approved: boolean; notes: string }) {
+  static async verifyProperty(
+    user: TokenPayload,
+    propertyId: number,
+    data: { approved: boolean; notes: string },
+  ) {
     const property = await p.property.findFirst({
       where: { id: propertyId, company_id: user.companyId },
       include: {
@@ -673,14 +761,16 @@ export class PropertyService {
       if ((property as any).images.length === 0) {
         throw {
           status: 400,
-          message: 'Cannot approve: at least one photo uploaded by you (the assigned PM) is required before verification.',
+          message:
+            'Cannot approve: at least one photo uploaded by you (the assigned PM) is required before verification.',
         };
       }
 
       if (!(property as any).location_confirmed_by_pm) {
         throw {
           status: 400,
-          message: 'Cannot approve: PM must confirm location details on-site before verification (use the Confirm Location action).',
+          message:
+            'Cannot approve: PM must confirm location details on-site before verification (use the Confirm Location action).',
         };
       }
     }
@@ -728,11 +818,15 @@ export class PropertyService {
           });
           // Send web push to DM executives (outside transaction)
           for (const dm of dmExecutives) {
-            notifyEmployee(dm.id, {
-              type: 'SYSTEM_ALERT',
-              title: 'Property Ready for DM Polish',
-              message: `Property ${updated.property_code} (${updated.title}) is ready for your polish.`,
-            }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] DM polish notify:', err));
+            notifyEmployee(
+              dm.id,
+              {
+                type: 'SYSTEM_ALERT',
+                title: 'Property Ready for DM Polish',
+                message: `Property ${updated.property_code} (${updated.title}) is ready for your polish.`,
+              },
+              { skipDbNotification: true },
+            ).catch((err) => logger.error('[WebPush] DM polish notify:', err));
           }
         }
       }
@@ -747,15 +841,25 @@ export class PropertyService {
    * Requires PROPERTIES_VERIFY permission — same gate as the verify action itself.
    */
   static async confirmLocationByPM(user: TokenPayload, propertyId: number) {
-    const property = await p.property.findFirst({ where: { id: propertyId, company_id: user.companyId } });
+    const property = await p.property.findFirst({
+      where: { id: propertyId, company_id: user.companyId },
+    });
     if (!property) throw { status: 404, message: 'Property not found' };
 
     if (!can(user, Permissions.PROPERTIES_VERIFY, property)) {
-      throw { status: 403, message: 'Forbidden: Only the assigned PM (or MD/Admin) can confirm location for this property' };
+      throw {
+        status: 403,
+        message:
+          'Forbidden: Only the assigned PM (or MD/Admin) can confirm location for this property',
+      };
     }
 
     if (property.status !== 'PENDING_VERIFICATION') {
-      throw { status: 409, message: 'Location confirmation is only applicable while the property is in PENDING_VERIFICATION status' };
+      throw {
+        status: 409,
+        message:
+          'Location confirmation is only applicable while the property is in PENDING_VERIFICATION status',
+      };
     }
 
     return await p.property.update({
@@ -780,7 +884,9 @@ export class PropertyService {
    * company, since the schema has no "who rejected it" field to target one.
    */
   static async resubmitProperty(user: TokenPayload, propertyId: number, data: { notes?: string }) {
-    const property = await p.property.findFirst({ where: { id: propertyId, company_id: user.companyId } });
+    const property = await p.property.findFirst({
+      where: { id: propertyId, company_id: user.companyId },
+    });
     if (!property) throw { status: 404, message: 'Property not found' };
 
     if (!can(user, Permissions.PROPERTIES_VERIFY, property)) {
@@ -819,7 +925,11 @@ export class PropertyService {
       });
 
       const mdEmployees = await tx.employee.findMany({
-        where: { company_id: user.companyId, status: 'ACTIVE', roles: { some: { role: { name: Roles.MD } } } },
+        where: {
+          company_id: user.companyId,
+          status: 'ACTIVE',
+          roles: { some: { role: { name: Roles.MD } } },
+        },
         select: { id: true },
       });
       if (mdEmployees.length > 0) {
@@ -833,11 +943,15 @@ export class PropertyService {
         });
         // Web push to MDs (outside transaction)
         for (const md of mdEmployees) {
-          notifyEmployee(md.id, {
-            type: 'SYSTEM_ALERT',
-            title: 'Property Resubmitted for Review',
-            message: `Property ${property.property_code} (${property.title}) is back in the verification pipeline.`,
-          }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] Resubmit notify:', err));
+          notifyEmployee(
+            md.id,
+            {
+              type: 'SYSTEM_ALERT',
+              title: 'Property Resubmitted for Review',
+              message: `Property ${property.property_code} (${property.title}) is back in the verification pipeline.`,
+            },
+            { skipDbNotification: true },
+          ).catch((err) => logger.error('[WebPush] Resubmit notify:', err));
         }
       }
 
@@ -846,7 +960,9 @@ export class PropertyService {
   }
 
   static async dmPolishProperty(user: TokenPayload, propertyId: number, data: any) {
-    const property = await p.property.findFirst({ where: { id: propertyId, company_id: user.companyId } });
+    const property = await p.property.findFirst({
+      where: { id: propertyId, company_id: user.companyId },
+    });
     if (!property) throw { status: 404, message: 'Property not found' };
 
     if (!can(user, Permissions.PROPERTIES_DM_POLISH, property)) {
@@ -908,11 +1024,15 @@ export class PropertyService {
         });
         // Web push to MDs (outside transaction)
         for (const md of mdEmployees) {
-          notifyEmployee(md.id, {
-            type: 'SYSTEM_ALERT',
-            title: 'Property Ready for MD Approval',
-            message: `Property ${updated.property_code} (${updated.title}) is ready for your final approval.`,
-          }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] DM polish notify:', err));
+          notifyEmployee(
+            md.id,
+            {
+              type: 'SYSTEM_ALERT',
+              title: 'Property Ready for MD Approval',
+              message: `Property ${updated.property_code} (${updated.title}) is ready for your final approval.`,
+            },
+            { skipDbNotification: true },
+          ).catch((err) => logger.error('[WebPush] DM polish notify:', err));
         }
       }
 
@@ -925,8 +1045,14 @@ export class PropertyService {
    * directly to PENDING_MD_APPROVAL without assigning a DM Executive.
    * Requires PROPERTIES_DM_POLISH permission (same gate as the standard polish path).
    */
-  static async dmVerifyAsIsProperty(user: TokenPayload, propertyId: number, data: { notes?: string }) {
-    const property = await p.property.findFirst({ where: { id: propertyId, company_id: user.companyId } });
+  static async dmVerifyAsIsProperty(
+    user: TokenPayload,
+    propertyId: number,
+    data: { notes?: string },
+  ) {
+    const property = await p.property.findFirst({
+      where: { id: propertyId, company_id: user.companyId },
+    });
     if (!property) throw { status: 404, message: 'Property not found' };
 
     if (!can(user, Permissions.PROPERTIES_DM_POLISH, property)) {
@@ -985,11 +1111,15 @@ export class PropertyService {
         });
         // Web push to MDs (outside transaction)
         for (const md of mdEmployees) {
-          notifyEmployee(md.id, {
-            type: 'SYSTEM_ALERT',
-            title: 'Property Ready for MD Approval',
-            message: `Property ${updated.property_code} (${updated.title}) is ready for your final approval (verified as-is).`,
-          }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] DM verify-as-is notify:', err));
+          notifyEmployee(
+            md.id,
+            {
+              type: 'SYSTEM_ALERT',
+              title: 'Property Ready for MD Approval',
+              message: `Property ${updated.property_code} (${updated.title}) is ready for your final approval (verified as-is).`,
+            },
+            { skipDbNotification: true },
+          ).catch((err) => logger.error('[WebPush] DM verify-as-is notify:', err));
         }
       }
 
@@ -997,8 +1127,14 @@ export class PropertyService {
     });
   }
 
-  static async mdApproveProperty(user: TokenPayload, propertyId: number, data: { approved: boolean; comments?: string }) {
-    const property = await p.property.findFirst({ where: { id: propertyId, company_id: user.companyId } });
+  static async mdApproveProperty(
+    user: TokenPayload,
+    propertyId: number,
+    data: { approved: boolean; comments?: string },
+  ) {
+    const property = await p.property.findFirst({
+      where: { id: propertyId, company_id: user.companyId },
+    });
     if (!property) throw { status: 404, message: 'Property not found' };
 
     if (!can(user, Permissions.PROPERTIES_MD_APPROVE, property)) {
@@ -1019,113 +1155,129 @@ export class PropertyService {
 
     const nextStatus = data.approved ? 'LIVE' : 'REJECTED';
 
-    const result = await p.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
-      const updated = await tx.property.update({
-        where: { id: propertyId },
-        data: {
-          status: nextStatus,
-          md_approved_at: data.approved ? new Date() : null,
-          rejection_reason: data.approved ? null : data.comments,
-        },
-      });
-
-      await tx.propertyVerificationLog.create({
-        data: {
-          property_id: propertyId,
-          actor_id: user.employeeId || 1,
-          from_status: property.status,
-          to_status: nextStatus,
-          notes: `MD Decision: ${data.approved ? 'APPROVED & LIVE' : 'REJECTED'}.${data.comments ? ` Comments: ${data.comments}` : ''}`,
-        },
-      });
-
-      await tx.auditEvent.create({
-        data: {
-          actor_id: user.employeeId || 1,
-          action: data.approved ? 'PROPERTY_MD_APPROVED_LIVE' : 'PROPERTY_MD_REJECTED',
-          entity_type: 'PROPERTY',
-          entity_id: propertyId,
-          old_value: JSON.stringify({ status: property.status }),
-          new_value: JSON.stringify({ status: nextStatus, comments: data.comments }),
-        },
-      });
-
-      // Notify the assigned PM about the MD decision
-      if (updated.assigned_pm_id) {
-        await tx.notification.create({
+    const result = await p.$transaction(
+      async (tx: import('@prisma/client').Prisma.TransactionClient) => {
+        const updated = await tx.property.update({
+          where: { id: propertyId },
           data: {
-            employee_id: updated.assigned_pm_id,
-            type: data.approved ? 'PROPERTY_LIVE' : 'PROPERTY_REJECTED',
-            title: data.approved ? `Property ${updated.property_code} — Approved & Live`
-              : `Property ${updated.property_code} — Rejected`,
-            message: data.approved
-              ? `Property "${updated.title}" has been approved by MD and is now LIVE.`
-              : `Property "${updated.title}" was rejected by MD.${data.comments ? ` Reason: ${data.comments}` : ''}`,
+            status: nextStatus,
+            md_approved_at: data.approved ? new Date() : null,
+            rejection_reason: data.approved ? null : data.comments,
           },
         });
-        // Web push to assigned PM (outside transaction)
-        notifyEmployee(updated.assigned_pm_id, {
-          type: data.approved ? 'PROPERTY_LIVE' : 'PROPERTY_REJECTED',
-          title: data.approved ? `Property ${updated.property_code} — Approved & Live`
-            : `Property ${updated.property_code} — Rejected`,
-          message: data.approved
-            ? `Property "${updated.title}" has been approved by MD and is now LIVE.`
-            : `Property "${updated.title}" was rejected by MD.${data.comments ? ` Reason: ${data.comments}` : ''}`,
-        }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] MD approve PM notify:', err));
-      }
 
-      // Notify all MDs about the property approval/rejection
-      const mdEmployees = await tx.employee.findMany({
-        where: {
-          company_id: user.companyId,
-          status: 'ACTIVE',
-          roles: { some: { role: { name: 'MD' } } },
-        },
-        select: { id: true },
-      });
-      if (mdEmployees.length > 0 && mdEmployees[0].id !== user.employeeId) {
-        await tx.notification.createMany({
-          data: mdEmployees.map((md: any) => ({
-            employee_id: md.id,
-            type: 'SYSTEM_ALERT',
-            title: data.approved ? 'Property Approved & Live'
-              : 'Property Rejected',
-            message: data.approved
-              ? `Property ${updated.property_code} (${updated.title}) has been approved and is now LIVE.`
-              : `Property ${updated.property_code} (${updated.title}) was rejected.${data.comments ? ` Comments: ${data.comments}` : ''}`,
-          })),
+        await tx.propertyVerificationLog.create({
+          data: {
+            property_id: propertyId,
+            actor_id: user.employeeId || 1,
+            from_status: property.status,
+            to_status: nextStatus,
+            notes: `MD Decision: ${data.approved ? 'APPROVED & LIVE' : 'REJECTED'}.${data.comments ? ` Comments: ${data.comments}` : ''}`,
+          },
         });
-        // Web push to MDs (outside transaction)
-        for (const md of mdEmployees) {
-          notifyEmployee(md.id, {
-            type: 'SYSTEM_ALERT',
-            title: data.approved ? 'Property Approved & Live' : 'Property Rejected',
-            message: data.approved
-              ? `Property ${updated.property_code} (${updated.title}) is now LIVE.`
-              : `Property ${updated.property_code} (${updated.title}) was rejected.`,
-          }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] MD approve notify:', err));
+
+        await tx.auditEvent.create({
+          data: {
+            actor_id: user.employeeId || 1,
+            action: data.approved ? 'PROPERTY_MD_APPROVED_LIVE' : 'PROPERTY_MD_REJECTED',
+            entity_type: 'PROPERTY',
+            entity_id: propertyId,
+            old_value: JSON.stringify({ status: property.status }),
+            new_value: JSON.stringify({ status: nextStatus, comments: data.comments }),
+          },
+        });
+
+        // Notify the assigned PM about the MD decision
+        if (updated.assigned_pm_id) {
+          await tx.notification.create({
+            data: {
+              employee_id: updated.assigned_pm_id,
+              type: data.approved ? 'PROPERTY_LIVE' : 'PROPERTY_REJECTED',
+              title: data.approved
+                ? `Property ${updated.property_code} — Approved & Live`
+                : `Property ${updated.property_code} — Rejected`,
+              message: data.approved
+                ? `Property "${updated.title}" has been approved by MD and is now LIVE.`
+                : `Property "${updated.title}" was rejected by MD.${data.comments ? ` Reason: ${data.comments}` : ''}`,
+            },
+          });
+          // Web push to assigned PM (outside transaction)
+          notifyEmployee(
+            updated.assigned_pm_id,
+            {
+              type: data.approved ? 'PROPERTY_LIVE' : 'PROPERTY_REJECTED',
+              title: data.approved
+                ? `Property ${updated.property_code} — Approved & Live`
+                : `Property ${updated.property_code} — Rejected`,
+              message: data.approved
+                ? `Property "${updated.title}" has been approved by MD and is now LIVE.`
+                : `Property "${updated.title}" was rejected by MD.${data.comments ? ` Reason: ${data.comments}` : ''}`,
+            },
+            { skipDbNotification: true },
+          ).catch((err) => logger.error('[WebPush] MD approve PM notify:', err));
         }
-      }
 
-      // Web push to assigned PM (outside transaction)
-      if (updated.assigned_pm_id) {
-        notifyEmployee(updated.assigned_pm_id, {
-          type: data.approved ? 'PROPERTY_LIVE' : 'PROPERTY_REJECTED',
-          title: data.approved ? `Property ${updated.property_code} — Approved & Live`
-            : `Property ${updated.property_code} — Rejected`,
-          message: data.approved
-            ? `Property "${updated.title}" has been approved by MD and is now LIVE.`
-            : `Property "${updated.title}" was rejected by MD.${data.comments ? ` Reason: ${data.comments}` : ''}`,
-        }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] MD approve PM notify:', err));
-      }
+        // Notify all MDs about the property approval/rejection
+        const mdEmployees = await tx.employee.findMany({
+          where: {
+            company_id: user.companyId,
+            status: 'ACTIVE',
+            roles: { some: { role: { name: 'MD' } } },
+          },
+          select: { id: true },
+        });
+        if (mdEmployees.length > 0 && mdEmployees[0].id !== user.employeeId) {
+          await tx.notification.createMany({
+            data: mdEmployees.map((md: any) => ({
+              employee_id: md.id,
+              type: 'SYSTEM_ALERT',
+              title: data.approved ? 'Property Approved & Live' : 'Property Rejected',
+              message: data.approved
+                ? `Property ${updated.property_code} (${updated.title}) has been approved and is now LIVE.`
+                : `Property ${updated.property_code} (${updated.title}) was rejected.${data.comments ? ` Comments: ${data.comments}` : ''}`,
+            })),
+          });
+          // Web push to MDs (outside transaction)
+          for (const md of mdEmployees) {
+            notifyEmployee(
+              md.id,
+              {
+                type: 'SYSTEM_ALERT',
+                title: data.approved ? 'Property Approved & Live' : 'Property Rejected',
+                message: data.approved
+                  ? `Property ${updated.property_code} (${updated.title}) is now LIVE.`
+                  : `Property ${updated.property_code} (${updated.title}) was rejected.`,
+              },
+              { skipDbNotification: true },
+            ).catch((err) => logger.error('[WebPush] MD approve notify:', err));
+          }
+        }
 
-      return updated;
-    });
+        // Web push to assigned PM (outside transaction)
+        if (updated.assigned_pm_id) {
+          notifyEmployee(
+            updated.assigned_pm_id,
+            {
+              type: data.approved ? 'PROPERTY_LIVE' : 'PROPERTY_REJECTED',
+              title: data.approved
+                ? `Property ${updated.property_code} — Approved & Live`
+                : `Property ${updated.property_code} — Rejected`,
+              message: data.approved
+                ? `Property "${updated.title}" has been approved by MD and is now LIVE.`
+                : `Property "${updated.title}" was rejected by MD.${data.comments ? ` Reason: ${data.comments}` : ''}`,
+            },
+            { skipDbNotification: true },
+          ).catch((err) => logger.error('[WebPush] MD approve PM notify:', err));
+        }
+
+        return updated;
+      },
+    );
 
     if (result.status === 'LIVE') {
       import('./lead.service').then(({ LeadService }) => {
-        LeadService.triggerLeadRecoveryForProperty(result.id).catch(err => 
-          logger.error(`Error triggering lead recovery for property ${result.id}:`, err)
+        LeadService.triggerLeadRecoveryForProperty(result.id).catch((err) =>
+          logger.error(`Error triggering lead recovery for property ${result.id}:`, err),
         );
       });
     }
@@ -1137,8 +1289,15 @@ export class PropertyService {
    * final selling price that wins over the computed one (e.g. a negotiated
    * one-off), with a required reason and a full audit trail. Clearing the
    * override (null) reverts to whatever the engine computes. */
-  static async overridePrice(user: TokenPayload, propertyId: number, overridePrice: number | null, reason?: string | null) {
-    const property = await p.property.findFirst({ where: { id: propertyId, company_id: user.companyId } });
+  static async overridePrice(
+    user: TokenPayload,
+    propertyId: number,
+    overridePrice: number | null,
+    reason?: string | null,
+  ) {
+    const property = await p.property.findFirst({
+      where: { id: propertyId, company_id: user.companyId },
+    });
     if (!property) throw { status: 404, message: 'Property not found or unauthorized' };
     if (!can(user, Permissions.PROPERTIES_UPDATE, property)) {
       throw { status: 403, message: 'Forbidden: Missing properties.update permission' };
@@ -1149,7 +1308,7 @@ export class PropertyService {
       where: { id: propertyId },
       data: {
         override_price: overridePrice,
-        override_reason: overridePrice != null ? reason ?? null : null,
+        override_reason: overridePrice != null ? (reason ?? null) : null,
         overridden_by_id: overridePrice != null ? user.employeeId : null,
         overridden_at: overridePrice != null ? new Date() : null,
       },
@@ -1172,7 +1331,12 @@ export class PropertyService {
     return priced;
   }
 
-  static async togglePublication(user: TokenPayload, propertyId: number, companyId: number, isPublished: boolean) {
+  static async togglePublication(
+    user: TokenPayload,
+    propertyId: number,
+    companyId: number,
+    isPublished: boolean,
+  ) {
     if (!can(user, Permissions.PROPERTIES_UPDATE)) {
       throw { status: 403, message: 'Forbidden: Missing properties.update permission' };
     }
@@ -1230,7 +1394,12 @@ export class PropertyService {
     });
   }
 
-  static async reassignProperty(user: TokenPayload, propertyId: number, newPmId: number, reason: string) {
+  static async reassignProperty(
+    user: TokenPayload,
+    propertyId: number,
+    newPmId: number,
+    reason: string,
+  ) {
     if (!reason || reason.trim() === '') {
       throw { status: 400, message: 'Reassignment reason is mandatory' };
     }
@@ -1250,7 +1419,7 @@ export class PropertyService {
     // New PM must belong to the PROPERTY's own company, not necessarily the
     // acting user's — same reasoning as reassignProject.
     const newPm = await p.employee.findFirst({
-      where: { id: newPmId, company_id: property.company_id, status: 'ACTIVE' }
+      where: { id: newPmId, company_id: property.company_id, status: 'ACTIVE' },
     });
     if (!newPm) throw { status: 400, message: 'New assignee not found or unauthorized' };
 
@@ -1259,7 +1428,7 @@ export class PropertyService {
     return await p.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
       const updated = await tx.property.update({
         where: { id: propertyId },
-        data: { assigned_pm_id: newPmId }
+        data: { assigned_pm_id: newPmId },
       });
 
       await tx.auditEvent.create({
@@ -1270,12 +1439,11 @@ export class PropertyService {
           entity_id: propertyId,
           old_value: oldPmId ? oldPmId.toString() : 'UNASSIGNED',
           new_value: newPmId.toString(),
-          reason: reason
-        }
+          reason: reason,
+        },
       });
 
       return updated;
     });
   }
 }
-

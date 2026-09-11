@@ -7,14 +7,56 @@ import { z } from 'zod';
 // unit always inherits its project's address. See services/projectUnit.service.ts.
 
 export const UnitTypeEnum = z.enum(['PLOT', 'FLAT', 'VILLA', 'HOUSE', 'COMMERCIAL', 'OTHER']);
-export const AreaUnitEnum = z.enum(['SQFT', 'SQYD', 'SQM', 'ACRE', 'GUNTA', 'CENT', 'ANKANAM', 'HECTARE']);
-export const PriceBasisEnum = z.enum(['CARPET', 'BUILT_UP', 'SUPER_BUILT_UP', 'PLOT_AREA', 'LUMPSUM']);
-export const SalesStatusEnum = z.enum(['AVAILABLE', 'HOLD', 'RESERVED', 'BOOKED', 'SOLD', 'BLOCKED', 'UNAVAILABLE']);
-export const ChargeCalcMethodEnum = z.enum(['FIXED', 'PER_SQFT', 'PER_SQYD', 'PERCENT_OF_BASE', 'QTY_X_RATE']);
+export const AreaUnitEnum = z.enum([
+  'SQFT',
+  'SQYD',
+  'SQM',
+  'ACRE',
+  'GUNTA',
+  'CENT',
+  'ANKANAM',
+  'HECTARE',
+]);
+export const PriceBasisEnum = z.enum([
+  'CARPET',
+  'BUILT_UP',
+  'SUPER_BUILT_UP',
+  'PLOT_AREA',
+  'LUMPSUM',
+]);
+export const SalesStatusEnum = z.enum([
+  'AVAILABLE',
+  'HOLD',
+  'RESERVED',
+  'BOOKED',
+  'SOLD',
+  'BLOCKED',
+  'UNAVAILABLE',
+]);
+export const ChargeCalcMethodEnum = z.enum([
+  'FIXED',
+  'PER_SQFT',
+  'PER_SQYD',
+  'PERCENT_OF_BASE',
+  'QTY_X_RATE',
+]);
 export const PricingRuleKindEnum = z.enum(['BASE_RATE', 'PREMIUM', 'CHARGE', 'DISCOUNT', 'TAX']);
 export const ChargeCategoryEnum = z.enum([
-  'FACING', 'FLOOR', 'CORNER', 'ROAD', 'PARK', 'VIEW', 'BHK', 'AMENITY',
-  'PARKING', 'INFRA', 'MAINTENANCE', 'LEGAL', 'CLUB', 'TAX', 'OTHER',
+  'FACING',
+  'FLOOR',
+  'CORNER',
+  'ROAD',
+  'PARK',
+  'VIEW',
+  'BHK',
+  'AMENITY',
+  'PARKING',
+  'INFRA',
+  'MAINTENANCE',
+  'LEGAL',
+  'CLUB',
+  'TAX',
+  'OTHER',
 ]);
 
 export const ProjectUnitCreateSchema = z.object({
@@ -78,7 +120,13 @@ export const ProjectUnitCreateSchema = z.object({
   discount_amount: z.number().optional().nullable(),
   discount_reason: z.string().optional().nullable(),
   manual_lines: z
-    .array(z.object({ label: z.string().min(1), category: ChargeCategoryEnum.optional(), amount: z.number() }))
+    .array(
+      z.object({
+        label: z.string().min(1),
+        category: ChargeCategoryEnum.optional(),
+        amount: z.number(),
+      }),
+    )
     .optional(),
   selected_optional_rule_ids: z.array(z.number().int()).optional(),
 
@@ -106,13 +154,19 @@ export const ChangeUnitStatusSchema = z.object({
   reason: z.string().optional(),
 });
 
-export const OverrideUnitPriceSchema = z.object({
-  override_price: z.number().positive().nullable(),
-  override_reason: z.string().min(3, 'A reason is required when overriding the calculated price').optional().nullable(),
-}).refine((data) => data.override_price === null || !!data.override_reason, {
-  message: 'A reason is required when setting an override price',
-  path: ['override_reason'],
-});
+export const OverrideUnitPriceSchema = z
+  .object({
+    override_price: z.number().positive().nullable(),
+    override_reason: z
+      .string()
+      .min(3, 'A reason is required when overriding the calculated price')
+      .optional()
+      .nullable(),
+  })
+  .refine((data) => data.override_price === null || !!data.override_reason, {
+    message: 'A reason is required when setting an override price',
+    path: ['override_reason'],
+  });
 
 // --- Pricing rules ---------------------------------------------------------
 

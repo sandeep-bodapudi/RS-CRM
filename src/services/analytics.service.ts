@@ -33,10 +33,14 @@ import { AttendanceStatusType } from '../shared';
 import { calculatePerformanceScore, roundPerformanceScore } from './performance-metric';
 import { IntegrationService } from './integration.service';
 import { OpportunityService } from './opportunity.service';
-import { getISTComponents, getISTMidnightInstant, getISTMonthRange, calculateAttendancePoints } from '../utils/time';
+import {
+  getISTComponents,
+  getISTMidnightInstant,
+  getISTMonthRange,
+  calculateAttendancePoints,
+} from '../utils/time';
 import { TokenPayload } from '../utils/jwt';
 import { IntegrationMetricsResponse } from '../shared';
-
 
 const p = prisma;
 
@@ -105,7 +109,7 @@ export interface ExecutiveMetricsResponse {
   totalEmployeesCount: number;
   attendanceExceptionsCount: number;
   pendingLeaveRequestsCount: number;
-  
+
   // Pipeline metrics
   newLeadsCount: number;
   contactedLeadsCount: number;
@@ -147,7 +151,9 @@ export class AnalyticsService {
    * placeholder numbers because this aggregation didn't exist yet — the
    * underlying data was already there, just never queried.
    */
-  private static async dropOffByStage(companyId: number): Promise<{ stage: string; dropoffs: number }[]> {
+  private static async dropOffByStage(
+    companyId: number,
+  ): Promise<{ stage: string; dropoffs: number }[]> {
     const groups = await p.lead.groupBy({
       by: ['exited_from_status'],
       where: { company_id: companyId, status: 'DROPPED', exited_from_status: { not: null } },
@@ -248,7 +254,7 @@ export class AnalyticsService {
    *   (local midnight) window as md.ts executive-metrics.
    */
   private static async attendanceExceptionsToday(
-    companyId: number
+    companyId: number,
   ): Promise<{ exceptions: number; active: number }> {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
@@ -305,17 +311,32 @@ export class AnalyticsService {
 
     const scores = await Promise.all(
       employees.map(async (emp: any) => {
-        const [tasksDone, tasksOverdue, reportsDone, belowTargetCount, targetExceededEvents, attendanceLogs, uninformedAbsent, propertyBookingContributions] =
-          await Promise.all([
-            p.task.count({ where: { assignee_id: emp.id, status: 'COMPLETED' } }),
-            p.task.count({ where: { assignee_id: emp.id, status: 'OVERDUE' } }),
-            p.dailyReport.count({ where: { employee_id: emp.id } }),
-            p.auditEvent.count({ where: { actor_id: emp.id, action: 'DAILY_REPORT_BELOW_TARGET' } }),
-            p.auditEvent.count({ where: { actor_id: emp.id, action: 'DAILY_REPORT_TARGET_EXCEEDED' } }),
-            p.attendanceLog.findMany({ where: { employee_id: emp.id }, select: { status: true, check_in_at: true } }),
-            p.auditEvent.count({ where: { actor_id: emp.id, action: 'UNINFORMED_ABSENT' } }),
-            p.auditEvent.count({ where: { actor_id: emp.id, action: 'PROPERTY_BOOKED_CONTRIBUTION' } }),
-          ]);
+        const [
+          tasksDone,
+          tasksOverdue,
+          reportsDone,
+          belowTargetCount,
+          targetExceededEvents,
+          attendanceLogs,
+          uninformedAbsent,
+          propertyBookingContributions,
+        ] = await Promise.all([
+          p.task.count({ where: { assignee_id: emp.id, status: 'COMPLETED' } }),
+          p.task.count({ where: { assignee_id: emp.id, status: 'OVERDUE' } }),
+          p.dailyReport.count({ where: { employee_id: emp.id } }),
+          p.auditEvent.count({ where: { actor_id: emp.id, action: 'DAILY_REPORT_BELOW_TARGET' } }),
+          p.auditEvent.count({
+            where: { actor_id: emp.id, action: 'DAILY_REPORT_TARGET_EXCEEDED' },
+          }),
+          p.attendanceLog.findMany({
+            where: { employee_id: emp.id },
+            select: { status: true, check_in_at: true },
+          }),
+          p.auditEvent.count({ where: { actor_id: emp.id, action: 'UNINFORMED_ABSENT' } }),
+          p.auditEvent.count({
+            where: { actor_id: emp.id, action: 'PROPERTY_BOOKED_CONTRIBUTION' },
+          }),
+        ]);
 
         let presentCount = 0;
         let lateCount = 0;
@@ -329,7 +350,11 @@ export class AnalyticsService {
           // lateCount/halfDayCount below; adding calculateAttendancePoints's
           // -1.0 for those here too would double-count the penalty.
           if (log.status === 'PRESENT') {
-            attendanceBoost += calculateAttendancePoints(log.status as AttendanceStatusType, log.check_in_at, emp.employment_type || 'FULL_TIME');
+            attendanceBoost += calculateAttendancePoints(
+              log.status as AttendanceStatusType,
+              log.check_in_at,
+              emp.employment_type || 'FULL_TIME',
+            );
           }
         }
 
@@ -346,7 +371,7 @@ export class AnalyticsService {
           lateCount,
           halfDayCount,
         }).score;
-      })
+      }),
     );
 
     const totalEmployees = scores.length;
@@ -368,7 +393,7 @@ export class AnalyticsService {
       where: {
         status: 'PENDING',
         employee_id: { in: employees.map((e: any) => e.id) },
-      }
+      },
     });
     return res;
   }
@@ -376,25 +401,36 @@ export class AnalyticsService {
   // ---- public: md.ts executive-metrics (delegated, contract-preserving) ----
   static async getExecutiveMetrics(companyId: number): Promise<ExecutiveMetricsResponse> {
     const [
-      totalLeadsCount, wonLeads, siteVisitsScheduled, property, attendance, pendingProposals,
-      newLeadsCount, contactedLeadsCount, qualifiedLeadsCount, siteVisitsCompletedCount, bookingInitiatedCount, activeCustomersCount,
-      salesValue, duePayments
+      totalLeadsCount,
+      wonLeads,
+      siteVisitsScheduled,
+      property,
+      attendance,
+      pendingProposals,
+      newLeadsCount,
+      contactedLeadsCount,
+      qualifiedLeadsCount,
+      siteVisitsCompletedCount,
+      bookingInitiatedCount,
+      activeCustomersCount,
+      salesValue,
+      duePayments,
     ] = await Promise.all([
-        this.countLeads(companyId),
-        this.countWonLeads(companyId),
-        this.countSiteVisitsScheduled(companyId),
-        this.propertyDistribution(companyId),
-        this.attendanceExceptionsToday(companyId),
-        this.countPendingProposals(companyId),
-        this.countLeadsByStatus(companyId, 'NEW'),
-        this.countLeadsByStatus(companyId, 'CONTACTED'),
-        this.countLeadsByStatus(companyId, 'QUALIFIED'),
-        this.countLeadsByStatus(companyId, 'SITE_VISIT_COMPLETED'),
-        this.countLeadsByStatus(companyId, 'BOOKING_INITIATED'),
-        this.countActiveCustomers(companyId),
-        this.bookingSalesValue(companyId),
-        this.duePayments(companyId),
-      ]);
+      this.countLeads(companyId),
+      this.countWonLeads(companyId),
+      this.countSiteVisitsScheduled(companyId),
+      this.propertyDistribution(companyId),
+      this.attendanceExceptionsToday(companyId),
+      this.countPendingProposals(companyId),
+      this.countLeadsByStatus(companyId, 'NEW'),
+      this.countLeadsByStatus(companyId, 'CONTACTED'),
+      this.countLeadsByStatus(companyId, 'QUALIFIED'),
+      this.countLeadsByStatus(companyId, 'SITE_VISIT_COMPLETED'),
+      this.countLeadsByStatus(companyId, 'BOOKING_INITIATED'),
+      this.countActiveCustomers(companyId),
+      this.bookingSalesValue(companyId),
+      this.duePayments(companyId),
+    ]);
 
     return {
       totalLeadsCount,
@@ -415,7 +451,8 @@ export class AnalyticsService {
       activeCustomersCount,
       salesValue,
       duePayments,
-      leadConversionRate: totalLeadsCount > 0 ? Math.round((wonLeads / totalLeadsCount) * 1000) / 10 : 0,
+      leadConversionRate:
+        totalLeadsCount > 0 ? Math.round((wonLeads / totalLeadsCount) * 1000) / 10 : 0,
     };
   }
 
@@ -440,7 +477,13 @@ export class AnalyticsService {
         where: { company_id: companyId },
         orderBy: { created_at: 'desc' },
         take: perSourceLimit,
-        select: { id: true, booking_code: true, agreed_price: true, status: true, created_at: true },
+        select: {
+          id: true,
+          booking_code: true,
+          agreed_price: true,
+          status: true,
+          created_at: true,
+        },
       }),
       p.siteVisitBooking.findMany({
         where: { status: 'COMPLETED', lead: { company_id: companyId } },
@@ -473,14 +516,16 @@ export class AnalyticsService {
         timestamp: b.created_at,
         link: '/bookings',
       })),
-      ...completedVisits.filter((v) => v.completed_at).map((v) => ({
-        id: `visit-${v.id}`,
-        type: 'SITE_VISIT_COMPLETED' as const,
-        title: `Site visit completed: ${v.booking_code}`,
-        subtitle: null as string | null,
-        timestamp: v.completed_at as Date,
-        link: '/site-visits',
-      })),
+      ...completedVisits
+        .filter((v) => v.completed_at)
+        .map((v) => ({
+          id: `visit-${v.id}`,
+          type: 'SITE_VISIT_COMPLETED' as const,
+          title: `Site visit completed: ${v.booking_code}`,
+          subtitle: null as string | null,
+          timestamp: v.completed_at as Date,
+          link: '/site-visits',
+        })),
       ...complaints.map((c) => ({
         id: `complaint-${c.id}`,
         type: 'COMPLAINT_FILED' as const,
@@ -525,9 +570,7 @@ export class AnalyticsService {
     // For management roles (MD/Admin) OpportunityPolicy.canList scopes to the
     // user's whole company; the authenticated user is already ADMIN_SYSTEM_METRICS
     // gated, so this never crosses tenant boundaries.
-    const [pipelineMetrics] = await Promise.all([
-      OpportunityService.getPipelineMetrics(user),
-    ]);
+    const [pipelineMetrics] = await Promise.all([OpportunityService.getPipelineMetrics(user)]);
 
     return {
       companyId,
@@ -556,7 +599,7 @@ export class AnalyticsService {
         created_by_id: true,
         last_contacted_at: true,
         created_at: true,
-      }
+      },
     });
 
     const kpis = {
@@ -567,18 +610,35 @@ export class AnalyticsService {
       qualified: allLeads.filter((l: any) => l.status === 'QUALIFIED').length,
       siteVisits: allLeads.filter((l: any) => l.status === 'SITE_VISIT_SCHEDULED').length,
       won: allLeads.filter((l: any) => l.status === 'BOOKED').length,
-      conversionRate: allLeads.length > 0 ? (allLeads.filter((l: any) => l.status === 'BOOKED').length / allLeads.length) * 100 : 0
+      conversionRate:
+        allLeads.length > 0
+          ? (allLeads.filter((l: any) => l.status === 'BOOKED').length / allLeads.length) * 100
+          : 0,
     };
 
     const pipelineCounts = allLeads.reduce((acc: any, lead: any) => {
       acc[lead.status] = (acc[lead.status] || 0) + 1;
       return acc;
     }, {});
-    
-    const statuses = ['NEW', 'ASSIGNED', 'CONTACTED', 'QUALIFIED', 'DEMO_SCHEDULED', 'DEMO_COMPLETED', 'SITE_VISIT_SCHEDULED', 'SITE_VISIT_COMPLETED', 'NEGOTIATION', 'BOOKING_INITIATED', 'BOOKED', 'DROPPED', 'RECOVERED_TO_POOL'];
-    const pipeline = statuses.map(status => ({
+
+    const statuses = [
+      'NEW',
+      'ASSIGNED',
+      'CONTACTED',
+      'QUALIFIED',
+      'DEMO_SCHEDULED',
+      'DEMO_COMPLETED',
+      'SITE_VISIT_SCHEDULED',
+      'SITE_VISIT_COMPLETED',
+      'NEGOTIATION',
+      'BOOKING_INITIATED',
+      'BOOKED',
+      'DROPPED',
+      'RECOVERED_TO_POOL',
+    ];
+    const pipeline = statuses.map((status) => ({
       status,
-      count: pipelineCounts[status] || 0
+      count: pipelineCounts[status] || 0,
     }));
 
     const stalledLeadsQuery = await p.lead.findMany({
@@ -587,50 +647,50 @@ export class AnalyticsService {
         status: { notIn: ['BOOKED', 'DROPPED'] },
         OR: [
           { last_contacted_at: { lt: sevenDaysAgo } },
-          { last_contacted_at: null, created_at: { lt: sevenDaysAgo } }
-        ]
+          { last_contacted_at: null, created_at: { lt: sevenDaysAgo } },
+        ],
       },
       include: {
-        assigned_to: { select: { id: true, full_name: true, employee_code: true } }
+        assigned_to: { select: { id: true, full_name: true, employee_code: true } },
       },
       orderBy: { last_contacted_at: 'asc' },
-      take: 20
+      take: 20,
     });
 
     const recoveredUnassignedLeadsQuery = await p.lead.findMany({
       where: {
         company_id: companyId,
         status: 'RECOVERED_TO_POOL',
-        assigned_to_id: null
+        assigned_to_id: null,
       },
       include: {
-        assigned_to: { select: { id: true, full_name: true, employee_code: true } }
+        assigned_to: { select: { id: true, full_name: true, employee_code: true } },
       },
       orderBy: { created_at: 'desc' },
-      take: 20
+      take: 20,
     });
 
     const overdueTasksQuery = await p.task.findMany({
       where: {
         status: 'PENDING',
         target_date: { lt: today },
-        assignee: { company_id: companyId }
+        assignee: { company_id: companyId },
       },
       include: {
         assignee: { select: { id: true, full_name: true, employee_code: true } },
         lead: { select: { id: true, customer_name: true } },
-        opportunity: { select: { id: true, opportunity_code: true } }
+        opportunity: { select: { id: true, opportunity_code: true } },
       },
       orderBy: { target_date: 'asc' },
-      take: 20
+      take: 20,
     });
 
     const siteVisitsQuery = await p.siteVisitBooking.groupBy({
       by: ['status'],
       where: { lead: { company_id: companyId } },
-      _count: { id: true }
+      _count: { id: true },
     });
-    
+
     const siteVisits = siteVisitsQuery.reduce((acc: any, item: any) => {
       acc[item.status] = item._count.id;
       return acc;
@@ -646,7 +706,7 @@ export class AnalyticsService {
 
     const employees = await p.employee.findMany({
       where: { id: { in: Array.from(employeeIds) }, company_id: companyId },
-      select: { id: true, full_name: true, employee_code: true }
+      select: { id: true, full_name: true, employee_code: true },
     });
 
     const teamPerformance: any[] = [];
@@ -662,7 +722,8 @@ export class AnalyticsService {
           qualified: assigned.filter((l: any) => l.status === 'QUALIFIED').length,
           siteVisits: assigned.filter((l: any) => l.status === 'SITE_VISIT_SCHEDULED').length,
           won: assigned.filter((l: any) => l.status === 'BOOKED').length,
-          conversionRate: (assigned.filter((l: any) => l.status === 'BOOKED').length / assigned.length) * 100
+          conversionRate:
+            (assigned.filter((l: any) => l.status === 'BOOKED').length / assigned.length) * 100,
         });
       }
 
@@ -674,7 +735,8 @@ export class AnalyticsService {
           qualified: introduced.filter((l: any) => l.status === 'QUALIFIED').length,
           siteVisits: introduced.filter((l: any) => l.status === 'SITE_VISIT_SCHEDULED').length,
           won: introduced.filter((l: any) => l.status === 'BOOKED').length,
-          conversionRate: (introduced.filter((l: any) => l.status === 'BOOKED').length / introduced.length) * 100
+          conversionRate:
+            (introduced.filter((l: any) => l.status === 'BOOKED').length / introduced.length) * 100,
         });
       }
     });
@@ -691,7 +753,7 @@ export class AnalyticsService {
       recoveredUnassignedLeads: recoveredUnassignedLeadsQuery,
       overdueTasks: overdueTasksQuery,
       siteVisits,
-      targets
+      targets,
     };
   }
 
@@ -706,18 +768,27 @@ export class AnalyticsService {
   static async getHrOverview(companyId: number) {
     const now = new Date();
     const { dateString: todayStr } = getISTComponents(now);
-    const { dateString: yesterdayStr } = getISTComponents(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+    const { dateString: yesterdayStr } = getISTComponents(
+      new Date(now.getTime() - 24 * 60 * 60 * 1000),
+    );
 
     const [year, month] = todayStr.split('-').map(Number);
     const { startOfMonth, endOfMonth } = getISTMonthRange(year, month);
-    const { dateString: prevMonthAnchorStr } = getISTComponents(new Date(startOfMonth.getTime() - 1));
+    const { dateString: prevMonthAnchorStr } = getISTComponents(
+      new Date(startOfMonth.getTime() - 1),
+    );
     const [prevYear, prevMonth] = prevMonthAnchorStr.split('-').map(Number);
-    const { startOfMonth: startOfPrevMonth, endOfMonth: endOfPrevMonth } = getISTMonthRange(prevYear, prevMonth);
+    const { startOfMonth: startOfPrevMonth, endOfMonth: endOfPrevMonth } = getISTMonthRange(
+      prevYear,
+      prevMonth,
+    );
 
     // AttendanceProposal has no Prisma relation to Employee (just a raw
     // employee_id column), so company scoping has to go through an explicit
     // employee-id lookup rather than a nested relation filter.
-    const companyEmployeeIds = (await p.employee.findMany({ where: { company_id: companyId }, select: { id: true } })).map((e) => e.id);
+    const companyEmployeeIds = (
+      await p.employee.findMany({ where: { company_id: companyId }, select: { id: true } })
+    ).map((e) => e.id);
 
     const [
       headcount,
@@ -728,19 +799,42 @@ export class AnalyticsService {
       leadsLastMonth,
     ] = await Promise.all([
       p.employee.count({ where: { company_id: companyId, status: 'ACTIVE' } }),
-      p.employee.count({ where: { company_id: companyId, created_at: { gte: startOfMonth, lte: endOfMonth } } }),
-      p.attendanceProposal.count({
-        where: { type: 'LEAVE', status: 'APPROVED', target_date: getISTMidnightInstant(todayStr), employee_id: { in: companyEmployeeIds } },
+      p.employee.count({
+        where: { company_id: companyId, created_at: { gte: startOfMonth, lte: endOfMonth } },
       }),
       p.attendanceProposal.count({
-        where: { type: 'LEAVE', status: 'APPROVED', target_date: getISTMidnightInstant(yesterdayStr), employee_id: { in: companyEmployeeIds } },
+        where: {
+          type: 'LEAVE',
+          status: 'APPROVED',
+          target_date: getISTMidnightInstant(todayStr),
+          employee_id: { in: companyEmployeeIds },
+        },
       }),
-      p.lead.findMany({ where: { company_id: companyId, created_at: { gte: startOfMonth, lte: endOfMonth } }, select: { status: true } }),
-      p.lead.findMany({ where: { company_id: companyId, created_at: { gte: startOfPrevMonth, lte: endOfPrevMonth } }, select: { status: true } }),
+      p.attendanceProposal.count({
+        where: {
+          type: 'LEAVE',
+          status: 'APPROVED',
+          target_date: getISTMidnightInstant(yesterdayStr),
+          employee_id: { in: companyEmployeeIds },
+        },
+      }),
+      p.lead.findMany({
+        where: { company_id: companyId, created_at: { gte: startOfMonth, lte: endOfMonth } },
+        select: { status: true },
+      }),
+      p.lead.findMany({
+        where: {
+          company_id: companyId,
+          created_at: { gte: startOfPrevMonth, lte: endOfPrevMonth },
+        },
+        select: { status: true },
+      }),
     ]);
 
     const conversionRate = (leads: { status: string }[]) =>
-      leads.length > 0 ? (leads.filter((l) => l.status === 'BOOKED').length / leads.length) * 100 : 0;
+      leads.length > 0
+        ? (leads.filter((l) => l.status === 'BOOKED').length / leads.length) * 100
+        : 0;
 
     return {
       headcount,

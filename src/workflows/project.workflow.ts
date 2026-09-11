@@ -22,7 +22,9 @@ import { DomainWorkflow, WorkflowTransitionRequest, WorkflowTransitionResult } f
 export type ProjectAction = 'UNDER_CONSTRUCTION' | 'COMPLETED' | 'CANCELLED';
 
 export class ProjectWorkflow implements DomainWorkflow {
-  private static readonly validTransitions: Partial<Record<string, Partial<Record<ProjectAction, string>>>> = {
+  private static readonly validTransitions: Partial<
+    Record<string, Partial<Record<ProjectAction, string>>>
+  > = {
     PLANNING: {
       UNDER_CONSTRUCTION: 'UNDER_CONSTRUCTION',
       CANCELLED: 'CANCELLED',

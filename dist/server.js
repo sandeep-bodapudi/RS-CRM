@@ -29,6 +29,7 @@ const kiosk_auth_1 = __importDefault(require("./routes/kiosk-auth"));
 const webauthn_1 = __importDefault(require("./routes/webauthn"));
 const feedback_1 = __importDefault(require("./routes/feedback"));
 const siteVisits_1 = __importDefault(require("./routes/siteVisits"));
+const demos_1 = __importDefault(require("./routes/demos"));
 const customers_1 = __importDefault(require("./routes/customers"));
 const public_1 = __importDefault(require("./routes/public"));
 const publicWebsite_1 = __importDefault(require("./routes/publicWebsite"));
@@ -179,6 +180,7 @@ if (mountInternal) {
     app.use('/api/v1/installments', installment_routes_1.default);
     app.use('/api/v1/projects', projects_1.default);
     app.use('/api/v1/site-visits', siteVisits_1.default);
+    app.use('/api/v1/demos', demos_1.default);
     app.use('/api/v1/admin', admin_1.default);
     app.use('/api/v1/expense-refunds', expenseRefunds_1.default);
     app.use('/api/v1/push', pushSubscriptions_1.default);

@@ -6,6 +6,8 @@ const shared_1 = require("../../shared");
 const errors_1 = require("./errors");
 const shared_2 = require("./shared");
 const distributionService_1 = require("../../utils/distributionService");
+const notifyEmployee_1 = require("../../utils/notifyEmployee");
+const logger_1 = require("../../utils/logger");
 const p = prisma_1.prisma;
 async function createLead(user, dto, opts) {
     // Public-website submissions have no real employee behind them. `user`
@@ -77,6 +79,12 @@ async function createLead(user, dto, opts) {
                         message: `Your active lead ${existingLead.lead_code} (${existingLead.customer_name}) submitted a new inquiry via ${sourceName}.`
                     }
                 });
+                // Web push to assigned employee (outside transaction)
+                (0, notifyEmployee_1.notifyEmployee)(existingLead.assigned_to_id, {
+                    type: 'SYSTEM_ALERT',
+                    title: 'Active Lead Re-Inquiry',
+                    message: `Your lead ${existingLead.lead_code} (${existingLead.customer_name}) submitted a new inquiry.`,
+                }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] Lead re-inquiry notify:', err));
             }
             return { lead: existingLead };
         }
@@ -257,6 +265,12 @@ async function createLead(user, dto, opts) {
                     message: `New Lead ${lead.customer_name} (${lead.phone}) has been assigned to you.`,
                 },
             });
+            // Web push to auto-assigned employee (outside transaction)
+            (0, notifyEmployee_1.notifyEmployee)(bestAssignee.employeeId, {
+                type: 'TARGET_ASSIGNED',
+                title: 'New Lead Auto-Assigned',
+                message: `New Lead ${lead.customer_name} (${lead.phone}) has been assigned to you.`,
+            }, { skipDbNotification: true }).catch(err => logger_1.logger.error('[WebPush] Lead auto-assign notify:', err));
         }
         return { lead, assignedTo: bestAssignee };
     });

@@ -52,12 +52,15 @@ async function buildCache(): Promise<Map<string, Set<string>> | null> {
  * Returns true if granted via DB, false if explicitly checked and not found,
  * or null if DB data is unavailable (fall back to token-based check).
  */
-export async function checkDbPermission(user: TokenPayload, action: string): Promise<boolean | null> {
+export async function checkDbPermission(
+  user: TokenPayload,
+  action: string,
+): Promise<boolean | null> {
   if (!user.roles || user.roles.length === 0) return null;
 
   // Refresh cache if stale or empty
   const now = Date.now();
-  if (!_overrideCache || (now - _overrideCacheAt >= _overrideTtlMs)) {
+  if (!_overrideCache || now - _overrideCacheAt >= _overrideTtlMs) {
     _overrideCache = await buildCache();
     _overrideCacheAt = now;
   }

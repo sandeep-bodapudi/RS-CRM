@@ -35,7 +35,7 @@ export class PropertyWorkflow implements DomainWorkflow {
     if (!allowedActions.includes(action as PropertyAction)) {
       return {
         allowed: false,
-        reason: `Invalid workflow transition: Cannot perform ${action} from state ${currentState}`
+        reason: `Invalid workflow transition: Cannot perform ${action} from state ${currentState}`,
       };
     }
 
@@ -44,7 +44,8 @@ export class PropertyWorkflow implements DomainWorkflow {
     if (action === 'VERIFY') nextState = PropertyStatus.PENDING_DM_POLISH;
     else if (action === 'DM_POLISH') nextState = PropertyStatus.PENDING_MD_APPROVAL;
     else if (action === 'DM_VERIFY_AS_IS') nextState = PropertyStatus.PENDING_MD_APPROVAL;
-    else if (action === 'MD_APPROVE') nextState = PropertyStatus.LIVE; // Or REJECTED, handled dynamically by service based on 'approved' flag
+    else if (action === 'MD_APPROVE')
+      nextState = PropertyStatus.LIVE; // Or REJECTED, handled dynamically by service based on 'approved' flag
     else if (action === 'RESUBMIT') nextState = PropertyStatus.PENDING_VERIFICATION;
 
     return { allowed: true, nextState };
@@ -56,9 +57,11 @@ export class PropertyWorkflow implements DomainWorkflow {
    */
   static validateTransition(currentStatus: string, action: PropertyAction): void {
     const allowedActions = this.validTransitions[currentStatus] || [];
-    
+
     if (!allowedActions.includes(action)) {
-      throw new Error(`Invalid workflow transition: Cannot perform ${action} from state ${currentStatus}`);
+      throw new Error(
+        `Invalid workflow transition: Cannot perform ${action} from state ${currentStatus}`,
+      );
     }
   }
 }
