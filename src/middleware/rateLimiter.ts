@@ -7,8 +7,8 @@ const skipRateLimitInTests = (req: any) =>
   process.env.NODE_ENV === 'test' && req.headers['x-strict-rate-limit'] !== 'true';
 
 export const apiRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 30000,
+  windowMs: 60 * 1000, // 1 minute
+  max: 3000,
   skip: skipRateLimitInTests,
   message: { error: 'Too many API requests, please try again later', code: 'RATE_LIMIT_EXCEEDED' },
   standardHeaders: true,
