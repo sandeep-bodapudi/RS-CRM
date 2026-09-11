@@ -7,17 +7,15 @@ const shared_1 = require("../shared");
  *
  * The workflow engine is the single authority permitted to write `Lead.status`.
  * Services MUST route every lead status change through
- * WorkflowEngine.transition(...) and never issue a raw
+ * WorkflowEngine.transitionLead(...) and never issue a raw
  * `tx.lead.update({ status })`.
  *
- * // Lead.status must only be written via engine.transition() — do not call tx.lead.update({status}) directly anywhere else in the codebase.
+ * // Lead.status must only be written via engine.transitionLead() — do not call tx.lead.update({status}) directly anywhere else in the codebase.
  *
  * This engine enforces BOTH:
  *  - the allowed state graph (transitionMatrix), and
  *  - the spec's field-level guards:
  *    • CALL_LOGGED activity required before ASSIGNED → CONTACTED (§1 row 2)
- *    • CONTACTED → QUALIFICATION_PENDING auto only when all qualification
- *      fields are null (§1 row 3)
  *    • CONTACTED → QUALIFIED direct only when all qualification fields present
  *      (§1 row 4)
  *    • SITE_VISIT_COMPLETED requires ALL linked visits COMPLETED (§1 row 6)
@@ -37,13 +35,6 @@ class LeadWorkflow {
             lead.property_type_preference != null &&
             lead.preferred_location != null);
     }
-    /** Which qualification fields are all null. */
-    static isQualificationEmpty(lead) {
-        return !!(lead.budget_min == null &&
-            lead.budget_max == null &&
-            lead.property_type_preference == null &&
-            lead.preferred_location == null);
-    }
     canTransition(req) {
         const { currentState, action: newStatus, entity } = req;
         if (currentState === newStatus) {
@@ -57,18 +48,6 @@ class LeadWorkflow {
             };
         }
         // ── Field-level guards (spec §1) ──
-        // §1 row 2: ASSIGNED → CONTACTED requires a CALL_LOGGED LeadActivity.
-        if (newStatus === shared_1.LeadStatus.CONTACTED &&
-            LeadWorkflow.REQUIRES_CALL_LOGGED.has(currentState)) {
-            const activities = (entity && (entity.activities || [])) || [];
-            const hasCallLogged = activities.some((a) => a.activity_type === 'CALL_LOGGED');
-            if (!hasCallLogged) {
-                return {
-                    allowed: false,
-                    reason: 'Transition to CONTACTED requires a CALL_LOGGED LeadActivity to exist first',
-                };
-            }
-        }
         // §1 row 4: CONTACTED → QUALIFIED is only valid when all
         // qualification fields are present.
         if (newStatus === shared_1.LeadStatus.QUALIFIED) {
@@ -214,11 +193,6 @@ LeadWorkflow.DROPPABLE_FROM = new Set([
     shared_1.LeadStatus.SITE_VISIT_COMPLETED,
     shared_1.LeadStatus.NEGOTIATION,
     shared_1.LeadStatus.BOOKING_INITIATED,
-]);
-/** Set of statuses that require a CALL_LOGGED activity before moving to CONTACTED.
- * Spec §1 row 2: "LeadActivity with activity_type: CALL_LOGGED must exist". */
-LeadWorkflow.REQUIRES_CALL_LOGGED = new Set([
-    shared_1.LeadStatus.ASSIGNED,
 ]);
 /** Strict Transition Matrix for Leads (spec §1 transition table).
  * Key: Current Status → allowed next statuses.

@@ -12,6 +12,7 @@ import { slugify, generateUniqueSlug } from '../utils/slugify';
 import { logger } from '../utils/logger';
 import { normalizeArea, areaFromDimensions, dimensionsDisagree, AreaUnitType } from '../shared/measurement';
 import { PricingService } from './pricing/pricing.service';
+import { notifyEmployee } from '../utils/notifyEmployee';
 
 const p = prisma;
 
@@ -457,7 +458,24 @@ export class PropertyService {
               message: `Property ${propertyCode} (${data.title}) was created without an assigned PM. Location: ${data.city || 'Unknown'}`
             }))
           });
+          // Web push to MDs (outside transaction)
+          for (const md of mdEmployees) {
+            notifyEmployee(md.id, {
+              type: 'SYSTEM_ALERT',
+              title: 'Property Requires PM Assignment',
+              message: `Property ${propertyCode} (${data.title}) needs a PM assignment.`,
+            }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] PM assign notify:', err));
+          }
         }
+      }
+
+      // Also notify assigned PM if one was set
+      if (finalPmId) {
+        notifyEmployee(finalPmId, {
+          type: 'PROPERTY_ASSIGNED',
+          title: `Property Assigned: ${propertyCode}`,
+          message: `Property "${data.title}" (${propertyCode}) has been assigned to you.`,
+        }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] Create property PM notify:', err));
       }
 
       return property;
@@ -582,6 +600,32 @@ export class PropertyService {
       });
     }
 
+    // Notify if PM changed via the edit form
+    if (data.assigned_pm_id !== undefined && data.assigned_pm_id !== property.assigned_pm_id) {
+      const newPmId = data.assigned_pm_id;
+      const oldPmId = property.assigned_pm_id;
+
+      await p.notification.create({
+        data: {
+          employee_id: newPmId,
+          type: 'PROPERTY_ASSIGNED',
+          title: `Property Assigned to You: ${updatedProperty.property_code}`,
+          message: `Property "${updatedProperty.title}" (${updatedProperty.property_code}) has been assigned to you.`,
+        },
+      });
+
+      if (oldPmId) {
+        await p.notification.create({
+          data: {
+            employee_id: oldPmId,
+            type: 'PROPERTY_REASSIGNED',
+            title: `Property Reassigned: ${updatedProperty.property_code}`,
+            message: `Property "${updatedProperty.title}" (${updatedProperty.property_code}) has been reassigned from you.`,
+          },
+        });
+      }
+    }
+
     if (data.manual_lines !== undefined) {
       await replaceManualPriceLines(propertyId, data.manual_lines || []);
     }
@@ -662,6 +706,36 @@ export class PropertyService {
           notes: `PM On-Site Verification: ${data.approved ? 'PASSED' : 'REJECTED'}. Notes: ${data.notes}`,
         },
       });
+
+      // Notify DM team when property passes PM verification (ready for DM polish)
+      if (data.approved) {
+        const dmExecutives = await tx.employee.findMany({
+          where: {
+            company_id: user.companyId,
+            status: 'ACTIVE',
+            roles: { some: { role: { name: 'DIGITAL_MARKETING_EXECUTIVE' } } },
+          },
+          select: { id: true },
+        });
+        if (dmExecutives.length > 0) {
+          await tx.notification.createMany({
+            data: dmExecutives.map((dm: any) => ({
+              employee_id: dm.id,
+              type: 'SYSTEM_ALERT',
+              title: 'Property Ready for DM Polish',
+              message: `Property ${updated.property_code} (${updated.title}) has passed PM on-site verification and is ready for DM polish.`,
+            })),
+          });
+          // Send web push to DM executives (outside transaction)
+          for (const dm of dmExecutives) {
+            notifyEmployee(dm.id, {
+              type: 'SYSTEM_ALERT',
+              title: 'Property Ready for DM Polish',
+              message: `Property ${updated.property_code} (${updated.title}) is ready for your polish.`,
+            }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] DM polish notify:', err));
+          }
+        }
+      }
 
       return updated;
     });
@@ -757,6 +831,14 @@ export class PropertyService {
             message: `Property ${property.property_code} (${property.title}) was resubmitted after rejection and is back in the verification pipeline.`,
           })),
         });
+        // Web push to MDs (outside transaction)
+        for (const md of mdEmployees) {
+          notifyEmployee(md.id, {
+            type: 'SYSTEM_ALERT',
+            title: 'Property Resubmitted for Review',
+            message: `Property ${property.property_code} (${property.title}) is back in the verification pipeline.`,
+          }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] Resubmit notify:', err));
+        }
       }
 
       return updated;
@@ -806,6 +888,34 @@ export class PropertyService {
         },
       });
 
+      // Notify all MDs that a property is awaiting their approval
+      const mdEmployees = await tx.employee.findMany({
+        where: {
+          company_id: user.companyId,
+          status: 'ACTIVE',
+          roles: { some: { role: { name: 'MD' } } },
+        },
+        select: { id: true },
+      });
+      if (mdEmployees.length > 0) {
+        await tx.notification.createMany({
+          data: mdEmployees.map((md: any) => ({
+            employee_id: md.id,
+            type: 'SYSTEM_ALERT',
+            title: 'Property Ready for MD Approval',
+            message: `Property ${updated.property_code} (${updated.title}) has completed DM polish and is ready for your final approval.`,
+          })),
+        });
+        // Web push to MDs (outside transaction)
+        for (const md of mdEmployees) {
+          notifyEmployee(md.id, {
+            type: 'SYSTEM_ALERT',
+            title: 'Property Ready for MD Approval',
+            message: `Property ${updated.property_code} (${updated.title}) is ready for your final approval.`,
+          }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] DM polish notify:', err));
+        }
+      }
+
       return updated;
     });
   }
@@ -854,6 +964,34 @@ export class PropertyService {
           notes: `Digital Marketing Head verified property as-is (no polish required). Submitted directly for MD Final Approval.${data.notes ? ` Notes: ${data.notes}` : ''}`,
         },
       });
+
+      // Notify all MDs that a property is awaiting their approval (same as dmPolishProperty)
+      const mdEmployees = await tx.employee.findMany({
+        where: {
+          company_id: user.companyId,
+          status: 'ACTIVE',
+          roles: { some: { role: { name: 'MD' } } },
+        },
+        select: { id: true },
+      });
+      if (mdEmployees.length > 0) {
+        await tx.notification.createMany({
+          data: mdEmployees.map((md: any) => ({
+            employee_id: md.id,
+            type: 'SYSTEM_ALERT',
+            title: 'Property Ready for MD Approval',
+            message: `Property ${updated.property_code} (${updated.title}) has been verified as-is by DM Head and is ready for your final approval.`,
+          })),
+        });
+        // Web push to MDs (outside transaction)
+        for (const md of mdEmployees) {
+          notifyEmployee(md.id, {
+            type: 'SYSTEM_ALERT',
+            title: 'Property Ready for MD Approval',
+            message: `Property ${updated.property_code} (${updated.title}) is ready for your final approval (verified as-is).`,
+          }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] DM verify-as-is notify:', err));
+        }
+      }
 
       return updated;
     });
@@ -911,6 +1049,75 @@ export class PropertyService {
           new_value: JSON.stringify({ status: nextStatus, comments: data.comments }),
         },
       });
+
+      // Notify the assigned PM about the MD decision
+      if (updated.assigned_pm_id) {
+        await tx.notification.create({
+          data: {
+            employee_id: updated.assigned_pm_id,
+            type: data.approved ? 'PROPERTY_LIVE' : 'PROPERTY_REJECTED',
+            title: data.approved ? `Property ${updated.property_code} — Approved & Live`
+              : `Property ${updated.property_code} — Rejected`,
+            message: data.approved
+              ? `Property "${updated.title}" has been approved by MD and is now LIVE.`
+              : `Property "${updated.title}" was rejected by MD.${data.comments ? ` Reason: ${data.comments}` : ''}`,
+          },
+        });
+        // Web push to assigned PM (outside transaction)
+        notifyEmployee(updated.assigned_pm_id, {
+          type: data.approved ? 'PROPERTY_LIVE' : 'PROPERTY_REJECTED',
+          title: data.approved ? `Property ${updated.property_code} — Approved & Live`
+            : `Property ${updated.property_code} — Rejected`,
+          message: data.approved
+            ? `Property "${updated.title}" has been approved by MD and is now LIVE.`
+            : `Property "${updated.title}" was rejected by MD.${data.comments ? ` Reason: ${data.comments}` : ''}`,
+        }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] MD approve PM notify:', err));
+      }
+
+      // Notify all MDs about the property approval/rejection
+      const mdEmployees = await tx.employee.findMany({
+        where: {
+          company_id: user.companyId,
+          status: 'ACTIVE',
+          roles: { some: { role: { name: 'MD' } } },
+        },
+        select: { id: true },
+      });
+      if (mdEmployees.length > 0 && mdEmployees[0].id !== user.employeeId) {
+        await tx.notification.createMany({
+          data: mdEmployees.map((md: any) => ({
+            employee_id: md.id,
+            type: 'SYSTEM_ALERT',
+            title: data.approved ? 'Property Approved & Live'
+              : 'Property Rejected',
+            message: data.approved
+              ? `Property ${updated.property_code} (${updated.title}) has been approved and is now LIVE.`
+              : `Property ${updated.property_code} (${updated.title}) was rejected.${data.comments ? ` Comments: ${data.comments}` : ''}`,
+          })),
+        });
+        // Web push to MDs (outside transaction)
+        for (const md of mdEmployees) {
+          notifyEmployee(md.id, {
+            type: 'SYSTEM_ALERT',
+            title: data.approved ? 'Property Approved & Live' : 'Property Rejected',
+            message: data.approved
+              ? `Property ${updated.property_code} (${updated.title}) is now LIVE.`
+              : `Property ${updated.property_code} (${updated.title}) was rejected.`,
+          }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] MD approve notify:', err));
+        }
+      }
+
+      // Web push to assigned PM (outside transaction)
+      if (updated.assigned_pm_id) {
+        notifyEmployee(updated.assigned_pm_id, {
+          type: data.approved ? 'PROPERTY_LIVE' : 'PROPERTY_REJECTED',
+          title: data.approved ? `Property ${updated.property_code} — Approved & Live`
+            : `Property ${updated.property_code} — Rejected`,
+          message: data.approved
+            ? `Property "${updated.title}" has been approved by MD and is now LIVE.`
+            : `Property "${updated.title}" was rejected by MD.${data.comments ? ` Reason: ${data.comments}` : ''}`,
+        }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] MD approve PM notify:', err));
+      }
 
       return updated;
     });

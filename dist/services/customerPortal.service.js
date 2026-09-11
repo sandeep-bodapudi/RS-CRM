@@ -1,31 +1,14 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CustomerPortalService = void 0;
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
+const crypto_1 = __importDefault(require("crypto"));
 const prisma_1 = require("../lib/prisma");
 const customer_service_1 = require("./customer.service");
+const whatsapp_1 = require("../utils/whatsapp");
 /**
  * Stub provisioner — does NOT make a network call. It records intent in the
  * audit log and returns a synthetic result so the booking flow can complete
@@ -61,15 +44,12 @@ class CustomerPortalService {
      * the BOOKED status write too.
      */
     static async provisionStub(tx, lead, user) {
-        const bcrypt = await Promise.resolve().then(() => __importStar(require('bcryptjs')));
-        const crypto = await Promise.resolve().then(() => __importStar(require('crypto')));
-        const { generateWhatsAppLink } = await Promise.resolve().then(() => __importStar(require('../utils/whatsapp')));
         // 1. Reuse existing convert-to-customer logic (handles idempotency via
         //    Customer.origin_lead_id unique constraint).
         const customer = await customer_service_1.CustomerService.upsertFromLead(user, lead.id, tx);
         // 2. Generate a cryptographically secure temporary password (8 chars)
-        const tempPassword = crypto.randomBytes(4).toString('hex').toLowerCase();
-        const passwordHash = await bcrypt.hash(tempPassword, 12);
+        const tempPassword = crypto_1.default.randomBytes(4).toString('hex').toLowerCase();
+        const passwordHash = await bcryptjs_1.default.hash(tempPassword, 12);
         // 3. Set temporary credentials and force reset on first login
         await tx.customer.update({
             where: { id: customer.id },
@@ -88,7 +68,7 @@ class CustomerPortalService {
             customerCode: customer.customer_code,
         });
         // 5. Generate WhatsApp credential-delivery message for the PM to send manually
-        const whatsappLink = generateWhatsAppLink(lead.phone, 'CREDENTIAL_DELIVERY', {
+        const whatsappLink = (0, whatsapp_1.generateWhatsAppLink)(lead.phone, 'CREDENTIAL_DELIVERY', {
             customer_name: lead.customer_name,
             phone: lead.phone,
             password: tempPassword,

@@ -18,11 +18,11 @@ const kyc_policy_1 = require("../policies/kyc.policy");
  * @returns boolean indicating if access is granted
  */
 const can = (user, action, resource) => {
-    // 1. Super Admin Global Access Bypass
-    if (user.roles.includes(shared_1.Roles.ADMIN)) {
-        return true;
-    }
-    // 2. Basic Permission Check
+    // Admin (Technical) is deliberately NOT a blanket bypass — RolePermissionsMatrix
+    // curates a specific list for Admin and explicitly withholds some permissions
+    // (e.g. "Explicitly NO EMPLOYEES_VIEW_SENSITIVE for ADMIN", no LEADS_* at all).
+    // Only Roles.MD is granted ALL_PERMISSIONS, via the matrix itself, not here.
+    // 1. Basic Permission Check
     const hasBasePermission = (user.permissions || []).includes(action);
     if (!hasBasePermission) {
         return false;
@@ -44,7 +44,13 @@ const can = (user, action, resource) => {
             return project_policy_1.ProjectPolicy.canDelete(user, resource);
         // -- PROPERTIES --
         case shared_1.Permissions.PROPERTIES_UPDATE:
+            if (!resource)
+                return true; // Defer to service layer
+            return property_policy_1.PropertyPolicy.canUpdate(user, resource);
         case shared_1.Permissions.PROPERTIES_DELETE:
+            if (!resource)
+                return true; // Defer to service layer
+            return property_policy_1.PropertyPolicy.canDelete(user, resource);
         case shared_1.Permissions.PROPERTIES_VERIFY:
             if (!resource)
                 return true; // Defer to service layer

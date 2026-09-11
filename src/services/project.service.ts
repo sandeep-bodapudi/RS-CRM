@@ -8,6 +8,7 @@ import { slugify, generateUniqueSlug } from '../utils/slugify';
 import { fetchWithCache } from '../utils/cache';
 import { getStorageService, processImageBuffer } from './storage.service';
 import { logger } from '../utils/logger';
+import { notifyEmployee } from '../utils/notifyEmployee';
 import { WorkflowEngine } from '../workflows/workflowEngine';
 import { WorkflowDomain } from '../workflows/types';
 const p = prisma;
@@ -136,7 +137,25 @@ export class ProjectService {
             ...mapCommonProjectFields(data),
           },
         });
-        
+
+        // Notify the assigned PM if one was set
+        if (data.assigned_pm_id) {
+          await p.notification.create({
+            data: {
+              employee_id: data.assigned_pm_id,
+              type: 'PROJECT_ASSIGNED',
+              title: `New Project Assigned: ${projectCode}`,
+              message: `Project "${data.name}" (${projectCode}) has been created and assigned to you.`,
+            },
+          });
+          // Web push to assigned PM (outside transaction)
+          notifyEmployee(data.assigned_pm_id, {
+            type: 'PROJECT_ASSIGNED',
+            title: `New Project Assigned: ${projectCode}`,
+            message: `Project "${data.name}" (${projectCode}) has been created and assigned to you.`,
+          }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] Create project PM notify:', err));
+        }
+
         return project;
       } catch (error: any) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
@@ -166,6 +185,17 @@ export class ProjectService {
     });
 
     if (!project) throw { status: 404, message: 'Project not found or unauthorized' };
+
+    // Core fields are locked while a project is PENDING_VERIFICATION (awaiting MD review).
+    // PM can still update media, documents, and images via separate endpoints.
+    const CORE_LOCKED_FIELDS = ['name', 'description', 'location', 'total_area', 'total_units',
+      'launch_date', 'project_phase', 'rera_number', 'assigned_pm_id', 'project_type', 'developer_name', 'status'];
+    if (project.verification_status === 'PENDING_VERIFICATION') {
+      const attemptedCoreChange = CORE_LOCKED_FIELDS.some((f) => (data as any)[f] !== undefined);
+      if (attemptedCoreChange) {
+        throw { status: 409, message: 'Core project details are locked while pending MD verification. Only media and documents may be updated.' };
+      }
+    }
 
     if (data.assigned_pm_id && data.assigned_pm_id !== project.assigned_pm_id) {
       const pm = await p.employee.findFirst({
@@ -223,6 +253,60 @@ export class ProjectService {
         });
         return updated;
       });
+    }
+
+    // Handle PM reassignment via the general edit form (PUT /projects/:id)
+    let finalProject = null;
+    if (data.assigned_pm_id !== undefined && data.assigned_pm_id !== project.assigned_pm_id) {
+      const newPmId = data.assigned_pm_id;
+      const oldPmId = project.assigned_pm_id;
+
+      finalProject = await p.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
+        const updated = await tx.project.update({
+          where: { id: projectId },
+          data: { assigned_pm_id: newPmId },
+        });
+
+        // Notify the new PM
+        await tx.notification.create({
+          data: {
+            employee_id: newPmId,
+            type: 'PROJECT_ASSIGNED',
+            title: `Project Assigned to You: ${updated.project_code}`,
+            message: `Project "${updated.name}" (${updated.project_code}) has been assigned to you.`,
+          },
+        });
+        // Web push to new PM (outside transaction)
+        notifyEmployee(newPmId, {
+          type: 'PROJECT_ASSIGNED',
+          title: `Project Assigned to You: ${updated.project_code}`,
+          message: `Project "${updated.name}" (${updated.project_code}) has been assigned to you.`,
+        }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] Project PM changed new PM:', err));
+
+        // Notify the old PM (if exists)
+        if (oldPmId) {
+          await tx.notification.create({
+            data: {
+              employee_id: oldPmId,
+              type: 'PROJECT_REASSIGNED',
+              title: `Project Reassigned: ${updated.project_code}`,
+              message: `Project "${updated.name}" (${updated.project_code}) has been reassigned from you.`,
+            },
+          });
+          // Web push to old PM (outside transaction)
+          notifyEmployee(oldPmId, {
+            type: 'PROJECT_REASSIGNED',
+            title: `Project Reassigned: ${updated.project_code}`,
+            message: `Project "${updated.name}" (${updated.project_code}) has been reassigned from you.`,
+          }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] Project PM changed old PM:', err));
+        }
+
+        return updated;
+      });
+    }
+
+    if (finalProject) {
+      return finalProject;
     }
 
     return await p.project.update({
@@ -355,6 +439,47 @@ export class ProjectService {
           reason: reason
         }
       });
+
+      // Notify the new PM that they've been assigned a project
+      await tx.notification.create({
+        data: {
+          employee_id: newPmId,
+          type: 'PROJECT_ASSIGNED',
+          title: `Project Assigned to You: ${updated.project_code}`,
+          message: `Project "${updated.name}" (${updated.project_code}) has been assigned to you${reason ? `. Reason: ${reason}` : ''}.`,
+        },
+      });
+      // Web push to new PM (outside transaction)
+      notifyEmployee(newPmId, {
+        type: 'PROJECT_ASSIGNED',
+        title: `Project Assigned to You: ${updated.project_code}`,
+        message: `Project "${updated.name}" (${updated.project_code}) has been assigned to you${reason ? `. Reason: ${reason}` : ''}.`,
+      }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] ReassignProject new PM:', err));
+
+      // Notify the old PM (if exists) that the project was reassigned away
+      if (oldPmId && oldPmId !== newPmId) {
+        await tx.notification.create({
+          data: {
+            employee_id: oldPmId,
+            type: 'PROJECT_REASSIGNED',
+            title: `Project Reassigned: ${updated.project_code}`,
+            message: `Project "${updated.name}" (${updated.project_code}) has been reassigned from you to ${newPm.full_name || newPm.employee_code} by ${user.employeeId}.`,
+          },
+        });
+        // Web push to old PM (outside transaction)
+        notifyEmployee(oldPmId, {
+          type: 'PROJECT_REASSIGNED',
+          title: `Project Reassigned: ${updated.project_code}`,
+          message: `Project "${updated.name}" (${updated.project_code}) has been reassigned from you.`,
+        }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] Project reassign old PM:', err));
+      }
+
+      // Web push to new PM (outside transaction)
+      notifyEmployee(newPmId, {
+        type: 'PROJECT_ASSIGNED',
+        title: `Project Assigned to You: ${updated.project_code}`,
+        message: `Project "${updated.name}" (${updated.project_code}) has been assigned to you${reason ? `. Reason: ${reason}` : ''}.`,
+      }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] Project reassign new PM:', err));
 
       return updated;
     });

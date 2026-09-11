@@ -1,10 +1,10 @@
 import { logger } from './logger';
 /**
  * notifyEmployee.ts
- * 
+ *
  * Universal notification dispatcher. Call this from any route whenever
  * an employee's data changes or an action requires their attention.
- * 
+ *
  * Simultaneously:
  *  1. Saves an in-app Notification record to the DB
  *  2. Sends a Web Push notification to all subscribed devices
@@ -12,7 +12,6 @@ import { logger } from './logger';
 
 import { prisma } from '../lib/prisma';
 import webpush from 'web-push';
-
 
 const p = prisma;
 
@@ -41,29 +40,37 @@ export interface NotifyPayload {
   link?: string;     // Optional deep-link for when user taps notification
 }
 
+export interface NotifyOptions {
+  /** When true, skips the DB notification create (already created in a transaction). */
+  skipDbNotification?: boolean;
+}
+
 /**
  * Notify one or more employees by their DB IDs.
  */
 export async function notifyEmployee(
   employeeIds: number | number[],
-  payload: NotifyPayload
+  payload: NotifyPayload,
+  options?: NotifyOptions
 ): Promise<void> {
   const ids = Array.isArray(employeeIds) ? employeeIds : [employeeIds];
 
   for (const employeeId of ids) {
-    // 1. Create in-app notification record
-    try {
-      await p.notification.create({
-        data: {
-          employee_id: employeeId,
-          type: payload.type,
-          title: payload.title,
-          message: payload.message,
-          is_read: false,
-        },
-      });
-    } catch (err) {
-      logger.error(`[NotifyEmployee] Failed to create in-app notification for employee ${employeeId}:`, err);
+    // 1. Create in-app notification record (unless skipped — already done in transaction)
+    if (!options?.skipDbNotification) {
+      try {
+        await p.notification.create({
+          data: {
+            employee_id: employeeId,
+            type: payload.type,
+            title: payload.title,
+            message: payload.message,
+            is_read: false,
+          },
+        });
+      } catch (err) {
+        logger.error(`[NotifyEmployee] Failed to create in-app notification for employee ${employeeId}:`, err);
+      }
     }
 
     // 2. Send Web Push to all subscribed devices

@@ -19,7 +19,13 @@ class JobManager {
                 logger_1.logger.info(`[Jobs] Skipping ${job.name} (Disabled via ${job.envDisableKey})`);
                 return;
             }
-            logger_1.logger.info(`[Jobs] Scheduling ${job.name} at ${job.schedule}`);
+            logger_1.logger.info(`[Jobs] Scheduling ${job.name} at ${job.schedule} (Asia/Kolkata)`);
+            // Explicit timezone -- without this, node-cron falls back to the
+            // process's local timezone, which on this server only happens to be
+            // IST because .env sets TZ=Asia/Kolkata. That's an environment
+            // dependency, not a guarantee; a deploy target that doesn't load .env
+            // (or overrides TZ) would silently shift every job's fire time, the
+            // same bug class already found and fixed elsewhere for attendance.
             node_cron_1.default.schedule(job.schedule, async () => {
                 try {
                     logger_1.logger.info(`[Jobs] Starting ${job.name}...`);
@@ -31,7 +37,7 @@ class JobManager {
                 catch (error) {
                     logger_1.logger.error({ err: error }, `[Jobs] FAILURE in ${job.name}: Alerting system!`);
                 }
-            });
+            }, { timezone: 'Asia/Kolkata' });
         });
     }
     // Used for manual execution & testing idempotency

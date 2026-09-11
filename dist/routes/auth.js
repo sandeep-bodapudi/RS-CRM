@@ -96,7 +96,7 @@ router.post('/login', rateLimiter_1.loginRateLimiter, (0, validate_1.validateReq
                 employee_id: employee.id,
                 family_token: familyToken,
                 refresh_token_hash: refreshTokenHash,
-                expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+                expires_at: new Date(Date.now() + jwt_1.REFRESH_TOKEN_TTL_MS)
             }
         });
         // Reset rate limiter on success
@@ -108,7 +108,7 @@ router.post('/login', rateLimiter_1.loginRateLimiter, (0, validate_1.validateReq
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax',
             path: '/',
-            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+            maxAge: jwt_1.REFRESH_TOKEN_TTL_MS,
         });
         return res.status(200).json({
             message: 'Login successful',
@@ -230,7 +230,7 @@ router.post('/change-password', auth_1.authenticateToken, (0, validate_1.validat
                 employee_id: updatedEmployee.id,
                 family_token: familyToken,
                 refresh_token_hash: refreshTokenHash,
-                expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+                expires_at: new Date(Date.now() + jwt_1.REFRESH_TOKEN_TTL_MS)
             }
         });
         // Set httpOnly refresh cookie
@@ -239,7 +239,7 @@ router.post('/change-password', auth_1.authenticateToken, (0, validate_1.validat
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax',
             path: '/',
-            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+            maxAge: jwt_1.REFRESH_TOKEN_TTL_MS,
         });
         return res.status(200).json({
             message: 'Password updated successfully',
@@ -451,7 +451,7 @@ router.post('/refresh', rateLimiter_1.refreshRateLimiter, (0, validate_1.validat
                 employee_id: employee.id,
                 family_token: session.family_token,
                 refresh_token_hash: newRefreshTokenHash,
-                expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+                expires_at: new Date(Date.now() + jwt_1.REFRESH_TOKEN_TTL_MS)
             }
         });
         res.cookie('refreshToken', newRefreshToken, {
@@ -459,7 +459,7 @@ router.post('/refresh', rateLimiter_1.refreshRateLimiter, (0, validate_1.validat
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax',
             path: '/',
-            maxAge: 7 * 24 * 60 * 60 * 1000,
+            maxAge: jwt_1.REFRESH_TOKEN_TTL_MS,
         });
         return res.status(200).json({ accessToken: newAccessToken, refreshToken: newRefreshToken });
     }

@@ -67,7 +67,16 @@ router.post('/login', (0, validate_1.validateRequestBody)(exports.KioskLoginSche
             credentialVersion: matchedCred.credential_version,
             createdAt: Date.now(),
         };
-        const accessToken = (0, jwt_1.generateAccessToken)(tokenPayload);
+        // § Phase 6: kiosk tokens have no refresh flow at all (they're not staff
+        // sessions), so they used to just die after the shared 24h default and
+        // need re-login. Confirmed acceptable to extend indefinitely: a kiosk
+        // token carries no employee identity/permissions, is scoped only to
+        // attendance-scan endpoints (authenticateKioskToken), and revocation
+        // stays instant via credential_version (rotating the kiosk password or
+        // toggling it inactive immediately invalidates every outstanding token
+        // for that device) — "never expires by time" here still means
+        // "always revocable on demand."
+        const accessToken = (0, jwt_1.generateAccessToken)(tokenPayload, '3650d');
         await p.auditEvent.create({
             data: {
                 actor_id: matchedCred.id,

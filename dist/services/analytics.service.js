@@ -39,30 +39,48 @@ const time_1 = require("../utils/time");
 const p = prisma_1.prisma;
 class AnalyticsService {
     // ---- shared low-level company-scoped counters ----
-    /** COUNT(*) (KPI 1) - globally counting leads. */
+    /** COUNT(*) WHERE company_id (KPI 1). */
     static async countLeads(companyId) {
-        return await p.lead.count();
+        return await p.lead.count({ where: { company_id: companyId } });
     }
-    /** COUNT(*) WHERE status='BOOKED' (KPI 2). */
+    /** COUNT(*) WHERE company_id AND status='BOOKED' (KPI 2). */
     static async countWonLeads(companyId) {
-        return await p.lead.count({ where: { status: 'BOOKED' } });
+        return await p.lead.count({ where: { company_id: companyId, status: 'BOOKED' } });
     }
-    /** COUNT(*) WHERE status='SITE_VISIT_SCHEDULED' (KPI 3). */
+    /** COUNT(*) WHERE company_id AND status='SITE_VISIT_SCHEDULED' (KPI 3). */
     static async countSiteVisitsScheduled(companyId) {
         return await p.lead.count({
-            where: { status: 'SITE_VISIT_SCHEDULED' },
+            where: { company_id: companyId, status: 'SITE_VISIT_SCHEDULED' },
         });
     }
-    /** Generalized lead counter by status */
+    /**
+     * Dropped-lead count grouped by the status the lead exited from
+     * (`Lead.exited_from_status`, snapshotted at drop time — see
+     * lead.workflow.ts's DROPPED-transition guard). Backs the Analytics
+     * "Pipeline Drop-off Analysis" chart, which previously rendered hardcoded
+     * placeholder numbers because this aggregation didn't exist yet — the
+     * underlying data was already there, just never queried.
+     */
+    static async dropOffByStage(companyId) {
+        const groups = await p.lead.groupBy({
+            by: ['exited_from_status'],
+            where: { company_id: companyId, status: 'DROPPED', exited_from_status: { not: null } },
+            _count: { _all: true },
+        });
+        return groups
+            .map((g) => ({ stage: g.exited_from_status, dropoffs: g._count._all }))
+            .sort((a, b) => b.dropoffs - a.dropoffs);
+    }
+    /** Generalized lead counter by status, scoped to company */
     static async countLeadsByStatus(companyId, status) {
         return await p.lead.count({
-            where: { status },
+            where: { company_id: companyId, status },
         });
     }
-    /** Count ACTIVE customers */
+    /** Count ACTIVE customers, scoped to company */
     static async countActiveCustomers(companyId) {
         return await p.customer.count({
-            where: { status: 'ACTIVE' },
+            where: { company_id: companyId, status: 'ACTIVE' },
         });
     }
     /**
@@ -88,17 +106,45 @@ class AnalyticsService {
             pendingPM: Number(row.pendingPMCount || 0),
         };
     }
-    /** COUNT(*) WHERE status='ACTIVE' (KPI 6). Preserves md.ts (no deleted_at filter). */
+    /** COUNT(*) WHERE status='ACTIVE' AND company_id (KPI 6). Preserves md.ts (no deleted_at filter). */
     static async countActiveEmployees(companyId) {
-        const res = await p.$queryRaw `SELECT COUNT(*) as count FROM Employee WHERE status = 'ACTIVE'`;
+        const res = await p.$queryRaw `SELECT COUNT(*) as count FROM Employee WHERE status = 'ACTIVE' AND company_id = ${companyId}`;
         return Number(res[0]?.count || 0);
     }
     /**
-     * Total bookings (KPI 5).
+     * Total bookings (KPI 5), scoped to company.
      * No status filtering is applied (the KPI is a total booking count).
      */
     static async countBookings(companyId) {
-        return await p.booking.count();
+        return await p.booking.count({ where: { company_id: companyId } });
+    }
+    /**
+     * Total confirmed booking value ("Sales Value" KPI). SUM(agreed_price) for
+     * CONFIRMED bookings only, scoped to company — represents closed deal value.
+     */
+    static async bookingSalesValue(companyId) {
+        const res = await p.booking.aggregate({
+            _sum: { agreed_price: true },
+            where: { company_id: companyId, status: 'CONFIRMED' },
+        });
+        return res._sum.agreed_price || 0;
+    }
+    /**
+     * Outstanding installment value ("Due Payments" KPI). SUM(expected_amount -
+     * received_amount) across non-cancelled, not-yet-fully-received installments,
+     * scoped to company via the owning Booking. Deliberately a single-table
+     * (Installment) aggregate — never touches Payment, to avoid the double-count
+     * hazard documented in this file's header comment.
+     */
+    static async duePayments(companyId) {
+        const res = await p.$queryRaw `
+      SELECT COALESCE(SUM(i.expected_amount - i.received_amount), 0) as due
+      FROM Installment i
+      JOIN Booking b ON b.id = i.booking_id
+      WHERE b.company_id = ${companyId}
+        AND i.status NOT IN ('CANCELLED', 'RECEIVED')
+    `;
+        return Number(res[0]?.due || 0);
     }
     /**
      * Attendance exceptions today (KPI 7). Preserves md.ts semantics verbatim:
@@ -114,6 +160,7 @@ class AnalyticsService {
       FROM Employee e
       LEFT JOIN AttendanceLog a ON a.employee_id = e.id AND a.check_in_at >= ${startOfDay}
       WHERE e.status = 'ACTIVE'
+        AND e.company_id = ${companyId}
         AND (e.attendance_required = false OR a.id IS NOT NULL)
     `;
         const totalExemptOrStamped = Number(res[0]?.count || 0);
@@ -132,6 +179,7 @@ class AnalyticsService {
         const lte = new Date(`${dateString}T23:59:59.999+05:30`);
         const where = {
             submitted_at: { gte, lte },
+            employee: { company_id: companyId },
         };
         const [total, met] = await Promise.all([
             p.dailyReport.count({ where }),
@@ -148,6 +196,7 @@ class AnalyticsService {
     static async teamPerformance(companyId) {
         const employees = await p.employee.findMany({
             where: {
+                company_id: companyId,
                 deleted_at: null,
                 status: 'ACTIVE',
                 roles: { none: { role: { is_invisible: true } } },
@@ -160,13 +209,14 @@ class AnalyticsService {
                 p.dailyReport.count({ where: { employee_id: emp.id } }),
                 p.auditEvent.count({ where: { actor_id: emp.id, action: 'DAILY_REPORT_BELOW_TARGET' } }),
                 p.auditEvent.count({ where: { actor_id: emp.id, action: 'DAILY_REPORT_TARGET_EXCEEDED' } }),
-                p.attendanceLog.findMany({ where: { employee_id: emp.id }, select: { status: true } }),
+                p.attendanceLog.findMany({ where: { employee_id: emp.id }, select: { status: true, check_in_at: true } }),
                 p.auditEvent.count({ where: { actor_id: emp.id, action: 'UNINFORMED_ABSENT' } }),
                 p.auditEvent.count({ where: { actor_id: emp.id, action: 'PROPERTY_BOOKED_CONTRIBUTION' } }),
             ]);
             let presentCount = 0;
             let lateCount = 0;
             let halfDayCount = 0;
+            let attendanceBoost = 0;
             for (const log of attendanceLogs) {
                 if (log.status === 'PRESENT' || log.status === 'APPROVED_LATE')
                     presentCount++;
@@ -174,6 +224,12 @@ class AnalyticsService {
                     lateCount++;
                 else if (log.status === 'HALF_DAY')
                     halfDayCount++;
+                // Only PRESENT feeds the boost — LATE/HALF_DAY stay penalized via
+                // lateCount/halfDayCount below; adding calculateAttendancePoints's
+                // -1.0 for those here too would double-count the penalty.
+                if (log.status === 'PRESENT') {
+                    attendanceBoost += (0, time_1.calculateAttendancePoints)(log.status, log.check_in_at, emp.employment_type || 'FULL_TIME');
+                }
             }
             return (0, performance_metric_1.calculatePerformanceScore)({
                 completedTasks: tasksDone,
@@ -184,6 +240,7 @@ class AnalyticsService {
                 uninformedAbsentEvents: uninformedAbsent,
                 propertyBookingContributions,
                 presentCount,
+                attendanceBoost,
                 lateCount,
                 halfDayCount,
             }).score;
@@ -198,6 +255,7 @@ class AnalyticsService {
     }
     static async countPendingProposals(companyId) {
         const employees = await p.employee.findMany({
+            where: { company_id: companyId },
             select: { id: true },
         });
         const res = await p.attendanceProposal.count({
@@ -210,7 +268,7 @@ class AnalyticsService {
     }
     // ---- public: md.ts executive-metrics (delegated, contract-preserving) ----
     static async getExecutiveMetrics(companyId) {
-        const [totalLeadsCount, wonLeads, siteVisitsScheduled, property, attendance, pendingProposals, newLeadsCount, contactedLeadsCount, qualifiedLeadsCount, siteVisitsCompletedCount, bookingInitiatedCount, activeCustomersCount] = await Promise.all([
+        const [totalLeadsCount, wonLeads, siteVisitsScheduled, property, attendance, pendingProposals, newLeadsCount, contactedLeadsCount, qualifiedLeadsCount, siteVisitsCompletedCount, bookingInitiatedCount, activeCustomersCount, salesValue, duePayments] = await Promise.all([
             this.countLeads(companyId),
             this.countWonLeads(companyId),
             this.countSiteVisitsScheduled(companyId),
@@ -223,6 +281,8 @@ class AnalyticsService {
             this.countLeadsByStatus(companyId, 'SITE_VISIT_COMPLETED'),
             this.countLeadsByStatus(companyId, 'BOOKING_INITIATED'),
             this.countActiveCustomers(companyId),
+            this.bookingSalesValue(companyId),
+            this.duePayments(companyId),
         ]);
         return {
             totalLeadsCount,
@@ -241,14 +301,91 @@ class AnalyticsService {
             siteVisitsCompletedCount,
             bookingInitiatedCount,
             activeCustomersCount,
+            salesValue,
+            duePayments,
+            leadConversionRate: totalLeadsCount > 0 ? Math.round((wonLeads / totalLeadsCount) * 1000) / 10 : 0,
         };
+    }
+    /**
+     * Portal-wide recent activity feed for the MD dashboard ("what's happening
+     * in the entire portal"). Reads directly from the source business tables
+     * (Lead/Booking/SiteVisitBooking/Complaint) rather than AuditEvent -- the
+     * AuditEvent action-string convention isn't reliably written for every one
+     * of these event types (see performance-metric.ts's equivalent caveat), so
+     * this needs data guaranteed to exist whenever the underlying event happened.
+     */
+    static async getRecentActivity(companyId, limit = 15) {
+        const perSourceLimit = Math.min(limit, 10);
+        const [leads, bookings, completedVisits, complaints] = await Promise.all([
+            p.lead.findMany({
+                where: { company_id: companyId },
+                orderBy: { created_at: 'desc' },
+                take: perSourceLimit,
+                select: { id: true, lead_code: true, customer_name: true, created_at: true },
+            }),
+            p.booking.findMany({
+                where: { company_id: companyId },
+                orderBy: { created_at: 'desc' },
+                take: perSourceLimit,
+                select: { id: true, booking_code: true, agreed_price: true, status: true, created_at: true },
+            }),
+            p.siteVisitBooking.findMany({
+                where: { status: 'COMPLETED', lead: { company_id: companyId } },
+                orderBy: { completed_at: 'desc' },
+                take: perSourceLimit,
+                select: { id: true, booking_code: true, completed_at: true },
+            }),
+            p.complaint.findMany({
+                where: { company_id: companyId },
+                orderBy: { created_at: 'desc' },
+                take: perSourceLimit,
+                select: { id: true, complaint_code: true, title: true, created_at: true },
+            }),
+        ]);
+        const activity = [
+            ...leads.map((l) => ({
+                id: `lead-${l.id}`,
+                type: 'LEAD_CREATED',
+                title: `New lead: ${l.customer_name}`,
+                subtitle: l.lead_code,
+                timestamp: l.created_at,
+                link: '/leads',
+            })),
+            ...bookings.map((b) => ({
+                id: `booking-${b.id}`,
+                type: 'BOOKING_CREATED',
+                title: `Booking ${b.status === 'CONFIRMED' ? 'confirmed' : 'created'}: ₹${b.agreed_price.toLocaleString()}`,
+                subtitle: b.booking_code,
+                timestamp: b.created_at,
+                link: '/bookings',
+            })),
+            ...completedVisits.filter((v) => v.completed_at).map((v) => ({
+                id: `visit-${v.id}`,
+                type: 'SITE_VISIT_COMPLETED',
+                title: `Site visit completed: ${v.booking_code}`,
+                subtitle: null,
+                timestamp: v.completed_at,
+                link: '/site-visits',
+            })),
+            ...complaints.map((c) => ({
+                id: `complaint-${c.id}`,
+                type: 'COMPLAINT_FILED',
+                title: `Complaint filed: ${c.title}`,
+                subtitle: c.complaint_code,
+                timestamp: c.created_at,
+                link: '/complaints',
+            })),
+        ];
+        activity.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+        return activity.slice(0, limit);
     }
     // ---- public: unified analytics KPI contract ----
     static async getKpis(companyId, user) {
-        const [totalLeads, wonLeads, siteVisitsScheduled, property, totalBookings, attendance, teamPerf, targets, marketing,] = await Promise.all([
+        const [totalLeads, wonLeads, siteVisitsScheduled, dropOffByStage, property, totalBookings, attendance, teamPerf, targets, marketing,] = await Promise.all([
             this.countLeads(companyId),
             this.countWonLeads(companyId),
             this.countSiteVisitsScheduled(companyId),
+            this.dropOffByStage(companyId),
             this.propertyDistribution(companyId),
             this.countBookings(companyId),
             this.attendanceExceptionsToday(companyId),
@@ -266,7 +403,7 @@ class AnalyticsService {
         return {
             companyId,
             generatedAt: new Date().toISOString(),
-            crm: { totalLeads, wonLeads, siteVisitsScheduled },
+            crm: { totalLeads, wonLeads, siteVisitsScheduled, dropOffByStage },
             property,
             opportunity: { pipelineMetrics },
             booking: { totalBookings },
@@ -280,6 +417,7 @@ class AnalyticsService {
         const today = new Date();
         const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
         const allLeads = await p.lead.findMany({
+            where: { company_id: companyId },
             select: {
                 id: true,
                 status: true,
@@ -310,6 +448,7 @@ class AnalyticsService {
         }));
         const stalledLeadsQuery = await p.lead.findMany({
             where: {
+                company_id: companyId,
                 status: { notIn: ['BOOKED', 'DROPPED'] },
                 OR: [
                     { last_contacted_at: { lt: sevenDaysAgo } },
@@ -324,6 +463,7 @@ class AnalyticsService {
         });
         const recoveredUnassignedLeadsQuery = await p.lead.findMany({
             where: {
+                company_id: companyId,
                 status: 'RECOVERED_TO_POOL',
                 assigned_to_id: null
             },
@@ -336,7 +476,8 @@ class AnalyticsService {
         const overdueTasksQuery = await p.task.findMany({
             where: {
                 status: 'PENDING',
-                target_date: { lt: today }
+                target_date: { lt: today },
+                assignee: { company_id: companyId }
             },
             include: {
                 assignee: { select: { id: true, full_name: true, employee_code: true } },
@@ -348,6 +489,7 @@ class AnalyticsService {
         });
         const siteVisitsQuery = await p.siteVisitBooking.groupBy({
             by: ['status'],
+            where: { lead: { company_id: companyId } },
             _count: { id: true }
         });
         const siteVisits = siteVisitsQuery.reduce((acc, item) => {
@@ -363,7 +505,7 @@ class AnalyticsService {
                 employeeIds.add(l.created_by_id);
         });
         const employees = await p.employee.findMany({
-            where: { id: { in: Array.from(employeeIds) } },
+            where: { id: { in: Array.from(employeeIds) }, company_id: companyId },
             select: { id: true, full_name: true, employee_code: true }
         });
         const teamPerformance = [];
@@ -405,6 +547,49 @@ class AnalyticsService {
             overdueTasks: overdueTasksQuery,
             siteVisits,
             targets
+        };
+    }
+    /**
+     * Real replacement for HRDashboard's previously-hardcoded trend badges
+     * (Phase-19 audit #7): headcount + new-hires-this-month, an actual
+     * day-specific "on leave today" count (sourced from approved LEAVE
+     * AttendanceProposal rows rather than an employee's permanent status
+     * field, which never changes back after the leave day passes), and
+     * this-month vs last-month lead conversion.
+     */
+    static async getHrOverview(companyId) {
+        const now = new Date();
+        const { dateString: todayStr } = (0, time_1.getISTComponents)(now);
+        const { dateString: yesterdayStr } = (0, time_1.getISTComponents)(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+        const [year, month] = todayStr.split('-').map(Number);
+        const { startOfMonth, endOfMonth } = (0, time_1.getISTMonthRange)(year, month);
+        const { dateString: prevMonthAnchorStr } = (0, time_1.getISTComponents)(new Date(startOfMonth.getTime() - 1));
+        const [prevYear, prevMonth] = prevMonthAnchorStr.split('-').map(Number);
+        const { startOfMonth: startOfPrevMonth, endOfMonth: endOfPrevMonth } = (0, time_1.getISTMonthRange)(prevYear, prevMonth);
+        // AttendanceProposal has no Prisma relation to Employee (just a raw
+        // employee_id column), so company scoping has to go through an explicit
+        // employee-id lookup rather than a nested relation filter.
+        const companyEmployeeIds = (await p.employee.findMany({ where: { company_id: companyId }, select: { id: true } })).map((e) => e.id);
+        const [headcount, newHiresThisMonth, onLeaveToday, onLeaveYesterday, leadsThisMonth, leadsLastMonth,] = await Promise.all([
+            p.employee.count({ where: { company_id: companyId, status: 'ACTIVE' } }),
+            p.employee.count({ where: { company_id: companyId, created_at: { gte: startOfMonth, lte: endOfMonth } } }),
+            p.attendanceProposal.count({
+                where: { type: 'LEAVE', status: 'APPROVED', target_date: (0, time_1.getISTMidnightInstant)(todayStr), employee_id: { in: companyEmployeeIds } },
+            }),
+            p.attendanceProposal.count({
+                where: { type: 'LEAVE', status: 'APPROVED', target_date: (0, time_1.getISTMidnightInstant)(yesterdayStr), employee_id: { in: companyEmployeeIds } },
+            }),
+            p.lead.findMany({ where: { company_id: companyId, created_at: { gte: startOfMonth, lte: endOfMonth } }, select: { status: true } }),
+            p.lead.findMany({ where: { company_id: companyId, created_at: { gte: startOfPrevMonth, lte: endOfPrevMonth } }, select: { status: true } }),
+        ]);
+        const conversionRate = (leads) => leads.length > 0 ? (leads.filter((l) => l.status === 'BOOKED').length / leads.length) * 100 : 0;
+        return {
+            headcount,
+            newHiresThisMonth,
+            onLeaveToday,
+            onLeaveYesterday,
+            conversionThisMonth: conversionRate(leadsThisMonth),
+            conversionLastMonth: conversionRate(leadsLastMonth),
         };
     }
 }

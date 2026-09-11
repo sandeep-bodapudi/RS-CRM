@@ -2,11 +2,18 @@ import { logger } from '../utils/logger';
 import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { authenticateToken, AuthenticatedRequest, requireRole } from '../middleware/auth';
-import { Roles } from '../shared';
+import { Roles, Permissions } from '../shared';
+import permissionsRouter from './admin/permissions';
+import attendanceRouter from './admin/attendance';
 
 const router = Router();
-
 const p = prisma;
+
+// Mount dynamic permissions management router
+router.use('/', permissionsRouter);
+
+// Mount attendance correction router
+router.use('/', attendanceRouter);
 
 /**
  * Technical Admin restricted routes for deep telemetry, auditing, and emergency controls.

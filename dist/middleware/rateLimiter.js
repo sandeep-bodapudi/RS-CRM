@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.aiSearchLimiter = exports.loginRateLimiter = exports.publicWriteLimiter = exports.publicReadLimiter = exports.refreshRateLimiter = exports.apiRateLimiter = void 0;
+exports.aiSearchLimiter = exports.loginRateLimiter = exports.feedbackRateLimiter = exports.appLockRateLimiter = exports.publicWriteLimiter = exports.publicReadLimiter = exports.refreshRateLimiter = exports.apiRateLimiter = void 0;
 const logger_1 = require("../utils/logger");
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const prisma_1 = require("../lib/prisma");
@@ -38,6 +38,33 @@ exports.publicWriteLimiter = (0, express_rate_limit_1.default)({
     skip: skipRateLimitInTests,
     max: 10, // 10 public lead submissions per IP per minute
     message: { error: 'Too many submissions from this IP, please try again after a minute', code: 'RATE_LIMIT_EXCEEDED' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+// § Phase 6: app-lock unlock endpoints are intentionally unauthenticated
+// (see routes/webauthn.ts's doc comment — the whole point is they run when
+// there's no valid access token in memory), so they need their own IP-based
+// throttle. More generous than loginRateLimiter since legitimate use means
+// "once per lock event, many times a day" for a single returning user,
+// potentially several staff sharing one office IP.
+exports.appLockRateLimiter = (0, express_rate_limit_1.default)({
+    windowMs: 60 * 1000,
+    skip: skipRateLimitInTests,
+    max: 20,
+    message: { error: 'Too many app-lock attempts, please try again after a minute', code: 'RATE_LIMIT_EXCEEDED' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+// § Phase 7: the customer feedback form is reached via a token in a WhatsApp
+// link, with no login and no API key — same "unauthenticated but abusable"
+// shape as app-lock unlock, so it gets its own throttle rather than sharing
+// publicReadLimiter/publicWriteLimiter (those are scoped to the API-key-gated
+// routes in routes/public.ts, a different trust boundary).
+exports.feedbackRateLimiter = (0, express_rate_limit_1.default)({
+    windowMs: 60 * 1000,
+    skip: skipRateLimitInTests,
+    max: 20,
+    message: { error: 'Too many requests, please try again after a minute', code: 'RATE_LIMIT_EXCEEDED' },
     standardHeaders: true,
     legacyHeaders: false,
 });

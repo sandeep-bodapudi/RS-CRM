@@ -6,6 +6,7 @@ import { WorkflowEngine } from '../../workflows/workflowEngine';
 import { WorkflowDomain } from '../../workflows/types';
 import { SiteVisitPolicy } from '../../policies/siteVisit.policy';
 import { generateNextBookingCode, resolveVisitProject } from './shared';
+import { notifyEmployee } from '../../utils/notifyEmployee';
 
 const p = prisma;
 
@@ -43,6 +44,7 @@ export async function listVisits(user: TokenPayload, filters: { status?: string;
         project_manager: { select: { id: true, employee_code: true, full_name: true, phone: true } },
         assigned_agent: { select: { id: true, employee_code: true, full_name: true, phone: true } },
         property: { select: { id: true, property_code: true, title: true, status: true } },
+        project: { select: { id: true, project_code: true, name: true, status: true } },
         site_visit_properties: {
           include: { property: { select: { id: true, property_code: true, title: true } } },
         },
@@ -172,6 +174,7 @@ export async function bookVisit(user: TokenPayload, data: any) {
         include: {
           lead: true,
           property: true,
+          project: true,
           telecaller: true,
           project_manager: true,
           assigned_agent: true
@@ -199,6 +202,12 @@ export async function bookVisit(user: TokenPayload, data: any) {
             message: `Site visit ${updatedBooking.booking_code} requires your acceptance.`,
           },
         });
+        // Web push to PM (outside transaction)
+        notifyEmployee(notifyId, {
+          type: 'TARGET_ASSIGNED',
+          title: 'New Site Visit to Accept',
+          message: `Site visit ${updatedBooking.booking_code} requires your acceptance.`,
+        }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] Site visit route PM:', err));
       } else {
         // Immediate Escalation Fallback for unmapped PM
         await tx.siteVisitEscalation.create({
@@ -207,12 +216,12 @@ export async function bookVisit(user: TokenPayload, data: any) {
             marketing_director_notified_at: new Date()
           }
         });
-        
+
         const marketingDirectors = await tx.employee.findMany({
           where: { roles: { some: { role: { name: Roles.MARKETING_DIRECTOR } } }, status: 'ACTIVE' },
           select: { id: true }
         });
-        
+
         if (marketingDirectors.length > 0) {
           await tx.notification.createMany({
             data: marketingDirectors.map((md: any) => ({
@@ -222,6 +231,14 @@ export async function bookVisit(user: TokenPayload, data: any) {
               message: `Site visit ${updatedBooking.booking_code} has no active project PM. Please reassign manually.`,
             }))
           });
+          // Web push to marketing directors (outside transaction)
+          for (const md of marketingDirectors) {
+            notifyEmployee(md.id, {
+              type: 'SYSTEM_ALERT',
+              title: 'Unassigned Site Visit',
+              message: `Site visit ${updatedBooking.booking_code} has no active project PM — please reassign.`,
+            }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] Site visit escalation MD:', err));
+          }
         }
       }
 

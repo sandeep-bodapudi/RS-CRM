@@ -33,7 +33,11 @@ class TaskPolicy {
         return false;
     }
     static canMutateSync(user, task) {
-        if (task.company_id && task.company_id !== user.companyId) {
+        // Task has no company_id column of its own -- company lives on its assignee.
+        // Checking task.company_id here always no-ops (always undefined), silently
+        // skipping this cross-company guard entirely.
+        const taskCompanyId = task.assignee?.company_id ?? task.company_id;
+        if (taskCompanyId && taskCompanyId !== user.companyId) {
             if (!user.roles.includes(shared_1.Roles.ADMIN))
                 return false;
         }

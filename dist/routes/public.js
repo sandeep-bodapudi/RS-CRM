@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.shapePublicProperty = exports.PUBLIC_PROPERTY_SELECT = void 0;
 const logger_1 = require("../utils/logger");
 const prisma_1 = require("../lib/prisma");
 const express_1 = require("express");
@@ -7,6 +8,9 @@ const shared_1 = require("../shared");
 const validate_1 = require("../middleware/validate");
 const rateLimiter_1 = require("../middleware/rateLimiter");
 const correlationId_1 = require("../middleware/correlationId");
+const publicApiKey_1 = require("../middleware/publicApiKey");
+const systemActor_1 = require("../utils/systemActor");
+const create_1 = require("../services/lead/create");
 const router = (0, express_1.Router)();
 const p = prisma_1.prisma;
 router.get('/companies', async (req, res) => {
@@ -22,13 +26,16 @@ router.get('/companies', async (req, res) => {
     }
 });
 // Public-safe property allowlist (WR-1/WR-2/WR-3/WR-6)
-const PUBLIC_PROPERTY_SELECT = {
+exports.PUBLIC_PROPERTY_SELECT = {
     id: true,
     property_code: true,
     title: true,
     description: true,
     category: true,
-    price: true,
+    // § Phase 3: Property.price (manually-typed) was removed — final_price is
+    // now the only authoritative price. Renamed back to `price` in the JSON
+    // response so this public API contract doesn't change for Sonthillu/Radha.
+    final_price: true,
     area_sqft: true,
     location: true,
     address: true,
@@ -40,6 +47,17 @@ const PUBLIC_PROPERTY_SELECT = {
     pricing: true,
     plot_details: true,
     apartment_details: true,
+    // Rebuild Phase 7: the 5 category-specific detail tables added alongside
+    // plot_details/apartment_details (property details.md spec) — without
+    // these, a public Villa/House/Commercial Shop/Commercial Office/Farm Land
+    // listing would silently drop every one of its category-specific fields
+    // (villa number, cabins, private pool, farm infrastructure, ...) even
+    // though the internal API now returns them.
+    villa_details: true,
+    house_details: true,
+    commercial_shop_details: true,
+    commercial_office_details: true,
+    farm_land_details: true,
     seo_title: true,
     seo_keywords: true,
     created_at: true,
@@ -62,44 +80,14 @@ const PUBLIC_PROPERTY_SELECT = {
         orderBy: [{ sort_order: 'asc' }, { created_at: 'asc' }],
     }
 };
-// Public-safe property subset for project detail (less than full property detail)
-// Excludes: status (internal), GPS coordinates, seller info, internal workflow fields
-const PUBLIC_PROJECT_PROPERTY_SELECT = {
-    id: true,
-    property_code: true,
-    title: true,
-    description: true,
-    category: true,
-    price: true,
-    area_sqft: true,
-    location: true,
-    bedrooms: true,
-    bathrooms: true,
-    facing: true,
-    amenities: true,
-    possession_status: true,
-    pricing: true,
-    plot_details: true,
-    apartment_details: true,
-    created_at: true,
-    state: true,
-    city: true,
-    locality: true,
-    pincode: true,
-    listing_type: true,
-    slug: true,
-    images: {
-        where: { status: 'APPROVED' },
-        select: {
-            id: true,
-            image_url: true,
-            is_primary: true,
-            alt_text: true,
-            sort_order: true,
-        },
-        orderBy: [{ sort_order: 'asc' }, { created_at: 'asc' }],
-    }
-};
+/** Renames the selected `final_price` column back to `price` for the public
+ * JSON response — keeps the external API contract unchanged even though the
+ * internal Property model no longer has its own separate `price` column. */
+function shapePublicProperty(row) {
+    const { final_price, ...rest } = row;
+    return { ...rest, price: final_price };
+}
+exports.shapePublicProperty = shapePublicProperty;
 // WR-5/WR-6: Public-safe project allowlist
 const PUBLIC_PROJECT_SELECT = {
     id: true,
@@ -116,21 +104,78 @@ const PUBLIC_PROJECT_SELECT = {
     amenities: true,
     created_at: true,
     slug: true,
+    cover_image_url: true,
     // company_id EXCLUDED — internal
     // assigned_pm_id EXCLUDED — internal
     // branch_id EXCLUDED — internal
 };
-// WR-5: Project detail extends list with properties
+// Public-safe ProjectUnit allowlist — mapped below (unitToPublicPropertyShape)
+// into the same property_code/category/etc. shape the existing public-site
+// DTO layer, built against the old Property-based units, already knows how
+// to render, so it keeps working unchanged. Units are
+// internally-authored inventory (no seller/workflow fields to exclude).
+const PUBLIC_PROJECT_UNIT_SELECT = {
+    id: true,
+    unit_code: true,
+    unit_type: true,
+    unit_number: true,
+    tower: true,
+    block: true,
+    floor: true,
+    bhk: true,
+    bedrooms: true,
+    bathrooms: true,
+    facing: true,
+    area_sqft: true,
+    final_price: true,
+    sales_status: true,
+    created_at: true,
+    images: {
+        select: { id: true, image_url: true, is_primary: true, alt_text: true, sort_order: true },
+        orderBy: [{ sort_order: 'asc' }, { created_at: 'asc' }],
+    },
+};
+// WR-5: Project detail extends list with published units (ProjectUnit — see
+// the "Deliberately NOT a Property" comment on that model in schema.prisma).
+// `properties` intentionally dropped from the public payload: post-rebuild it
+// holds only legacy soft-archived rows from the Property -> ProjectUnit
+// migration, never live inventory.
 const PUBLIC_PROJECT_DETAIL_SELECT = {
     ...PUBLIC_PROJECT_SELECT,
-    properties: {
-        select: PUBLIC_PROJECT_PROPERTY_SELECT,
+    units: {
+        where: { is_published: true },
+        select: PUBLIC_PROJECT_UNIT_SELECT,
         orderBy: { created_at: 'desc' },
     },
 };
+/** Shapes a published ProjectUnit into the Property-like object the public
+ * site's DTO layer (toPublicProjectDetail in dto.ts, both frontends) already
+ * knows how to render — avoids touching four downstream codebases for a
+ * field-name difference. */
+function unitToPublicPropertyShape(unit) {
+    const categoryMap = { FLAT: 'APARTMENT', PLOT: 'PLOT', VILLA: 'VILLA', HOUSE: 'INDEPENDENT_HOUSE', COMMERCIAL: 'COMMERCIAL', OTHER: 'OTHER' };
+    const label = [unit.tower, unit.block, unit.unit_number].filter(Boolean).join(' ') || unit.unit_code;
+    return {
+        id: unit.id,
+        title: `${unit.bhk ? unit.bhk + ' ' : ''}${categoryMap[unit.unit_type] === 'APARTMENT' ? 'Flat' : unit.unit_type} ${label}`.trim(),
+        property_code: unit.unit_code,
+        category: categoryMap[unit.unit_type] || unit.unit_type,
+        listing_type: 'NEW',
+        price: unit.final_price,
+        area_sqft: unit.area_sqft,
+        location: undefined, // inherited from the project itself, not repeated per unit
+        bedrooms: unit.bedrooms,
+        bathrooms: unit.bathrooms,
+        facing: unit.facing,
+        possession_status: null,
+        images: unit.images || [],
+        amenities: '[]',
+        created_at: unit.created_at,
+    };
+}
 // Property detail adds a minimal project subset (WR-5 extends this pattern)
 const PUBLIC_PROPERTY_DETAIL_SELECT = {
-    ...PUBLIC_PROPERTY_SELECT,
+    ...exports.PUBLIC_PROPERTY_SELECT,
     project: {
         select: {
             id: true,
@@ -141,31 +186,9 @@ const PUBLIC_PROPERTY_DETAIL_SELECT = {
         },
     },
 };
-// Public API Key Middleware
-const authenticatePublicKey = async (req, res, next) => {
-    const apiKey = req.header('x-api-key');
-    if (!apiKey) {
-        return res.status(401).json({ error: 'API Key missing' });
-    }
-    try {
-        const validKey = await p.publicApiKey.findUnique({
-            where: { api_key: apiKey },
-            include: { company: true },
-        });
-        if (!validKey || !validKey.is_active) {
-            return res.status(401).json({ error: 'Invalid or inactive API Key' });
-        }
-        req.apiKeyContext = validKey;
-        next();
-    }
-    catch (err) {
-        logger_1.logger.error('API Key Auth error:', err);
-        res.status(500).json({ error: 'Internal server error during authentication' });
-    }
-};
 router.use(correlationId_1.correlationId);
 router.use(rateLimiter_1.publicReadLimiter);
-router.use(authenticatePublicKey);
+router.use(publicApiKey_1.authenticatePublicKey);
 // GET /api/v1/public/:brand/properties
 router.get('/:brand/properties', async (req, res) => {
     try {
@@ -267,13 +290,13 @@ router.get('/:brand/properties', async (req, res) => {
         };
         // WR-7: Price range filter (price >= priceMin AND price <= priceMax)
         if (priceMin !== undefined && priceMax !== undefined) {
-            whereCondition.price = { gte: priceMin, lte: priceMax };
+            whereCondition.final_price = { gte: priceMin, lte: priceMax };
         }
         else if (priceMin !== undefined) {
-            whereCondition.price = { gte: priceMin };
+            whereCondition.final_price = { gte: priceMin };
         }
         else if (priceMax !== undefined) {
-            whereCondition.price = { lte: priceMax };
+            whereCondition.final_price = { lte: priceMax };
         }
         // WR-7: Bedrooms filter
         let finalBedroomsMin = undefined;
@@ -373,10 +396,10 @@ router.get('/:brand/properties', async (req, res) => {
             orderBy.created_at = 'desc';
         }
         else if (sortBy === 'price-asc') {
-            orderBy.price = 'asc';
+            orderBy.final_price = 'asc';
         }
         else if (sortBy === 'price-desc') {
-            orderBy.price = 'desc';
+            orderBy.final_price = 'desc';
         }
         // WR-7: Pagination — page and limit with defaults and max
         const skip = (page - 1) * limit;
@@ -387,12 +410,12 @@ router.get('/:brand/properties', async (req, res) => {
         });
         const properties = await p.property.findMany({
             where: whereCondition,
-            select: PUBLIC_PROPERTY_SELECT,
+            select: exports.PUBLIC_PROPERTY_SELECT,
             orderBy: orderBy,
             skip: skip,
             take: take,
         });
-        res.status(200).json(properties);
+        res.status(200).json(properties.map(shapePublicProperty));
     }
     catch (error) {
         logger_1.logger.error('Fetch public properties error:', error);
@@ -440,7 +463,7 @@ router.get('/:brand/properties/:id', async (req, res) => {
         if (!property) {
             return res.status(404).json({ error: 'Property not found or not available' });
         }
-        res.status(200).json(property);
+        res.status(200).json(shapePublicProperty(property));
     }
     catch (error) {
         logger_1.logger.error('Fetch public property detail error:', error);
@@ -448,44 +471,36 @@ router.get('/:brand/properties/:id', async (req, res) => {
     }
 });
 // ─── WR-5: Public Project Endpoints ──────────────────────────────────────────
-// Brand → brand_type mapping (WR-1 established: RRH=Commercial/Plots, Sonthillu=Residential)
-const BRAND_TYPE_MAP = {
-    rrh: 'RADHA_REAL_HOMES',
-    sonthillu: 'SONTHILLU',
-};
-// Helper: derive inventory summary from properties in a project
-// Counts all properties in the project regardless of publication status,
-// but excludes CANCELLED properties from the total.
-function deriveInventorySummary(properties) {
+// Rebuilt against the ProjectUnit split (a project's saleable inventory is no
+// longer Property rows with project_id set — see schema.prisma's comment on
+// ProjectUnit). Visibility is company-scoped via the API key already
+// (PublicApiKey has no brand/category column of its own), plus Project's own
+// `is_published` flag; `:brand` in the URL is kept only for path
+// compatibility with the sites already calling it.
+// Helper: derive inventory summary from a project's ProjectUnit rows.
+// Counts every unit regardless of is_published (an unpublished unit is still
+// real inventory a buyer shouldn't see priced-out-of-existence), excluding
+// only BLOCKED/UNAVAILABLE from the public total the same way the internal
+// dashboard's tiles do.
+function deriveUnitInventorySummary(units) {
     let total = 0;
     let available = 0;
     let reserved = 0;
     let sold = 0;
-    const now = new Date();
-    for (const prop of properties) {
-        // Skip cancelled properties entirely
-        if (prop.status === 'CANCELLED')
+    for (const unit of units) {
+        if (unit.sales_status === 'BLOCKED' || unit.sales_status === 'UNAVAILABLE')
             continue;
         total++;
-        if (prop.status === 'LIVE') {
+        if (unit.sales_status === 'AVAILABLE')
             available++;
-        }
-        else if (prop.status === 'LOCKED') {
-            if (prop.locked_until && prop.locked_until < now) {
-                available++; // expired lock = available
-            }
-            else {
-                reserved++; // active lock = reserved
-            }
-        }
-        else if (prop.status === 'BOOKED' || prop.status === 'SOLD') {
+        else if (unit.sales_status === 'HOLD' || unit.sales_status === 'RESERVED')
+            reserved++;
+        else if (unit.sales_status === 'BOOKED' || unit.sales_status === 'SOLD')
             sold++;
-        }
-        // PENDING_* / REJECTED: count in total but not in available/reserved/sold
     }
     return { total, available, reserved, sold };
 }
-// GET /api/v1/public/:brand/projects — list projects with published properties for this brand
+// GET /api/v1/public/:brand/projects — list published projects for this company
 router.get('/:brand/projects', async (req, res) => {
     try {
         const { brand } = req.params;
@@ -494,39 +509,32 @@ router.get('/:brand/projects', async (req, res) => {
             return res.status(400).json({ error: 'Invalid brand specified in URL' });
         }
         const companyId = req.apiKeyContext.company_id;
-        const brandType = BRAND_TYPE_MAP[brandLower];
-        // Find projects that have at least one property:
-        // 1. of the matching brand_type (RRH → RADHA_REAL_HOMES, Sonthillu → SONTHILLU)
-        // 2. published to this company via PropertyPublication
         const projects = await p.project.findMany({
             where: {
-                properties: {
-                    some: {
-                        brand_type: brandType,
-                        publications: {
-                            some: {
-                                company_id: companyId,
-                                is_published: true,
-                            },
-                        },
-                    },
-                },
+                company_id: companyId,
+                is_published: true,
                 status: { not: 'CANCELLED' },
             },
             select: PUBLIC_PROJECT_SELECT,
             orderBy: { created_at: 'desc' },
         });
-        // Derive inventory summary for each project
-        const projectsWithInventory = await Promise.all(projects.map(async (project) => {
-            const allProperties = await p.property.findMany({
-                where: { project_id: project.id },
-                select: {
-                    status: true,
-                    locked_until: true,
-                },
-            });
-            const inventory_summary = deriveInventorySummary(allProperties);
-            return { ...project, inventory_summary };
+        if (projects.length === 0) {
+            return res.status(200).json([]);
+        }
+        // One batched query for every project's units rather than N+1.
+        const units = await p.projectUnit.findMany({
+            where: { project_id: { in: projects.map((pr) => pr.id) } },
+            select: { project_id: true, sales_status: true },
+        });
+        const unitsByProject = new Map();
+        for (const unit of units) {
+            const list = unitsByProject.get(unit.project_id) || [];
+            list.push(unit);
+            unitsByProject.set(unit.project_id, list);
+        }
+        const projectsWithInventory = projects.map((project) => ({
+            ...project,
+            inventory_summary: deriveUnitInventorySummary(unitsByProject.get(project.id) || []),
         }));
         res.status(200).json(projectsWithInventory);
     }
@@ -536,7 +544,8 @@ router.get('/:brand/projects', async (req, res) => {
     }
 });
 // GET /api/v1/public/:brand/projects/:id — public project detail
-// Returns 404 when project does not exist or has no published properties for this brand.
+// Returns 404 when the project does not exist, isn't published, or belongs
+// to a different company than the one this API key is scoped to.
 router.get('/:brand/projects/:id', async (req, res) => {
     try {
         const { brand, id } = req.params;
@@ -549,39 +558,27 @@ router.get('/:brand/projects/:id', async (req, res) => {
             return res.status(404).json({ error: 'Project not found or not available' });
         }
         const companyId = req.apiKeyContext.company_id;
-        const brandType = BRAND_TYPE_MAP[brandLower];
-        // Verify project exists and has at least one published property of this brand for this company
-        const publicationCheck = await p.propertyPublication.findFirst({
-            where: {
-                company_id: companyId,
-                is_published: true,
-                property: {
-                    project_id: projectId,
-                    brand_type: brandType,
-                },
-            },
-        });
-        if (!publicationCheck) {
-            return res.status(404).json({ error: 'Project not found or not available' });
-        }
-        // Fetch project with properties and approved images
         const project = await p.project.findFirst({
-            where: { id: projectId },
+            where: { id: projectId, company_id: companyId, is_published: true },
             select: PUBLIC_PROJECT_DETAIL_SELECT,
         });
         if (!project) {
             return res.status(404).json({ error: 'Project not found or not available' });
         }
-        // Derive inventory summary from all properties in the project
-        const allProperties = await p.property.findMany({
+        // Inventory summary counts every unit (published or not — see
+        // deriveUnitInventorySummary), while `units` above was already filtered
+        // to is_published:true for display, so re-fetch unfiltered for the count.
+        const allUnits = await p.projectUnit.findMany({
             where: { project_id: projectId },
-            select: {
-                status: true,
-                locked_until: true,
-            },
+            select: { sales_status: true },
         });
-        const inventory_summary = deriveInventorySummary(allProperties);
-        res.status(200).json({ ...project, inventory_summary });
+        const inventory_summary = deriveUnitInventorySummary(allUnits);
+        const { units, ...projectFields } = project;
+        res.status(200).json({
+            ...projectFields,
+            properties: (units || []).map(unitToPublicPropertyShape),
+            inventory_summary,
+        });
     }
     catch (error) {
         logger_1.logger.error('Fetch public project detail error:', error);
@@ -589,41 +586,36 @@ router.get('/:brand/projects/:id', async (req, res) => {
     }
 });
 // POST /api/v1/public/:brand/leads
+// Website leads used to be a bare, unchecked insert — no duplicate
+// detection, no scoring, no SLA timer, and (critically) no auto-distribution
+// to a telecaller, unlike every internal lead-creation path. This now
+// routes through the exact same createLead() pipeline internal leads use,
+// via a per-company non-login "system" employee (see utils/systemActor.ts)
+// so the required LeadActivity.actor_id FK has something real to point at,
+// while attribution (created_by_id) correctly stays null — a website lead
+// has no employee creator.
 router.post('/:brand/leads', rateLimiter_1.publicWriteLimiter, (0, validate_1.validateRequestBody)(shared_1.PublicLeadCreateSchema), async (req, res) => {
     try {
         const { brand } = req.params;
-        const { customer_name, phone, email, notes, property_type_preference, preferred_location, budget_max, enquiry_type, preferred_contact_time, property_ids, project_id } = req.body;
         const companyId = req.apiKeyContext.company_id;
         if (brand.toLowerCase() !== 'rrh' && brand.toLowerCase() !== 'sonthillu') {
             return res.status(400).json({ error: 'Invalid brand specified in URL' });
         }
-        // Auto-generate Lead Code
-        const year = new Date().getFullYear();
-        const count = await p.lead.count();
-        const leadCode = `RRH-LD-${year}-${String(count + 1).padStart(4, '0')}`;
-        // Create the lead
-        const newLead = await p.lead.create({
-            data: {
-                lead_code: leadCode,
-                company_id: companyId,
-                customer_name,
-                phone,
-                email,
-                source: 'WEBSITE',
-                status: 'NEW',
-                property_type_preference: property_type_preference || 'APARTMENT',
-                preferred_location,
-                budget_max: budget_max ? Number(budget_max) : null,
-                enquiry_type,
-                preferred_contact_time,
-                property_ids,
-                project_id,
-                notes,
-            },
-        });
-        res.status(201).json({ message: 'Lead captured successfully', leadId: newLead.id });
+        const systemEmployee = await (0, systemActor_1.getOrCreateSystemEmployee)(companyId);
+        const systemUser = {
+            employeeId: systemEmployee.id,
+            employeeCode: systemEmployee.employee_code,
+            companyId,
+            branchId: null,
+            roles: [],
+            permissions: [],
+        };
+        const { lead } = await (0, create_1.createLead)(systemUser, { ...req.body, source: 'WEBSITE' }, { isPublicSubmission: true });
+        res.status(201).json({ message: 'Lead captured successfully', leadId: lead.id });
     }
     catch (error) {
+        if (error.statusCode)
+            return res.status(error.statusCode).json({ error: error.message });
         logger_1.logger.error('Public lead creation error:', error);
         res.status(500).json({ error: 'Failed to create lead' });
     }

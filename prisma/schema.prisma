@@ -326,6 +326,7 @@ model Employee {
   assigned_customers            Customer[]                   @relation("AssignedCustomers")
   lead_activities               LeadActivity[]
   assigned_projects             Project[]                    @relation("AssignedPMProjects")
+  verified_projects             Project[]                    @relation("ProjectVerifier")
   assigned_properties           Property[]                   @relation("AssignedPMProperties")
   dm_executive_properties       Property[]                   @relation("DMExecutiveProperties")
   created_properties            Property[]                   @relation("CreatedProperties")
@@ -918,9 +919,17 @@ model Project {
   cover_image_url String? @db.Text
   is_published    Boolean @default(false)
 
+  // Verification workflow: DRAFT → PENDING_VERIFICATION → VERIFIED | REJECTED
+  // Only MD/Admin can approve. PM submits. Others only see VERIFIED projects.
+  verification_status  String    @default("DRAFT") // DRAFT | PENDING_VERIFICATION | VERIFIED | REJECTED
+  verified_by_id       Int?
+  verified_at          DateTime?
+  verification_notes   String?   @db.Text
+
   company     Company   @relation(fields: [company_id], references: [id])
   branch      Branch?   @relation(fields: [branch_id], references: [id])
   assigned_pm Employee? @relation("AssignedPMProjects", fields: [assigned_pm_id], references: [id])
+  verified_by Employee? @relation("ProjectVerifier", fields: [verified_by_id], references: [id])
 
   properties    Property[]
   opportunities Opportunity[]
@@ -2366,6 +2375,8 @@ model Demo {
   summary      String   @db.Text
   created_at   DateTime @default(now())
   updated_at   DateTime @updatedAt
+  accepted_at  DateTime? // When handler accepted the demo request (blind approval)
+  accepted_by  Int?     // Employee ID who accepted (usually the handler themselves)
 
   lead                  Lead                     @relation(fields: [lead_id], references: [id], onDelete: Cascade)
   handler               Employee                 @relation("DemoHandler", fields: [handler_id], references: [id])
@@ -2642,3 +2653,5 @@ model PropertyFarmLandDetails {
 
   property Property @relation(fields: [property_id], references: [id], onDelete: Cascade)
 }
+
+

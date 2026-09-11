@@ -6,4 +6,5 @@ var WorkflowDomain;
     WorkflowDomain["LEAD"] = "LEAD";
     WorkflowDomain["PROPERTY"] = "PROPERTY";
     WorkflowDomain["SITE_VISIT"] = "SITE_VISIT";
+    WorkflowDomain["PROJECT"] = "PROJECT";
 })(WorkflowDomain || (exports.WorkflowDomain = WorkflowDomain = {}));

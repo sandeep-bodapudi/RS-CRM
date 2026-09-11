@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CustomerService = exports.AppError = void 0;
 const prisma_1 = require("../lib/prisma");
+const shared_1 = require("../shared");
 const dataScope_1 = require("../authz/dataScope");
 const customer_policy_1 = require("../policies/customer.policy");
 const workflowEngine_1 = require("../workflows/workflowEngine");
@@ -98,11 +99,20 @@ class CustomerService {
     }
     static async convertFromLead(user, leadId) {
         const lead = await p.lead.findFirst({
-            where: { id: leadId, },
+            where: { id: leadId, company_id: user.companyId },
             include: { converted_customer: true },
         });
         if (!lead) {
             throw new AppError(404, 'Lead not found or access denied');
+        }
+        // Phase-19 audit #9: Channel Partner Managers manage leads for an
+        // external partner company's own inventory -- they may only convert
+        // leads they personally entered, never a lead introduced or worked by
+        // someone else in the normal internal sales pipeline.
+        const isChannelPartnerManager = user.roles.includes(shared_1.Roles.CHANNEL_PARTNER_MANAGER);
+        const isManagement = user.roles.includes(shared_1.Roles.MD) || user.roles.includes(shared_1.Roles.ADMIN);
+        if (isChannelPartnerManager && !isManagement && lead.created_by_id !== user.employeeId) {
+            throw new AppError(403, 'Channel Partner Managers may only convert leads they personally created.');
         }
         if (lead.converted_customer) {
             throw new AppError(409, 'This lead has already been converted to a customer');
@@ -133,7 +143,7 @@ class CustomerService {
                 },
             });
             // Update lead status to BOOKED (won state) — routed through the engine.
-            await workflowEngine_1.WorkflowEngine.transition(tx, lead.id, 'BOOKED', { actor: user, entity: lead });
+            await workflowEngine_1.WorkflowEngine.transitionLead(tx, lead.id, 'BOOKED', { actor: user, entity: lead });
             await tx.leadActivity.create({
                 data: {
                     lead_id: lead.id,

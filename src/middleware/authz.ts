@@ -1,13 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import { can } from '../authz/authorization';
+import { checkDbPermission } from '../authz/dbPermissions';
 import { AuthenticatedRequest } from './auth';
 import { Permission } from '../shared';
 
 /**
- * requireAuthz Middleware
- * Replaces simple requireRole/requirePermission checks with the new centralized 'can' engine.
- * @param action The required permission action.
- * @param getResource An optional async function to fetch the specific resource being accessed.
+ * requireAuthz Middleware — v2
+ * First checks DB-backed permission overrides (takes effect immediately,
+ * no re-login needed), then falls back to the static token-based `can()` engine.
  */
 export const requireAuthz = (
   action: Permission,
@@ -23,18 +23,22 @@ export const requireAuthz = (
       if (getResource) {
         resource = await getResource(req);
         if (!resource) {
-          // If a resource is expected but not found, 404 is more appropriate than 403
           return res.status(404).json({ error: 'Resource not found', code: 'NOT_FOUND' });
         }
       }
 
+      // 1. Check DB-backed permission overrides (grants) — immediate effect
+      const dbResult = await checkDbPermission(req.user, action);
+      if (dbResult === true) {
+        return next();
+      }
+
+      // 2. Fall back to static token-based authorization
       const isAuthorized = can(req.user, action, resource);
-      
       if (!isAuthorized) {
         return res.status(403).json({ error: 'Forbidden: Insufficient access or out of scope', code: 'FORBIDDEN' });
       }
 
-      // We attach the authorized resource to the request so downstream routes don't have to fetch it again
       if (resource) {
         (req as any).authorizedResource = resource;
       }

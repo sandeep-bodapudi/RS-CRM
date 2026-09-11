@@ -26,6 +26,7 @@ import webauthnRoutes from './routes/webauthn';
 import feedbackRoutes from './routes/feedback';
 
 import siteVisitRoutes from './routes/siteVisits';
+import demoRoutes from './routes/demos';
 import customerRoutes from './routes/customers';
 import publicRoutes from './routes/public';
 import publicWebsiteRoutes from './routes/publicWebsite';
@@ -203,6 +204,7 @@ if (mountInternal) {
   app.use('/api/v1/installments', installmentRoutes);
   app.use('/api/v1/projects', projectRoutes);
   app.use('/api/v1/site-visits', siteVisitRoutes);
+  app.use('/api/v1/demos', demoRoutes);
   app.use('/api/v1/admin', adminRoutes);
   app.use('/api/v1/expense-refunds', expenseRefundRoutes);
   app.use('/api/v1/push', pushRoutes);

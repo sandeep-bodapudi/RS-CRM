@@ -18,3 +18,4 @@ export * from './siteVisit';
 export * from './messageTemplate';
 export * from './employee';
 export * from './websiteAccount';
+export * from './demo';

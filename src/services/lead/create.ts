@@ -4,7 +4,8 @@ import { Roles } from '../../shared';
 import { AppError } from './errors';
 import { generateNextLeadCode, calculateLeadScore, syncLeadPreferredLocations } from './shared';
 import { findBestAssigneeForLead } from '../../utils/distributionService';
-
+import { notifyEmployee } from '../../utils/notifyEmployee';
+import { logger } from '../../utils/logger';
 const p = prisma;
 
 export async function createLead(
@@ -86,6 +87,12 @@ export async function createLead(
               message: `Your active lead ${existingLead.lead_code} (${existingLead.customer_name}) submitted a new inquiry via ${sourceName}.`
             }
           });
+          // Web push to assigned employee (outside transaction)
+          notifyEmployee(existingLead.assigned_to_id, {
+            type: 'SYSTEM_ALERT',
+            title: 'Active Lead Re-Inquiry',
+            message: `Your lead ${existingLead.lead_code} (${existingLead.customer_name}) submitted a new inquiry.`,
+          }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] Lead re-inquiry notify:', err));
         }
           return { lead: existingLead };
       } else {
@@ -279,7 +286,14 @@ export async function createLead(
             message: `New Lead ${lead.customer_name} (${lead.phone}) has been assigned to you.`,
           },
         });
+        // Web push to auto-assigned employee (outside transaction)
+        notifyEmployee(bestAssignee.employeeId, {
+          type: 'TARGET_ASSIGNED',
+          title: 'New Lead Auto-Assigned',
+          message: `New Lead ${lead.customer_name} (${lead.phone}) has been assigned to you.`,
+        }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] Lead auto-assign notify:', err));
       }
+
 
       return { lead, assignedTo: bestAssignee };
     });

@@ -2,7 +2,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LeadPolicy = void 0;
 const shared_1 = require("../shared");
-const lead_service_1 = require("../services/lead.service");
 /**
  * Phase 3 - Lead Resource Scope Policy
  * Enforces ownership and cross-company boundaries before mutating data.
@@ -43,15 +42,16 @@ class LeadPolicy {
      * - Applies the same rules as canView.
      */
     static canMutate(user, lead) {
-        // Currently, mutation rules are identical to view rules for assigned users.
         // Management can mutate any lead in their company
         if (this.isManagement(user)) {
             return lead.company_id === user.companyId;
         }
-        // Telecallers/Agents: can ONLY mutate leads assigned to their own employeeId,
-        // OR leads they created that are currently unassigned. Cross-company access is always denied.
-        if (lead.assigned_to_id === user.employeeId ||
-            (lead.assigned_to_id === null && lead.created_by_id === user.employeeId)) {
+        // Telecallers/Agents: can ONLY mutate leads currently assigned to their own
+        // employeeId. A lead they personally created but that has since gone back
+        // to the unassigned pool is still visible to them (canView, for their own
+        // tracking) but is view-only until it's actually assigned to someone --
+        // it isn't theirs to work just because they introduced it.
+        if (lead.assigned_to_id === user.employeeId) {
             return lead.company_id === user.companyId;
         }
         return false;
@@ -66,41 +66,6 @@ class LeadPolicy {
             return false;
         }
         return this.isManagement(user);
-    }
-    /** Returns the list of valid status transitions from the given current status.
-     * Lead workflow: NEW -> ASSIGNED -> CONTACTED -> QUALIFIED -> SITE_VISIT_SCHEDULED -> WON
-     * Any transition not in this map is illegal.
-     */
-    static getValidTransitions(status) {
-        const map = {
-            NEW: ['ASSIGNED'],
-            ASSIGNED: ['CONTACTED', 'DROPPED'],
-            CONTACTED: ['QUALIFIED', 'DROPPED'],
-            QUALIFIED: ['DEMO_SCHEDULED', 'SITE_VISIT_SCHEDULED', 'DROPPED'],
-            DEMO_SCHEDULED: ['DEMO_COMPLETED', 'DROPPED'],
-            DEMO_COMPLETED: ['SITE_VISIT_SCHEDULED', 'DROPPED'],
-            SITE_VISIT_SCHEDULED: ['SITE_VISIT_COMPLETED', 'DROPPED'],
-            SITE_VISIT_COMPLETED: ['NEGOTIATION', 'DROPPED'],
-            NEGOTIATION: ['BOOKING_INITIATED', 'DROPPED'],
-            BOOKING_INITIATED: ['BOOKED', 'DROPPED'],
-            BOOKED: [], // terminal won
-            DROPPED: ['RECOVERED_TO_POOL'],
-            RECOVERED_TO_POOL: ['ASSIGNED'],
-        };
-        return map[status] || [];
-    }
-    /** Validates that a status transition is legal according to the lead workflow.
-     * Returns the AppError if invalid, or null if valid.
-     */
-    static validateTransition(currentStatus, newStatus) {
-        if (currentStatus === newStatus) {
-            return { valid: true };
-        }
-        const valid = this.getValidTransitions(currentStatus);
-        if (valid.includes(newStatus)) {
-            return { valid: true };
-        }
-        return { valid: false, error: new lead_service_1.AppError(409, `Invalid lead status transition: ${currentStatus} → ${newStatus}`) };
     }
 }
 exports.LeadPolicy = LeadPolicy;

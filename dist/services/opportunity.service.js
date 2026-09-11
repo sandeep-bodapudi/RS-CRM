@@ -71,7 +71,7 @@ class OpportunityService {
             // engine (the only authority allowed to write Lead.status) rather than a
             // raw update. OPPORTUNITY_OPEN no longer exists.
             if (lead.status === 'SITE_VISIT_COMPLETED') {
-                await workflowEngine_1.WorkflowEngine.transition(tx, lead_id, 'NEGOTIATION', { actor: user, entity: { ...lead, opportunities: [opportunity] } });
+                await workflowEngine_1.WorkflowEngine.transitionLead(tx, lead_id, 'NEGOTIATION', { actor: user, entity: { ...lead, opportunities: [opportunity] } });
             }
             return opportunity;
         });
@@ -105,7 +105,7 @@ class OpportunityService {
                 company_id: lead.company_id,
                 lead_id: lead.id,
                 owner_id: actingEmployeeId,
-                expected_value: property?.price ?? null,
+                expected_value: property?.final_price ?? null,
                 probability: 30,
                 expected_close_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
                 source: lead.source ?? null,

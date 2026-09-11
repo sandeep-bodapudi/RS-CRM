@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.buildCustomerScope = exports.buildProjectScope = exports.buildPropertyScope = exports.buildEmployeeScope = exports.buildLeadScope = void 0;
 const shared_1 = require("../shared");
 const hierarchy_1 = require("../utils/hierarchy");
+const prisma_1 = require("../lib/prisma");
 const MANAGEMENT_ROLES = [
     shared_1.Roles.MD,
     shared_1.Roles.ADMIN,
@@ -13,25 +14,46 @@ const MANAGEMENT_ROLES = [
     shared_1.Roles.SALES_MANAGER,
 ];
 /**
+ * Resolves which companies' data this employee may see, via the explicit
+ * EmployeeCompanyAccess grant table (Phase 1.2). Radha Real Homes and
+ * Sonthillu Constructions currently share one employee base, so employees
+ * are granted access to both there; when the employee bases are split
+ * apart later, removing a grant row is enough — no code change needed.
+ *
+ * Falls back to the employee's own `company_id` (their JWT "home" company)
+ * if no explicit grant rows exist yet, so an ungranted employee is scoped
+ * to at least one company rather than zero or all of them.
+ */
+async function getAccessibleCompanyIds(user) {
+    const grants = await prisma_1.prisma.employeeCompanyAccess.findMany({
+        where: { employee_id: user.employeeId },
+        select: { company_id: true },
+    });
+    if (grants.length === 0) {
+        return [user.companyId];
+    }
+    return grants.map((g) => g.company_id);
+}
+/**
  * Ensures company isolation for all scopes, except for System Admins.
  */
-function getBaseScope(user) {
-    // Global visibility across all companies by default (except Properties)
-    return {};
+async function getBaseScope(user) {
+    const companyIds = await getAccessibleCompanyIds(user);
+    return { company_id: { in: companyIds } };
 }
 /**
  * Builds the read-visibility scope for Leads.
  */
 async function buildLeadScope(user) {
-    const baseScope = getBaseScope(user);
     // 1. ADMIN
     if (user.roles.includes(shared_1.Roles.ADMIN)) {
         return {}; // Global access
     }
+    const baseScope = await getBaseScope(user);
     // 3. MANAGEMENT
     const isManagement = user.roles.some((r) => MANAGEMENT_ROLES.includes(r));
     if (isManagement) {
-        return baseScope; // Entire company leads (which is now global)
+        return baseScope; // All companies this employee has been granted access to
     }
     // 4. MANAGERS & TELECALLERS (TEAM / OWN scope)
     const downstreamIds = await (0, hierarchy_1.getDownstreamEmployeeIds)(user.companyId, user.employeeId);
@@ -48,11 +70,11 @@ exports.buildLeadScope = buildLeadScope;
  * Builds the read-visibility scope for Employees.
  */
 async function buildEmployeeScope(user) {
-    const baseScope = getBaseScope(user);
     // 1. ADMIN
     if (user.roles.includes(shared_1.Roles.ADMIN)) {
         return {}; // Global access
     }
+    const baseScope = await getBaseScope(user);
     // Hide system/invisible roles for everyone except Admin
     const invisibleFilter = {
         roles: { none: { role: { is_invisible: true } } },
@@ -78,8 +100,10 @@ exports.buildEmployeeScope = buildEmployeeScope;
  * Builds the read-visibility scope for Properties.
  */
 async function buildPropertyScope(user) {
-    // Properties strictly retain company_id segregation
-    const propertyBaseScope = user.roles.includes(shared_1.Roles.ADMIN) ? {} : { company_id: user.companyId };
+    // Company-scoped like every other domain (Phase 1.2) — brought in line with
+    // Lead/Employee/Project/Customer rather than being locked to the single
+    // "home" company_id, since employees currently need both companies' data.
+    const propertyBaseScope = user.roles.includes(shared_1.Roles.ADMIN) ? {} : await getBaseScope(user);
     // 1. ADMIN & MANAGEMENT
     const isManagement = user.roles.some((r) => MANAGEMENT_ROLES.includes(r));
     if (user.roles.includes(shared_1.Roles.ADMIN) || isManagement) {
@@ -113,12 +137,12 @@ exports.buildPropertyScope = buildPropertyScope;
  *   Others:              no access
  */
 async function buildProjectScope(user) {
-    const baseScope = getBaseScope(user);
     // 1. ADMIN (global, no company restriction)
     if (user.roles.includes(shared_1.Roles.ADMIN)) {
         return {};
     }
-    // 2. MANAGEMENT (all company projects)
+    const baseScope = await getBaseScope(user);
+    // 2. MANAGEMENT (all companies this employee has been granted access to)
     const isManagement = user.roles.some((r) => MANAGEMENT_ROLES.includes(r));
     if (isManagement) {
         return baseScope;
@@ -145,10 +169,10 @@ exports.buildProjectScope = buildProjectScope;
  * Builds the read-visibility scope for Customers.
  */
 async function buildCustomerScope(user) {
-    const baseScope = getBaseScope(user);
     if (user.roles.includes(shared_1.Roles.ADMIN)) {
         return {};
     }
+    const baseScope = await getBaseScope(user);
     const isManagement = user.roles.some((r) => MANAGEMENT_ROLES.includes(r));
     if (isManagement) {
         return baseScope;

@@ -7,6 +7,7 @@ import { WorkflowDomain } from '../../workflows/types';
 import { SiteVisitPolicy } from '../../policies/siteVisit.policy';
 import { applyTransition } from './shared';
 import { createFeedbackRequest, dispatchFeedbackRequestNotification } from '../feedback.service';
+import { notifyEmployee } from '../../utils/notifyEmployee';
 
 const p = prisma;
 
@@ -99,6 +100,12 @@ export async function reassignVisit(user: TokenPayload, visitId: number, toEmplo
           message: `Site visit ${visit.booking_code} has been reassigned to you for acceptance.`,
         },
       });
+      // Web push to reassigned employee (outside transaction)
+      notifyEmployee(toEmployeeId, {
+        type: 'TARGET_ASSIGNED',
+        title: 'Site Visit Reassigned to You',
+        message: `Site visit ${visit.booking_code} has been reassigned to you for acceptance.`,
+      }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] Site visit reassign:', err));
 
       return updated;
     });
@@ -147,6 +154,12 @@ export async function escalateVisit(user: TokenPayload, visitId: number, reason:
             message: `Site visit ${visit.booking_code} could not be assigned to a PM/Agent. Reason: ${reason}`,
           },
         });
+        // Web push to Marketing Director (outside transaction)
+        notifyEmployee(md.id, {
+          type: 'SYSTEM_ALERT',
+          title: 'Site Visit Escalated',
+          message: `Site visit ${visit.booking_code} escalated — no PM/Agent available.`,
+        }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] Site visit escalate:', err));
       }
 
       return updated;

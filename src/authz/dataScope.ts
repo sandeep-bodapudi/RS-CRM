@@ -158,28 +158,32 @@ export async function buildProjectScope(user: TokenPayload): Promise<Prisma.Proj
 
   const baseScope = await getBaseScope(user);
 
-  // 2. MANAGEMENT (all companies this employee has been granted access to)
-  const isManagement = user.roles.some((r) => MANAGEMENT_ROLES.includes(r as any));
-  if (isManagement) {
+  // 2. MD — sees all projects in their company (any verification_status)
+  if (user.roles.includes(Roles.MD)) {
     return baseScope;
   }
 
-  // 3. PROJECT MANAGER — STRICTLY ASSIGNED PROJECTS ONLY
-  // Per authoritative rule: PM CANNOT view Projects assigned to other PMs.
+  // 3. MANAGEMENT — only see VERIFIED projects (no drafts for non-MD)
+  const isManagement = user.roles.some((r) => MANAGEMENT_ROLES.includes(r as any));
+  if (isManagement) {
+    return { ...baseScope, verification_status: 'VERIFIED' };
+  }
+
+  // 4. PROJECT MANAGER - sees all their assigned projects (any verification_status) AND all other VERIFIED projects
   if (user.roles.includes(Roles.PROJECT_MANAGER)) {
     return {
       ...baseScope,
-      assigned_pm_id: user.employeeId,
+      OR: [
+        { assigned_pm_id: user.employeeId },
+        { verification_status: 'VERIFIED' },
+      ],
     };
   }
 
-  // 4. TELECALLER / AGENT — read-only, launched projects (UNDER_CONSTRUCTION or COMPLETED)
-  // Note: Project has no 'LIVE' status. 'LIVE' in roadmap documentation maps to
-  // non-PLANNING, non-CANCELLED projects. This interpretation is confirmed by
-  // the Packet 3 telecaller scope business decision.
+  // 5. Everyone else — only see VERIFIED projects
   return {
     ...baseScope,
-    status: { notIn: ['PLANNING', 'CANCELLED'] },
+    verification_status: 'VERIFIED',
   };
 }
 

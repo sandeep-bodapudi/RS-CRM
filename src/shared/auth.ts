@@ -85,11 +85,19 @@ export const Permissions = {
   SITE_VISITS_VERIFY: 'site_visits.verify',
   SITE_VISITS_ASSIGN_AGENT: 'site_visits.assign_agent',
   SITE_VISITS_COMPLETE: 'site_visits.complete',
+
+  DEMOS_CREATE: 'demos.create',
+  DEMOS_READ: 'demos.read',
+  DEMOS_ASSIGN_AGENT: 'demos.assign_agent',
+  DEMOS_ACCEPT: 'demos.accept',
+  DEMOS_COMPLETE: 'demos.complete',
   
   PROJECTS_CREATE: 'projects.create',
   PROJECTS_READ: 'projects.read',
   PROJECTS_UPDATE: 'projects.update',
   PROJECTS_DELETE: 'projects.delete',
+  PROJECTS_SUBMIT_VERIFY: 'projects.submit_verify', // PM submits project for MD review
+  PROJECTS_VERIFY: 'projects.verify',               // MD approves/rejects
   
   BOOKINGS_CREATE: 'bookings.create',
   BOOKINGS_READ: 'bookings.read',
@@ -166,6 +174,8 @@ export const RolePermissionsMatrix: Record<RoleName, string[]> = {
   [Roles.ADMIN]: ALL_PERMISSIONS, // Admin is a second fully-privileged account alongside MD (2026-09-07 -- previously a curated list that excluded EMPLOYEES_VIEW_SENSITIVE and all LEADS_* permissions, which blocked real Admin usage; product decision was to match MD instead of narrowing the gaps one by one).
   
   [Roles.HR_MANAGER]: [
+    Permissions.PROJECTS_READ,
+    Permissions.PROPERTIES_READ,
     Permissions.EMPLOYEES_CREATE,
     Permissions.EMPLOYEES_READ,
     Permissions.EMPLOYEES_UPDATE,
@@ -187,6 +197,8 @@ export const RolePermissionsMatrix: Record<RoleName, string[]> = {
   ],
 
   [Roles.FINANCE]: [
+    Permissions.PROJECTS_READ,
+    Permissions.PROPERTIES_READ,
     Permissions.EXPENSES_REVIEW,
     Permissions.EXPENSES_MARK_REFUNDED,
     Permissions.EXPENSES_CREATE,
@@ -209,6 +221,7 @@ export const RolePermissionsMatrix: Record<RoleName, string[]> = {
   ],
   
 [Roles.MARKETING_DIRECTOR]: [
+    Permissions.PROJECTS_READ,
     Permissions.TASKS_CREATE,
     Permissions.LEADS_CREATE,
     Permissions.LEADS_READ,
@@ -252,12 +265,15 @@ export const RolePermissionsMatrix: Record<RoleName, string[]> = {
     Permissions.PROJECTS_READ,
     Permissions.PROJECTS_UPDATE,
     Permissions.PROJECTS_DELETE,
+    Permissions.PROJECTS_SUBMIT_VERIFY,
     Permissions.PROPERTIES_CREATE,
     Permissions.PROPERTIES_VERIFY,
     Permissions.PROPERTIES_READ,
     Permissions.PROPERTIES_UPDATE,
     Permissions.SITE_VISITS_READ,
     Permissions.SITE_VISITS_ASSIGN_AGENT,
+    Permissions.DEMOS_READ,
+    Permissions.DEMOS_ASSIGN_AGENT,
     Permissions.TASKS_CREATE,
     Permissions.TASKS_READ,
     Permissions.TASKS_UPDATE,
@@ -281,6 +297,8 @@ export const RolePermissionsMatrix: Record<RoleName, string[]> = {
   ],
 
   [Roles.DIGITAL_LEAD_OPERATOR]: [
+    Permissions.PROJECTS_READ,
+    Permissions.PROPERTIES_READ,
     Permissions.LEADS_CREATE,
     Permissions.LEADS_READ,
     Permissions.LEADS_UPDATE,
@@ -312,6 +330,7 @@ export const RolePermissionsMatrix: Record<RoleName, string[]> = {
   ],
 
   [Roles.TELECALLER]: [
+    Permissions.PROPERTIES_READ,
     Permissions.PROJECTS_READ,
     Permissions.LEADS_CREATE,
     Permissions.LEADS_READ,
@@ -339,6 +358,7 @@ export const RolePermissionsMatrix: Record<RoleName, string[]> = {
   ],
   
   [Roles.DIGITAL_MARKETING_HEAD]: [
+    Permissions.PROJECTS_READ,
     Permissions.PROPERTIES_DM_POLISH,
     Permissions.PROPERTIES_READ,
     Permissions.LEADS_READ,
@@ -350,8 +370,12 @@ export const RolePermissionsMatrix: Record<RoleName, string[]> = {
   ],
   
   [Roles.AGENT]: [
+    Permissions.PROJECTS_READ,
+    Permissions.PROPERTIES_READ,
     Permissions.SITE_VISITS_READ,
     Permissions.SITE_VISITS_COMPLETE,
+    Permissions.DEMOS_READ,
+    Permissions.DEMOS_COMPLETE,
     Permissions.CUSTOMERS_READ,
     Permissions.CUSTOMERS_UPDATE,
     Permissions.CUSTOMERS_CONVERT,
@@ -379,6 +403,7 @@ export const RolePermissionsMatrix: Record<RoleName, string[]> = {
   ],
 
   [Roles.DIGITAL_MARKETING_EXECUTIVE]: [
+    Permissions.PROJECTS_READ,
     Permissions.LEADS_READ,
     Permissions.LEADS_UPDATE,
     // PROPERTIES_READ is required alongside PROPERTIES_DM_POLISH -- GET
@@ -401,6 +426,8 @@ export const RolePermissionsMatrix: Record<RoleName, string[]> = {
   ],
   
   [Roles.SALES_MANAGER]: [
+    Permissions.PROJECTS_READ,
+    Permissions.PROPERTIES_READ,
     Permissions.TASKS_CREATE,
     Permissions.LEADS_READ,
     Permissions.LEADS_UPDATE,

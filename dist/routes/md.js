@@ -114,4 +114,16 @@ router.get('/executive-metrics', auth_1.authenticateToken, (0, authz_1.requireAu
         return res.status(500).json({ error: 'Failed to fetch executive metrics' });
     }
 });
+// GET /api/v1/md/recent-activity - Portal-wide activity feed for the MD dashboard
+router.get('/recent-activity', auth_1.authenticateToken, (0, authz_1.requireAuthz)(shared_1.Permissions.ADMIN_SYSTEM_METRICS), async (req, res, next) => {
+    try {
+        const companyId = req.user?.companyId || 1;
+        const activity = await analytics_service_1.AnalyticsService.getRecentActivity(companyId);
+        return res.status(200).json({ activity });
+    }
+    catch (error) {
+        logger_1.logger.error('Fetch recent activity error:', error);
+        return res.status(500).json({ error: 'Failed to fetch recent activity' });
+    }
+});
 exports.default = router;

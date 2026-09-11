@@ -22,6 +22,9 @@ var __importStar = (this && this.__importStar) || function (mod) {
     __setModuleDefault(result, mod);
     return result;
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const logger_1 = require("../utils/logger");
 const express_1 = require("express");
@@ -30,7 +33,9 @@ const authz_1 = require("../middleware/authz");
 const shared_1 = require("../shared");
 const validate_1 = require("../middleware/validate");
 const lead_service_1 = require("../services/lead.service");
+const shared_2 = require("../services/lead/shared");
 const opportunity_service_1 = require("../services/opportunity.service");
+const prisma_1 = __importDefault(require("../lib/prisma"));
 const router = (0, express_1.Router)();
 // Helper to catch and route AppErrors to HTTP responses
 const handleServiceError = (error, res) => {
@@ -101,6 +106,13 @@ router.post('/bulk-upload', auth_1.authenticateToken, (0, authz_1.requireAuthz)(
         return res.status(200).json({
             message: `Successfully processed and auto-distributed ${result.successful_imports} leads`,
             count: result.successful_imports,
+            // Previously dropped on the floor -- a partial failure (duplicates,
+            // missing fields, etc.) was invisible to the uploader beyond a lower
+            // count than expected, with no explanation of which rows or why.
+            total_rows: result.total_rows,
+            duplicates: result.duplicates,
+            failed_rows: result.failed_rows,
+            errors: result.errors,
         });
     }
     catch (error) {
@@ -126,10 +138,60 @@ router.post('/:id/assign', auth_1.authenticateToken, (0, authz_1.requireAuthz)(s
 router.patch('/:id/status', auth_1.authenticateToken, (0, authz_1.requireAuthz)(shared_1.Permissions.LEADS_UPDATE), (0, validate_1.validateRequestBody)(shared_1.LeadStatusUpdateSchema), async (req, res) => {
     try {
         const leadId = parseInt(req.params.id, 10);
-        const { status, notes, exit_reason, demo_scheduled_at, demo_handler_id, qualification } = req.body;
-        const updated = await lead_service_1.LeadService.updateLeadStatus(req.user, leadId, status, notes, { exit_reason, demo_scheduled_at, demo_handler_id, qualification });
+        const { status, notes, exit_reason, exit_reason_detail, demo_scheduled_at, demo_handler_id, qualification } = req.body;
+        const updated = await lead_service_1.LeadService.updateLeadStatus(req.user, leadId, status, notes, { exit_reason, exit_reason_detail, demo_scheduled_at, demo_handler_id, qualification });
         return res.status(200).json({
             message: `Lead ${updated.lead_code} status updated to ${status}`,
+            lead: updated,
+        });
+    }
+    catch (error) {
+        return handleServiceError(error, res);
+    }
+});
+// PATCH /api/v1/leads/:id - Generic lead update (for qualification, budget, notes, etc.)
+router.patch('/:id', auth_1.authenticateToken, (0, authz_1.requireAuthz)(shared_1.Permissions.LEADS_UPDATE), async (req, res) => {
+    try {
+        const leadId = parseInt(req.params.id, 10);
+        const updateData = req.body;
+        const existingLead = await lead_service_1.LeadService.getLeadById(req.user, leadId);
+        if (!existingLead) {
+            return res.status(404).json({ error: 'Lead not found' });
+        }
+        // Basic update using prisma
+        const updated = await prisma_1.default.$transaction(async (tx) => {
+            const lead = await tx.lead.update({
+                where: { id: leadId },
+                data: {
+                    budget_min: updateData.budget_min !== undefined ? updateData.budget_min : undefined,
+                    budget_max: updateData.budget_max !== undefined ? updateData.budget_max : undefined,
+                    property_type_preference: updateData.property_type_preference !== undefined ? updateData.property_type_preference : undefined,
+                    // Full multi-location list (§ Phase 2) wins over the legacy single
+                    // field when both are sent — its first entry becomes the primary.
+                    preferred_location: updateData.preferred_locations && updateData.preferred_locations.length > 0
+                        ? updateData.preferred_locations[0]
+                        : (updateData.preferred_location !== undefined ? updateData.preferred_location : undefined),
+                    notes: updateData.notes !== undefined ? updateData.notes : undefined,
+                }
+            });
+            if (updateData.preferred_locations !== undefined) {
+                await (0, shared_2.syncLeadPreferredLocations)(tx, leadId, updateData.preferred_locations || []);
+            }
+            return lead;
+        });
+        // Log activity for qualification update if provided
+        if (updateData.budget_min !== undefined || updateData.property_type_preference) {
+            await prisma_1.default.leadActivity.create({
+                data: {
+                    lead_id: leadId,
+                    actor_id: req.user.employeeId,
+                    activity_type: 'QUALIFIED',
+                    notes: 'Lead qualification details updated manually.',
+                }
+            });
+        }
+        return res.status(200).json({
+            message: `Lead ${updated.lead_code} updated successfully`,
             lead: updated,
         });
     }

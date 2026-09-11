@@ -58,4 +58,22 @@ router.get('/sales-manager', auth_1.authenticateToken, (0, authz_1.requireAuthz)
         return res.status(500).json({ error: 'Failed to fetch sales manager dashboard' });
     }
 });
+// GET /api/v1/analytics/hr-overview
+//
+// Real trend data for HRDashboard's Overview tab (Phase-19 audit #7),
+// replacing the previously-hardcoded "+3"/"-1"/"+2.1%" trend badges and the
+// permanent-status-based "On Leave Today" count.
+router.get('/hr-overview', auth_1.authenticateToken, (0, authz_1.requireAuthz)(shared_1.Permissions.EMPLOYEES_READ), async (req, res) => {
+    try {
+        const companyId = req.user.companyId;
+        if (!companyId)
+            return res.status(400).json({ error: 'Company context required' });
+        const overview = await analytics_service_1.default.getHrOverview(companyId);
+        return res.status(200).json(overview);
+    }
+    catch (error) {
+        logger_1.logger.error('Fetch HR overview error:', error);
+        return res.status(500).json({ error: 'Failed to fetch HR overview' });
+    }
+});
 exports.default = router;

@@ -29,6 +29,7 @@ const prisma_1 = require("../lib/prisma");
 const auth_1 = require("../middleware/auth");
 const shared_1 = require("../shared");
 const performance_metric_1 = require("../services/performance-metric");
+const time_1 = require("../utils/time");
 const router = (0, express_1.Router)();
 const p = prisma_1.prisma;
 router.post('/reset-score-history', auth_1.authenticateToken, (0, auth_1.requireRole)([shared_1.Roles.ADMIN]), async (req, res) => {
@@ -47,10 +48,10 @@ router.post('/reset-score-history', auth_1.authenticateToken, (0, auth_1.require
 router.get('/my-score', auth_1.authenticateToken, async (req, res) => {
     try {
         const employeeId = req.user.employeeId;
-        const year = req.query.year ? Number(req.query.year) : new Date().getFullYear();
-        const month = req.query.month ? Number(req.query.month) : new Date().getMonth() + 1;
-        const startOfMonth = new Date(year, month - 1, 1);
-        const endOfMonth = new Date(year, month, 0, 23, 59, 59, 999);
+        const [istYear, istMonth] = (0, time_1.getISTComponents)().dateString.split('-').map(Number);
+        const year = req.query.year ? Number(req.query.year) : istYear;
+        const month = req.query.month ? Number(req.query.month) : istMonth;
+        const { startOfMonth, endOfMonth } = (0, time_1.getISTMonthRange)(year, month);
         const taskEvents = await p.task.count({ where: { assignee_id: employeeId, status: 'COMPLETED', updated_at: { gte: startOfMonth, lte: endOfMonth } } });
         const reportEvents = await p.dailyReport.count({ where: { employee_id: employeeId, submitted_at: { gte: startOfMonth, lte: endOfMonth } } });
         const belowTargetEvents = await p.auditEvent.count({ where: { actor_id: employeeId, action: 'DAILY_REPORT_BELOW_TARGET', created_at: { gte: startOfMonth, lte: endOfMonth } } });
@@ -58,10 +59,14 @@ router.get('/my-score', auth_1.authenticateToken, async (req, res) => {
         const overdueTasksCount = await p.task.count({ where: { assignee_id: employeeId, status: 'OVERDUE', updated_at: { gte: startOfMonth, lte: endOfMonth } } });
         const uninformedAbsentEvents = await p.auditEvent.count({ where: { actor_id: employeeId, action: 'UNINFORMED_ABSENT', created_at: { gte: startOfMonth, lte: endOfMonth } } });
         const propertyBookingContributions = await p.auditEvent.count({ where: { actor_id: employeeId, action: 'PROPERTY_BOOKED_CONTRIBUTION', created_at: { gte: startOfMonth, lte: endOfMonth } } });
-        const attendanceLogs = await p.attendanceLog.findMany({ where: { employee_id: employeeId, check_in_at: { gte: startOfMonth, lte: endOfMonth } } });
+        const attendanceLogs = await p.attendanceLog.findMany({
+            where: { employee_id: employeeId, check_in_at: { gte: startOfMonth, lte: endOfMonth } },
+            include: { employee: { select: { employment_type: true } } },
+        });
         let presentCount = 0;
         let lateCount = 0;
         let halfDayCount = 0;
+        let attendanceBoost = 0;
         for (const log of attendanceLogs) {
             if (log.status === 'PRESENT' || log.status === 'APPROVED_LATE')
                 presentCount++;
@@ -69,6 +74,14 @@ router.get('/my-score', auth_1.authenticateToken, async (req, res) => {
                 lateCount++;
             if (log.status === 'HALF_DAY')
                 halfDayCount++;
+            // Only PRESENT logs feed the boost here — LATE/HALF_DAY are still
+            // penalized via lateCount/halfDayCount below (unchanged), and calling
+            // calculateAttendancePoints on them too would double-count that
+            // penalty. APPROVED_LATE/APPROVED_HALF_DAY correctly contribute 0 by
+            // simply not being added anywhere, matching "no gain, no lose".
+            if (log.status === 'PRESENT') {
+                attendanceBoost += (0, time_1.calculateAttendancePoints)(log.status, log.check_in_at, log.employee.employment_type || 'FULL_TIME');
+            }
         }
         const { score: totalScore, breakdown } = (0, performance_metric_1.calculatePerformanceScore)({
             completedTasks: taskEvents,
@@ -79,6 +92,7 @@ router.get('/my-score', auth_1.authenticateToken, async (req, res) => {
             uninformedAbsentEvents,
             propertyBookingContributions,
             presentCount,
+            attendanceBoost,
             lateCount,
             halfDayCount,
         });
@@ -92,10 +106,10 @@ router.get('/my-score', auth_1.authenticateToken, async (req, res) => {
 router.get('/history', auth_1.authenticateToken, async (req, res) => {
     try {
         const employeeId = req.user.employeeId;
-        const year = req.query.year ? Number(req.query.year) : new Date().getFullYear();
-        const month = req.query.month ? Number(req.query.month) : new Date().getMonth() + 1;
-        const startOfMonth = new Date(year, month - 1, 1);
-        const endOfMonth = new Date(year, month, 0, 23, 59, 59, 999);
+        const [istYear, istMonth] = (0, time_1.getISTComponents)().dateString.split('-').map(Number);
+        const year = req.query.year ? Number(req.query.year) : istYear;
+        const month = req.query.month ? Number(req.query.month) : istMonth;
+        const { startOfMonth, endOfMonth } = (0, time_1.getISTMonthRange)(year, month);
         const events = [];
         events.push({
             id: 'base-50', action: 'INITIAL_BASE_SCORE', title: 'Initial Base Performance Index', points: 50.0, type: 'BOOST',
@@ -128,14 +142,31 @@ router.get('/history', auth_1.authenticateToken, async (req, res) => {
                 events.push({ id: `bk-${b.id}`, action: b.action, title: 'Lead Converted to Booking', points: +10.0, type: 'BOOST', description: b.reason || 'Contributed to a Lead that converted to a Booking', timestamp: b.created_at });
             }
         }
-        const attendanceLogs = await p.attendanceLog.findMany({ where: { employee_id: employeeId, check_in_at: { gte: startOfMonth, lte: endOfMonth } } });
+        const attendanceLogs = await p.attendanceLog.findMany({
+            where: { employee_id: employeeId, check_in_at: { gte: startOfMonth, lte: endOfMonth } },
+            include: { employee: { select: { employment_type: true } } },
+        });
         for (const log of attendanceLogs) {
-            if (log.status === 'LATE')
-                events.push({ id: `att-late-${log.id}`, action: 'LATE_CHECKIN', title: 'Late Check-In Penalty', points: -1.0, type: 'PENALTY', description: 'Check-in recorded late', timestamp: log.check_in_at || new Date() });
-            else if (log.status === 'HALF_DAY')
-                events.push({ id: `att-hd-${log.id}`, action: 'HALF_DAY_CHECKIN', title: 'Half Day Check-In Penalty', points: -1.0, type: 'PENALTY', description: 'Check-in recorded after 11:30 AM', timestamp: log.check_in_at || new Date() });
-            else if (log.status === 'PRESENT' || log.status === 'APPROVED_LATE')
-                events.push({ id: `att-present-${log.id}`, action: 'PRESENT_CHECKIN', title: 'On-Time Check-In', points: +0.5, type: 'BOOST', description: 'Checked in on-time', timestamp: log.check_in_at || new Date() });
+            const ts = log.check_in_at || new Date();
+            if (log.status === 'LATE') {
+                events.push({ id: `att-late-${log.id}`, action: 'LATE_CHECKIN', title: 'Late Check-In Penalty', points: -1.0, type: 'PENALTY', description: 'Check-in recorded late', timestamp: ts });
+            }
+            else if (log.status === 'HALF_DAY') {
+                events.push({ id: `att-hd-${log.id}`, action: 'HALF_DAY_CHECKIN', title: 'Half Day Check-In Penalty', points: -1.0, type: 'PENALTY', description: 'Check-in recorded after 11:30 AM', timestamp: ts });
+            }
+            else if (log.status === 'APPROVED_LATE') {
+                // § Phase 4: an approval means "not penalized", not "still earns the
+                // on-time bonus" — this used to be lumped in with PRESENT at +0.5.
+                events.push({ id: `att-apl-${log.id}`, action: 'APPROVED_LATE_CHECKIN', title: 'Approved Late Check-In', points: 0.0, type: 'NEUTRAL', description: 'Late check-in was approved — no gain, no penalty', timestamp: ts });
+            }
+            else if (log.status === 'APPROVED_HALF_DAY') {
+                events.push({ id: `att-aphd-${log.id}`, action: 'APPROVED_HALF_DAY_CHECKIN', title: 'Approved Half-Day Check-In', points: 0.0, type: 'NEUTRAL', description: 'Half-day check-in was approved — no gain, no penalty', timestamp: ts });
+            }
+            else if (log.status === 'PRESENT') {
+                const points = (0, time_1.calculateAttendancePoints)(log.status, log.check_in_at, log.employee.employment_type || 'FULL_TIME');
+                const title = points >= 1.0 ? 'Early Check-In' : points >= 0.5 ? 'On-Time Check-In (Grace Period)' : 'On-Time Check-In';
+                events.push({ id: `att-present-${log.id}`, action: 'PRESENT_CHECKIN', title, points, type: points > 0 ? 'BOOST' : 'NEUTRAL', description: 'Checked in before the 10:30 AM cutoff', timestamp: ts });
+            }
         }
         events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
         return res.status(200).json({ events });
@@ -158,10 +189,10 @@ router.get('/team', auth_1.authenticateToken, async (req, res) => {
         const whereClause = { company_id: req.user.companyId, deleted_at: null, roles: { none: { role: { is_invisible: true } } } };
         if (!isMD && !isAdmin && !isHR)
             whereClause.reporting_manager_id = req.user.employeeId;
-        const year = req.query.year ? Number(req.query.year) : new Date().getFullYear();
-        const month = req.query.month ? Number(req.query.month) : new Date().getMonth() + 1;
-        const startOfMonth = new Date(year, month - 1, 1);
-        const endOfMonth = new Date(year, month, 0, 23, 59, 59, 999);
+        const [istYear, istMonth] = (0, time_1.getISTComponents)().dateString.split('-').map(Number);
+        const year = req.query.year ? Number(req.query.year) : istYear;
+        const month = req.query.month ? Number(req.query.month) : istMonth;
+        const { startOfMonth, endOfMonth } = (0, time_1.getISTMonthRange)(year, month);
         const employees = await p.employee.findMany({ where: whereClause, include: { branch: true, roles: { include: { role: true } } }, orderBy: { employee_code: 'asc' } });
         const teamScores = await Promise.all(employees.map(async (emp) => {
             const [tasksDone, tasksOverdue, reportsDone, belowTargetCount, targetExceededEvents, attendanceLogs, uninformedAbsent, propertyBookingContributions] = await Promise.all([
@@ -170,13 +201,14 @@ router.get('/team', auth_1.authenticateToken, async (req, res) => {
                 p.dailyReport.count({ where: { employee_id: emp.id, submitted_at: { gte: startOfMonth, lte: endOfMonth } } }),
                 p.auditEvent.count({ where: { actor_id: emp.id, action: 'DAILY_REPORT_BELOW_TARGET', created_at: { gte: startOfMonth, lte: endOfMonth } } }),
                 p.auditEvent.count({ where: { actor_id: emp.id, action: 'DAILY_REPORT_TARGET_EXCEEDED', created_at: { gte: startOfMonth, lte: endOfMonth } } }),
-                p.attendanceLog.findMany({ where: { employee_id: emp.id, check_in_at: { gte: startOfMonth, lte: endOfMonth } }, select: { status: true } }),
+                p.attendanceLog.findMany({ where: { employee_id: emp.id, check_in_at: { gte: startOfMonth, lte: endOfMonth } }, select: { status: true, check_in_at: true } }),
                 p.auditEvent.count({ where: { actor_id: emp.id, action: 'UNINFORMED_ABSENT', created_at: { gte: startOfMonth, lte: endOfMonth } } }),
                 p.auditEvent.count({ where: { actor_id: emp.id, action: 'PROPERTY_BOOKED_CONTRIBUTION', created_at: { gte: startOfMonth, lte: endOfMonth } } }),
             ]);
             let presentCount = 0;
             let lateCount = 0;
             let halfDayCount = 0;
+            let attendanceBoost = 0;
             for (const log of attendanceLogs) {
                 if (log.status === 'PRESENT' || log.status === 'APPROVED_LATE')
                     presentCount++;
@@ -184,6 +216,12 @@ router.get('/team', auth_1.authenticateToken, async (req, res) => {
                     lateCount++;
                 else if (log.status === 'HALF_DAY')
                     halfDayCount++;
+                // Only PRESENT feeds the boost — LATE/HALF_DAY stay penalized via
+                // lateCount/halfDayCount below; adding calculateAttendancePoints's
+                // -1.0 for those here too would double-count the penalty.
+                if (log.status === 'PRESENT') {
+                    attendanceBoost += (0, time_1.calculateAttendancePoints)(log.status, log.check_in_at, emp.employment_type || 'FULL_TIME');
+                }
             }
             const { score, breakdown } = (0, performance_metric_1.calculatePerformanceScore)({
                 completedTasks: tasksDone,
@@ -194,6 +232,7 @@ router.get('/team', auth_1.authenticateToken, async (req, res) => {
                 uninformedAbsentEvents: uninformedAbsent,
                 propertyBookingContributions,
                 presentCount,
+                attendanceBoost,
                 lateCount,
                 halfDayCount,
             });

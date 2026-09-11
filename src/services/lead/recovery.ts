@@ -3,7 +3,8 @@ import { TokenPayload } from '../../utils/jwt';
 import { findBestAssigneeForLead } from '../../utils/distributionService';
 import { AppError } from './errors';
 import { generateNextLeadCode } from './shared';
-
+import { notifyEmployee } from '../../utils/notifyEmployee';
+import { logger } from '../../utils/logger';
 const p = prisma;
 
 export async function distributeUnassignedPoolLeads(companyId: number) {
@@ -103,6 +104,12 @@ export async function triggerLeadRecoveryForProperty(propertyId: number) {
               message: `Lead ${recoveredLead.lead_code} (${recoveredLead.customer_name}) has been automatically recovered because new matching inventory became available.`,
             }
           });
+          // Web push to recovered lead owner (outside transaction)
+          notifyEmployee(recoveredLead.assigned_to_id, {
+            type: 'SYSTEM_ALERT',
+            title: 'Lead Recovered',
+            message: `Lead ${recoveredLead.lead_code} (${recoveredLead.customer_name}) has been recovered — new inventory is available.`,
+          }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] Lead recovery notify:', err));
 
           await p.leadActivity.create({
             data: {

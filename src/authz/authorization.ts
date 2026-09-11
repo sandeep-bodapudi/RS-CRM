@@ -22,7 +22,10 @@ export const can = (user: TokenPayload, action: Permission, resource?: any): boo
   // (e.g. "Explicitly NO EMPLOYEES_VIEW_SENSITIVE for ADMIN", no LEADS_* at all).
   // Only Roles.MD is granted ALL_PERMISSIONS, via the matrix itself, not here.
 
-  // 1. Basic Permission Check
+  // 1. Basic Permission Check (also covers DB overrides — the middleware
+  //    requireAuthz checks DB overrides first and calls next() if granted,
+  //    so by the time we reach here any DB-granted permission already short-
+  //    circuited. The token-based check below covers the fallback case.)
   const hasBasePermission = (user.permissions || []).includes(action);
 
   if (!hasBasePermission) {

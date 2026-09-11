@@ -7,11 +7,18 @@
  * (see task-sla.status.ts): no HTTP, no Express, no DB writes, deterministic,
  * and unit-testable.
  *
- * NOTES ON THE EXISTING FORMULAS (behavior preserved):
- *  - /performance/my-score and /performance/team share the FULL formula.
- *  - /performance/leaderboard intentionally uses a REDUCED formula that only
- *    counts completed tasks + daily reports (no attendance or penalties).
- *  These differences are preserved; they are NOT normalized here.
+ * NOTES ON THE EXISTING FORMULAS:
+ *  - /performance/my-score and /performance/team share the FULL formula
+ *    (calculatePerformanceScore below).
+ *  - § Phase 4: attendance scoring is no longer a flat presentCount * weight —
+ *    see PerformanceScoreInputs.attendanceBoost and utils/time.ts's
+ *    calculateAttendancePoints() for the time-of-day gradient this replaced.
+ *  - The ranked leaderboard view is served by GET /performance/achievements
+ *    (?employeeId=ALL), which ranks by deals closed / assisted conversions /
+ *    site visits executed — a different, deal-outcome-based ranking, not a
+ *    variant of this score formula. There is no separate
+ *    calculateLeaderboardScore function; an earlier design called for one,
+ *    but it was superseded by the achievements-based ranking.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.calculatePerformanceScore = exports.roundPerformanceScore = exports.PERFORMANCE_WEIGHTS = exports.PERFORMANCE_BASE_SCORE = void 0;
@@ -19,7 +26,6 @@ exports.PERFORMANCE_BASE_SCORE = 50.0;
 exports.PERFORMANCE_WEIGHTS = {
     completedTaskBoost: 2.0,
     dailyReportBoost: 0.5,
-    presentBoost: 0.5,
     propertyBookingBoost: 10.0,
     targetExceededBoost: 0.5,
     latePenalty: 1.0,
@@ -68,7 +74,7 @@ function calculatePerformanceScore(inputs) {
         dailyReports: inputs.dailyReports,
         reportBoost: inputs.dailyReports * exports.PERFORMANCE_WEIGHTS.dailyReportBoost,
         presentCount: inputs.presentCount,
-        presentBoost: inputs.presentCount * exports.PERFORMANCE_WEIGHTS.presentBoost,
+        presentBoost: inputs.attendanceBoost,
         propertyBookingContributions: inputs.propertyBookingContributions,
         propertyBookingBoost: inputs.propertyBookingContributions * exports.PERFORMANCE_WEIGHTS.propertyBookingBoost,
         lateCount: inputs.lateCount,

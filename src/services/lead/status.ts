@@ -8,6 +8,8 @@ import { CustomerPortalService } from '../customerPortal.service';
 import { findBestAssigneeForLead } from '../../utils/distributionService';
 import { AppError } from './errors';
 import { generateNextLeadCode, syncLeadPreferredLocations } from './shared';
+import { notifyEmployee } from '../../utils/notifyEmployee';
+import { logger } from '../../utils/logger';
 
 const p = prisma;
 
@@ -45,6 +47,16 @@ export async function reassignLead(user: TokenPayload, leadId: number, assigneeI
         },
       });
 
+      // Notify the newly assigned employee
+      await tx.notification.create({
+        data: {
+          employee_id: assigneeId,
+          type: 'TARGET_ASSIGNED',
+          title: 'Lead Assigned to You',
+          message: `Lead ${lead.lead_code} (${lead.customer_name}) has been assigned to you by ${user.employeeId}. Reason: ${reason}`,
+        },
+      });
+
       await tx.auditEvent.create({
         data: {
           actor_id: user.employeeId,
@@ -58,10 +70,16 @@ export async function reassignLead(user: TokenPayload, leadId: number, assigneeI
 
       return updated;
     });
+    // Send web push notification to the newly assigned employee (outside transaction)
+    notifyEmployee(assigneeId, {
+      type: 'TARGET_ASSIGNED',
+      title: 'Lead Assigned to You',
+      message: `Lead ${lead!.lead_code} (${lead!.customer_name}) has been assigned to you.`,
+    }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] Lead reassign:', err));
   }
 
 export async function updateLeadStatus(user: TokenPayload, leadId: number, newStatus: string, notes?: string, guardFields?: { exit_reason?: string; exit_reason_detail?: string; demo_scheduled_at?: string; demo_handler_id?: number; qualification?: any }) {
-    const lead = await p.lead.findFirst({ where: { id: leadId, } });
+    const lead = await p.lead.findFirst({ where: { id: leadId }, include: { project: true } });
     if (!lead) throw new AppError(404, 'Lead not found');
 
     if (!can(user, Permissions.LEADS_UPDATE, lead)) {
@@ -79,10 +97,22 @@ export async function updateLeadStatus(user: TokenPayload, leadId: number, newSt
     // active, in this company, and holds an eligible role (PM/Agent/Sales
     // Manager/Channel Partner Manager, or MD self-assigning) — Telecallers
     // are explicitly ineligible.
+    //
+    // Auto-assign fallback: if handler_id is not provided, resolve the
+    // lead's project PM as the default handler. When the territory model
+    // exists (P2.3), replace this with a territory-based lookup.
     if (newStatus === 'DEMO_SCHEDULED') {
-      const handlerId = _guardFields.demo_handler_id;
+      let handlerId = _guardFields.demo_handler_id;
+
+      // Auto-resolve from lead's project PM if not manually specified
       if (!handlerId) {
-        throw new AppError(400, 'Please select who will handle this demo.');
+        if (lead.project?.assigned_pm_id) {
+          handlerId = lead.project.assigned_pm_id;
+        }
+      }
+
+      if (!handlerId) {
+        throw new AppError(400, 'Please select who will handle this demo, or attach a project to the lead so the PM can be auto-assigned.');
       }
 
       const handler = await p.employee.findFirst({
@@ -204,7 +234,7 @@ export async function updateLeadStatus(user: TokenPayload, leadId: number, newSt
       }
     }
 
-    return await p.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
+    const finalLead = await p.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
       const updateData: any = {
         last_contacted_at: new Date(),
       };
@@ -217,14 +247,30 @@ export async function updateLeadStatus(user: TokenPayload, leadId: number, newSt
       }
       // Create Demo record when entering DEMO_SCHEDULED instead of updating Lead fields
       if (newStatus === 'DEMO_SCHEDULED' && _guardFields.demo_scheduled_at && _guardFields.demo_handler_id) {
-        await tx.demo.create({
+        const demoRecord = await tx.demo.create({
           data: {
             lead_id: leadId,
             handler_id: _guardFields.demo_handler_id,
             scheduled_at: new Date(_guardFields.demo_scheduled_at),
             summary: notes || 'Demo Scheduled',
-          }
+          },
         });
+        // Notify the demo handler that a demo was scheduled for them
+        await tx.notification.create({
+          data: {
+            employee_id: _guardFields.demo_handler_id,
+            type: 'DEMO_SCHEDULED',
+            title: `Demo Scheduled: ${lead.customer_name}`,
+            message: `A demo for ${lead.customer_name} (${lead.lead_code}) has been scheduled for ${new Date(_guardFields.demo_scheduled_at).toLocaleString()}.`,
+          },
+        });
+        // Web push to demo handler (outside transaction, after DB notification)
+        const demoHandlerId = _guardFields.demo_handler_id;
+        notifyEmployee(demoHandlerId, {
+          type: 'DEMO_SCHEDULED',
+          title: `Demo Scheduled: ${lead.customer_name}`,
+          message: `A demo for ${lead.customer_name} (${lead.lead_code}) has been scheduled for ${new Date(_guardFields.demo_scheduled_at).toLocaleString()}.`,
+        }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] Demo scheduled:', err));
       }
       // Persist qualification fields when entering QUALIFIED
       if (newStatus === 'QUALIFIED' && guardFields?.qualification) {
@@ -277,6 +323,23 @@ export async function updateLeadStatus(user: TokenPayload, leadId: number, newSt
         },
       });
 
+      // Notify the assigned employee when lead status changes
+      if (!isRecover && updated.assigned_to_id) {
+        const isDroppedNotification = isDrop;
+        await tx.notification.create({
+          data: {
+            employee_id: updated.assigned_to_id,
+            type: isDroppedNotification ? 'LEAD_DROPPED' : 'STATUS_UPDATE',
+            title: isDroppedNotification
+              ? `Lead ${updated.lead_code} — Dropped`
+              : `Lead ${updated.lead_code} — Status Updated`,
+            message: isDroppedNotification
+              ? `${updated.customer_name} was dropped from ${lead!.status}. Reason: ${guardFields?.exit_reason || 'n/a'}`
+              : `${updated.customer_name} moved from ${lead!.status} to ${newStatus}${notes ? `. ${notes}` : ''}`,
+          },
+        });
+      }
+
       // §4: auto-create Opportunity when entering NEGOTIATION
       if (newStatus === 'NEGOTIATION') {
         // Find the INTERESTED property outcome that unlocked NEGOTIATION (§1:
@@ -324,11 +387,35 @@ export async function updateLeadStatus(user: TokenPayload, leadId: number, newSt
               notes: `Auto-distributed to ${bestAssignee.name} (${bestAssignee.employeeCode}) [Weight Score: ${bestAssignee.weight.toFixed(1)}] upon recovery`,
             },
           });
+
+          // Notify the auto-assigned employee about the recovery
+          await tx.notification.create({
+            data: {
+              employee_id: bestAssignee.employeeId,
+              type: 'STATUS_UPDATE',
+              title: `Lead ${finalUpdated.lead_code} — Recovered & Assigned to You`,
+              message: `${finalUpdated.customer_name} was recovered from dropped state and auto-assigned to you.`,
+            },
+          });
         }
       }
 
       return finalUpdated;
     });
+    // Send web push notification for lead status change (outside transaction)
+    if (!isRecover && finalLead.assigned_to_id) {
+      notifyEmployee(finalLead.assigned_to_id, {
+        type: isDrop ? 'LEAD_DROPPED' : 'STATUS_UPDATE',
+        title: isDrop
+          ? `Lead ${finalLead.lead_code} — Dropped`
+          : `Lead ${finalLead.lead_code} — Status Updated`,
+        message: isDrop
+          ? `${finalLead.customer_name} was dropped from ${lead!.status}.`
+          : `${finalLead.customer_name} moved from ${lead!.status} to ${newStatus}${notes ? `. ${notes}` : ''}`,
+      }, { skipDbNotification: true }).catch(err => logger.error('[WebPush] Lead status:', err));
+    }
+
+    return finalLead;
   }
 
 export async function bulkUploadLeads(user: TokenPayload, rawLeads: any[]) {
