@@ -144,6 +144,18 @@ export class CustomerService {
       throw new AppError(409, 'This lead has already been converted to a customer');
     }
 
+    // Converting force-transitions the lead straight to BOOKED, and the
+    // workflow only allows that from BOOKING_INITIATED (see
+    // apps/api/src/workflows/lead.workflow.ts) — check explicitly up front
+    // for a clear message rather than letting the transition fail generically
+    // after a Customer row has already been created in this transaction.
+    if (lead.status !== 'BOOKING_INITIATED') {
+      throw new AppError(
+        409,
+        'This lead can only be converted to a customer once it reaches Booking Initiated.',
+      );
+    }
+
     const customerCode = await this.generateNextCustomerCode();
 
     // Parse names from customer_name

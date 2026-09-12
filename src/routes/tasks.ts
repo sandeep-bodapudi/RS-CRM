@@ -247,12 +247,6 @@ router.patch(
       const taskId = parseInt(req.params.id, 10);
       if (isNaN(taskId))
         return next({ name: 'AppError', statusCode: 400, message: 'Invalid ID format' });
-      if (isNaN(taskId))
-        return next({ name: 'AppError', statusCode: 400, message: 'Invalid ID format' });
-      if (isNaN(taskId))
-        return next({ name: 'AppError', statusCode: 400, message: 'Invalid ID format' });
-      if (isNaN(taskId))
-        return next({ name: 'AppError', statusCode: 400, message: 'Invalid ID format' });
       const { status } = req.body;
       const employeeId = req.user!.employeeId;
 
@@ -290,7 +284,13 @@ router.patch(
         },
       });
 
-      if (isCompleting) {
+      // A task someone assigned to themselves shouldn't earn the same
+      // performance credit as a manager-assigned one — otherwise anyone can
+      // inflate their own score by creating and immediately completing
+      // trivial self-assigned tasks.
+      const isSelfAssigned = existingTask.created_by === existingTask.assignee_id;
+
+      if (isCompleting && !isSelfAssigned) {
         await p.auditEvent.create({
           data: {
             actor_id: employeeId,
@@ -306,6 +306,15 @@ router.patch(
             employee_id: employeeId,
             title: '🎉 Task Completed!',
             message: `Great job! You completed "${updatedTask.title}" and earned +1.0 performance points!`,
+            type: 'SYSTEM_ALERT',
+          },
+        });
+      } else if (isCompleting) {
+        await p.notification.create({
+          data: {
+            employee_id: employeeId,
+            title: '✅ Task Completed',
+            message: `You completed "${updatedTask.title}". Self-assigned tasks don't count toward performance.`,
             type: 'SYSTEM_ALERT',
           },
         });

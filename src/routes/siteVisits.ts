@@ -15,6 +15,7 @@ import {
 } from '../shared';
 import { validateRequestBody } from '../middleware/validate';
 import { SiteVisitService } from '../services/siteVisit.service';
+import { LeadService } from '../services/lead.service';
 import { prisma } from '../lib/prisma';
 
 const router = Router();
@@ -312,6 +313,55 @@ router.post(
         feedback_notes,
         proof_photo_url,
       );
+
+      // §1: SITE_VISIT_COMPLETED → NEGOTIATION (any INTERESTED) or DROPPED
+      // (all NOT_INTERESTED). completeVisit() computes the branch but never
+      // advanced Lead.status itself — its own comment says "the caller (route)
+      // will advance the Lead accordingly", but nothing here ever did, so
+      // every lead going through Site Visits (as opposed to Demo, which does
+      // this correctly via its own PATCH /leads/:id/status call) was
+      // permanently stuck at SITE_VISIT_SCHEDULED, unable to ever reach
+      // Negotiation/Booking/Booked. Mirrors that DEMO_COMPLETED path here.
+      //
+      // Whoever has site_visits.complete (typically Agent) usually lacks
+      // leads.update, and is usually not the lead's own assignee either —
+      // this is a system-triggered consequence of an already-authorized
+      // action (completing the visit), not a new independent lead edit
+      // initiated on the actor's own authority, so the permission check is
+      // explicitly skipped for just this call (see updateLeadStatus's opts
+      // doc comment).
+      const outcomeBranch = (visit as any)._outcomeBranch as 'NEGOTIATE' | 'DROP' | undefined;
+      if (outcomeBranch) {
+        try {
+          await LeadService.updateLeadStatus(
+            req.user!,
+            visit.lead_id,
+            'SITE_VISIT_COMPLETED',
+            undefined,
+            undefined,
+            { skipPermissionCheck: true },
+          );
+          await LeadService.updateLeadStatus(
+            req.user!,
+            visit.lead_id,
+            outcomeBranch === 'DROP' ? 'DROPPED' : 'NEGOTIATION',
+            outcomeBranch === 'DROP'
+              ? 'Auto-dropped: every property outcome from the completed site visit was Not Interested.'
+              : 'Auto-advanced to Negotiation: the completed site visit had at least one Interested property outcome.',
+            // Any -> DROPPED requires a non-empty exit_reason (lead.workflow.ts
+            // §1 row 10) — NO_MATCHING_INVENTORY is the closest fit for "visited,
+            // but nothing shown matched what they wanted."
+            outcomeBranch === 'DROP' ? { exit_reason: 'NO_MATCHING_INVENTORY' } : undefined,
+            { skipPermissionCheck: true },
+          );
+        } catch (cascadeError: any) {
+          logger.error(
+            `[site-visits/complete] Lead ${visit.lead_id} cascade failed after visit ${visit.booking_code} completed:`,
+            cascadeError,
+          );
+        }
+      }
+
       return res.status(200).json({
         message: `Site visit ${visit.booking_code} completed! Outcomes recorded.`,
         visit,

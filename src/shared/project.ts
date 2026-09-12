@@ -33,7 +33,14 @@ const ProjectCommonFields = {
   completion_date: z.string().optional().nullable(),
 
   rera_status: z.enum(['NOT_APPLICABLE', 'APPLIED', 'APPROVED']).optional().nullable(),
+  // Deprecated single-value column — superseded by approval_authorities
+  // below (#13: a project can need sign-off from more than one authority).
   approval_authority: z.enum(['RERA', 'DTCP', 'HMDA', 'PANCHAYAT']).optional().nullable(),
+  // A project can need sign-off from more than one Telangana authority at
+  // once (e.g. both HMDA and GHMC), so this replaces the single-value
+  // approval_authority above. Free strings rather than a strict enum so the
+  // "Other" escape hatch (#14) can carry arbitrary authority names.
+  approval_authorities: z.array(z.string().min(1)).optional().nullable(),
   approval_number: z.string().optional().nullable(),
   lp_number: z.string().optional().nullable(),
 
@@ -75,7 +82,11 @@ export const ProjectUpdateSchema = z.object({
   rera_number: z.string().optional().nullable(),
   amenities: z.any().optional(),
   assigned_pm_id: z.number().int().positive().optional().nullable(),
-  status: z.enum(['PLANNING', 'UNDER_CONSTRUCTION', 'COMPLETED', 'CANCELLED']).optional(),
+  // ON_HOLD (#15): a project can be paused without cancelling it outright —
+  // see services/project.service.ts for what pausing actually blocks.
+  status: z
+    .enum(['PLANNING', 'UNDER_CONSTRUCTION', 'COMPLETED', 'CANCELLED', 'ON_HOLD'])
+    .optional(),
   ...ProjectCommonFields,
 });
 

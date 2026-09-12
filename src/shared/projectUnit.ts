@@ -72,6 +72,8 @@ export const ProjectUnitCreateSchema = z.object({
   type_code: z.string().optional().nullable(),
 
   bhk: z.string().optional().nullable(),
+  // NEW or RESALE — mirrors Property.listing_type (#12).
+  listing_type: z.enum(['NEW', 'RESALE']).optional().nullable(),
   bedrooms: z.number().int().optional().nullable(),
   bathrooms: z.number().int().optional().nullable(),
   balconies: z.number().int().optional().nullable(),

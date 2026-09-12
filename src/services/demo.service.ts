@@ -3,6 +3,19 @@ import { TokenPayload } from '../utils/jwt';
 import { AppError } from './lead/errors';
 import { notifyEmployee } from '../utils/notifyEmployee';
 import { logger } from '../utils/logger';
+import { WorkflowEngine } from '../workflows/workflowEngine';
+import { WorkflowDomain } from '../workflows/types';
+import { Roles } from '../shared';
+
+// TokenPayload.roles holds the real DB role names (e.g. 'Managing director',
+// 'Admin (Technical)' — see routes/auth.ts's `roleNames = employee.roles.map(r
+// => r.role.name)`), never the literal strings 'MD'/'ADMIN'. Every "only the
+// handler or MD/Admin" check below used to compare against those literals —
+// comparing role NAMES against enum KEYS — so the override could never match
+// a real MD or Admin account; only the exact assigned handler could ever act
+// on a demo, full stop.
+const isMdOrAdmin = (user: TokenPayload) =>
+  user.roles.some((r) => r === Roles.MD || r === Roles.ADMIN);
 
 const p = prisma;
 
@@ -143,7 +156,7 @@ export async function acceptDemo(user: TokenPayload, demoId: number, notes?: str
   if (demo.accepted_at) throw { status: 409, message: 'Demo already accepted' };
 
   // Only the assigned handler or MD/Admin can accept
-  if (demo.handler_id !== user.employeeId && !['MD', 'ADMIN'].includes(user.roles[0])) {
+  if (demo.handler_id !== user.employeeId && !isMdOrAdmin(user)) {
     throw { status: 403, message: 'Only the assigned demo handler can accept this demo' };
   }
 
@@ -201,7 +214,7 @@ export async function declineDemo(user: TokenPayload, demoId: number, notes?: st
   if (!demo) throw { status: 404, message: 'Demo not found' };
   if (demo.accepted_at) throw { status: 409, message: 'Demo already accepted' };
 
-  if (demo.handler_id !== user.employeeId && !['MD', 'ADMIN'].includes(user.roles[0])) {
+  if (demo.handler_id !== user.employeeId && !isMdOrAdmin(user)) {
     throw { status: 403, message: 'Only the assigned demo handler can decline this demo' };
   }
 
@@ -233,14 +246,22 @@ export async function completeDemo(user: TokenPayload, demoId: number, notes?: s
   });
   if (!demo) throw { status: 404, message: 'Demo not found' };
 
-  if (demo.handler_id !== user.employeeId && !['MD', 'ADMIN'].includes(user.roles[0])) {
+  // Was `!['MD', 'ADMIN'].includes(user.roles[0])` — only ever checked the
+  // FIRST role in the array, so a multi-role MD/Admin whose token happened to
+  // list another role first would be wrongly rejected. Check the whole array.
+  if (demo.handler_id !== user.employeeId && !isMdOrAdmin(user)) {
     throw { status: 403, message: 'Only the assigned demo handler can complete this demo' };
   }
 
-  // Update lead status to DEMO_COMPLETED
-  await p.lead.update({
-    where: { id: demo.lead_id },
-    data: { status: 'DEMO_COMPLETED' },
+  // Was a raw `p.lead.update({ data: { status: 'DEMO_COMPLETED' } } )` with no
+  // guard at all — it would force ANY lead status straight to DEMO_COMPLETED
+  // (even e.g. BOOKED or NEGOTIATION), bypassing the workflow entirely. Route
+  // through the same engine every other transition in this codebase uses.
+  await p.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
+    await WorkflowEngine.transitionLead(tx, demo.lead_id, 'DEMO_COMPLETED', {
+      actor: user,
+      entity: demo.lead,
+    });
   });
 
   // Add notes to timeline
@@ -263,7 +284,7 @@ export async function cancelDemo(user: TokenPayload, demoId: number, notes?: str
   });
   if (!demo) throw { status: 404, message: 'Demo not found' };
 
-  if (demo.handler_id !== user.employeeId && !['MD', 'ADMIN'].includes(user.roles[0])) {
+  if (demo.handler_id !== user.employeeId && !isMdOrAdmin(user)) {
     throw { status: 403, message: 'Only the assigned demo handler can cancel this demo' };
   }
 

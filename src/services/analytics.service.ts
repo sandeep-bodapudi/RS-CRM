@@ -319,9 +319,14 @@ export class AnalyticsService {
           targetExceededEvents,
           attendanceLogs,
           uninformedAbsent,
+          midnightAutoCheckout,
+          missingDailyReport,
+          completedAllWork,
           propertyBookingContributions,
         ] = await Promise.all([
-          p.task.count({ where: { assignee_id: emp.id, status: 'COMPLETED' } }),
+          p.task.count({
+            where: { assignee_id: emp.id, status: 'COMPLETED', created_by: { not: emp.id } },
+          }),
           p.task.count({ where: { assignee_id: emp.id, status: 'OVERDUE' } }),
           p.dailyReport.count({ where: { employee_id: emp.id } }),
           p.auditEvent.count({ where: { actor_id: emp.id, action: 'DAILY_REPORT_BELOW_TARGET' } }),
@@ -333,6 +338,11 @@ export class AnalyticsService {
             select: { status: true, check_in_at: true },
           }),
           p.auditEvent.count({ where: { actor_id: emp.id, action: 'UNINFORMED_ABSENT' } }),
+          p.auditEvent.count({
+            where: { actor_id: emp.id, action: 'ATTENDANCE_AUTO_CHECKOUT_MIDNIGHT' },
+          }),
+          p.auditEvent.count({ where: { actor_id: emp.id, action: 'MISSING_DAILY_REPORT' } }),
+          p.auditEvent.count({ where: { actor_id: emp.id, action: 'COMPLETED_ALL_WORK' } }),
           p.auditEvent.count({
             where: { actor_id: emp.id, action: 'PROPERTY_BOOKED_CONTRIBUTION' },
           }),
@@ -365,6 +375,9 @@ export class AnalyticsService {
           belowTargetEvents: belowTargetCount,
           targetExceededEvents,
           uninformedAbsentEvents: uninformedAbsent,
+          midnightAutoCheckoutEvents: midnightAutoCheckout,
+          missingDailyReportEvents: missingDailyReport,
+          completedAllWorkEvents: completedAllWork,
           propertyBookingContributions,
           presentCount,
           attendanceBoost,

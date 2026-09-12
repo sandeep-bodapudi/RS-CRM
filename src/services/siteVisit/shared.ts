@@ -94,9 +94,13 @@ export async function applyTransition(
   }
 
   return await p.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
+    // Includes `lead` so callers like acceptVisit can hand the customer's
+    // name/phone straight back in the response — previously the accepting
+    // PM/Agent got no contact details at all until a separate detail fetch.
     const updated = await tx.siteVisitBooking.update({
       where: { id: visitId },
       data: { status: transition.nextState, ...extraData },
+      include: { lead: true },
     });
 
     await tx.leadActivity.create({

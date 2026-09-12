@@ -289,7 +289,7 @@ export const dailyAttendanceRollupJob = async (referenceDate: Date = new Date())
 
       const staff = await prisma.employee.findMany({
         where: { company_id: companyId, status: 'ACTIVE', attendance_required: true },
-        select: { id: true, full_name: true, employee_code: true },
+        select: { id: true, full_name: true, employee_code: true, report_required: true },
       });
 
       const [loggedIds, approvedLeaveIds] = await Promise.all([
@@ -314,6 +314,138 @@ export const dailyAttendanceRollupJob = async (referenceDate: Date = new Date())
         ...loggedIds.map((l) => l.employee_id),
         ...approvedLeaveIds.map((p) => p.employee_id),
       ]);
+
+      // ---- Part 3: flag anyone who attended but never submitted a daily
+      // report -- feeds performance.ts's missingDailyReportEvents input.
+      // Deliberately covers everyone who logged in that day regardless of
+      // employment_type (Part-Time included per the requester -- report_
+      // required is the only opt-out, same flag HR already uses elsewhere).
+      // Placed here, BEFORE Part 2's own `if (absentees.length === 0)
+      // continue`, since that continue would otherwise skip this entirely
+      // for any company where nobody happened to be an uninformed absentee
+      // that day -- the common case, and exactly what silently swallowed
+      // this block the first time it was placed after Part 2 instead.
+      const attendedIds = staff
+        .filter((s) => loggedIds.some((l) => l.employee_id === s.id) && s.report_required !== false)
+        .map((s) => s.id);
+      let submittedIds = new Set<number>();
+      if (attendedIds.length > 0) {
+        const submitted = await prisma.dailyReport.findMany({
+          where: {
+            employee_id: { in: attendedIds },
+            submitted_at: { gte: yesterdayStart, lt: midnightInstant },
+          },
+          select: { employee_id: true },
+        });
+        submittedIds = new Set(submitted.map((r) => r.employee_id));
+        let missingReport = staff.filter(
+          (s) => attendedIds.includes(s.id) && !submittedIds.has(s.id),
+        );
+
+        if (missingReport.length > 0) {
+          const alreadyFlagged = await prisma.auditEvent.findMany({
+            where: {
+              actor_id: { in: missingReport.map((m) => m.id) },
+              action: 'MISSING_DAILY_REPORT',
+              new_value: { contains: yesterday.dateString },
+            },
+            select: { actor_id: true },
+          });
+          const alreadyFlaggedIds = new Set(alreadyFlagged.map((a) => a.actor_id));
+          missingReport = missingReport.filter((m) => !alreadyFlaggedIds.has(m.id));
+        }
+
+        if (missingReport.length > 0) {
+          for (const emp of missingReport) {
+            await prisma.auditEvent.create({
+              data: {
+                actor_id: emp.id,
+                action: 'MISSING_DAILY_REPORT',
+                entity_type: 'EMPLOYEE',
+                entity_id: emp.id,
+                new_value: JSON.stringify({ date: yesterday.dateString }),
+                reason: 'Attended but did not submit a daily report for this date.',
+              },
+            });
+          }
+          const names = missingReport.map((m) => m.full_name || m.employee_code).join(', ');
+          await notifyEmployee(
+            missingReport.map((m) => m.id),
+            {
+              type: 'SYSTEM',
+              title: '📋 Daily report missing',
+              message: `You attended on ${yesterday.dateString} but didn't submit a daily report — this cost 1.0 performance point.`,
+              link: '/daily-report',
+            },
+          );
+          logger.info(`${names} missed submitting a daily report for ${yesterday.dateString}.`);
+        }
+      }
+
+      // ---- Part 4: "cleared their desk" bonus -- submitted their report AND
+      // has zero open (PENDING/IN_PROGRESS/OVERDUE) tasks left as of end of
+      // day. Per the requester: "if they completed all works in their
+      // account they need to get 1 pt." Operationalized as a precise,
+      // checkable pair of conditions rather than something vaguer like "all
+      // leads followed up," since tasks are the one work-queue every role
+      // already has and can genuinely empty out.
+      const reportSubmittedIds = staff
+        .filter((s) => attendedIds.includes(s.id) && submittedIds.has(s.id))
+        .map((s) => s.id);
+      if (reportSubmittedIds.length > 0) {
+        const withOpenTasks = await prisma.task.findMany({
+          where: {
+            assignee_id: { in: reportSubmittedIds },
+            status: { in: ['PENDING', 'IN_PROGRESS', 'OVERDUE'] },
+          },
+          select: { assignee_id: true },
+          distinct: ['assignee_id'],
+        });
+        const withOpenTaskIds = new Set(withOpenTasks.map((t) => t.assignee_id));
+        let clearedDesk = staff.filter(
+          (s) => reportSubmittedIds.includes(s.id) && !withOpenTaskIds.has(s.id),
+        );
+
+        if (clearedDesk.length > 0) {
+          const alreadyAwarded = await prisma.auditEvent.findMany({
+            where: {
+              actor_id: { in: clearedDesk.map((c) => c.id) },
+              action: 'COMPLETED_ALL_WORK',
+              new_value: { contains: yesterday.dateString },
+            },
+            select: { actor_id: true },
+          });
+          const alreadyAwardedIds = new Set(alreadyAwarded.map((a) => a.actor_id));
+          clearedDesk = clearedDesk.filter((c) => !alreadyAwardedIds.has(c.id));
+        }
+
+        if (clearedDesk.length > 0) {
+          for (const emp of clearedDesk) {
+            await prisma.auditEvent.create({
+              data: {
+                actor_id: emp.id,
+                action: 'COMPLETED_ALL_WORK',
+                entity_type: 'EMPLOYEE',
+                entity_id: emp.id,
+                new_value: JSON.stringify({ date: yesterday.dateString, points: 1.0 }),
+                reason: 'Submitted daily report and cleared all open tasks for this date.',
+              },
+            });
+          }
+          const names = clearedDesk.map((c) => c.full_name || c.employee_code).join(', ');
+          await notifyEmployee(
+            clearedDesk.map((c) => c.id),
+            {
+              type: 'SYSTEM',
+              title: '🎯 Cleared your desk!',
+              message: `You submitted your daily report and had no open tasks left on ${yesterday.dateString} — +1.0 performance point.`,
+              link: '/my-performance',
+            },
+          );
+          logger.info(`${names} completed all their work on ${yesterday.dateString}.`);
+        }
+      }
+
       let absentees = staff.filter((s) => !excusedIds.has(s.id));
       if (absentees.length === 0) continue;
 

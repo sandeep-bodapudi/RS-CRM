@@ -111,7 +111,12 @@ export const getISTMonthRange = (
 /**
  * Calculates Attendance Status according to RRH Business Rules (IST):
  * 1. FULL_TIME: <= 10:30 AM IST -> PRESENT; 10:31-11:30 -> LATE or APPROVED_LATE;
- *    > 11:30 -> HALF_DAY or APPROVED_HALF_DAY.
+ *    11:31 AM - 1:59 PM -> HALF_DAY or APPROVED_HALF_DAY; >= 2:00 PM -> ABSENT
+ *    (or APPROVED_HALF_DAY if an approved late/half-day proposal already
+ *    covers the day — an approval shouldn't flip to ABSENT just because the
+ *    actual arrival landed a little later than planned). Before this cutoff
+ *    was added, ANY check-in after 11:30 AM was scored identically as
+ *    HALF_DAY no matter how late — a 1pm and a 6pm arrival counted the same.
  * 2. PART_TIME / CONTRACT / INTERN: no late/early/half-day penalties — status is
  *    always PRESENT and attendance is tracked via working_duration_minutes (check-in/out).
  */
@@ -144,8 +149,14 @@ export const calculateAttendanceStatus = (
     return hasApprovedProposal ? AttendanceStatus.APPROVED_LATE : AttendanceStatus.LATE;
   }
 
-  // After 11:30 AM IST -> Half day rule
-  return hasApprovedProposal ? AttendanceStatus.APPROVED_HALF_DAY : AttendanceStatus.HALF_DAY;
+  const cutoff1400 = 14 * 60; // 2:00 PM IST — beyond this, a check-in no longer counts as a half-day
+  if (totalMinutes < cutoff1400) {
+    return hasApprovedProposal ? AttendanceStatus.APPROVED_HALF_DAY : AttendanceStatus.HALF_DAY;
+  }
+
+  // 2:00 PM or later — too late to count as any real attendance for the day,
+  // unless an approved proposal already covers it.
+  return hasApprovedProposal ? AttendanceStatus.APPROVED_HALF_DAY : AttendanceStatus.ABSENT;
 };
 
 /**
@@ -187,8 +198,18 @@ export const calculateAttendancePoints = (
   if (status === AttendanceStatus.LATE || status === AttendanceStatus.HALF_DAY) {
     return -1.0;
   }
+  // A check-in this late (2pm+, see calculateAttendanceStatus's cutoff)
+  // contributes essentially nothing to the workday, so it's scored as
+  // harshly as a genuine no-show (-2.0, matching UNINFORMED_ABSENT in
+  // jobs/tasks.ts) rather than the lighter -1.0 half-day penalty. That job
+  // only flags days with NO attendance log at all, so an employee who
+  // checked in this late is correctly excluded from it — this is the one
+  // and only place that penalty applies for them, not a double-count.
+  if (status === AttendanceStatus.ABSENT) {
+    return -2.0;
+  }
   if (status !== AttendanceStatus.PRESENT) {
-    return 0.0; // ABSENT / LEAVE / anything else — scored elsewhere, not here
+    return 0.0; // LEAVE / anything else — scored elsewhere, not here
   }
 
   // PART_TIME / CONTRACT / INTERN never get cutoff-based marks at all (see

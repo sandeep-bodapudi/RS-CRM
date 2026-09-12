@@ -43,6 +43,7 @@ function mapCommonProjectFields(data: Partial<ProjectCreateInput & ProjectUpdate
     'floors_count',
     'rera_status',
     'approval_authority',
+    'approval_authorities',
     'approval_number',
     'lp_number',
     'default_price_basis',

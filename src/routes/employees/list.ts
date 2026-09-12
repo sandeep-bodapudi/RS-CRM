@@ -17,19 +17,41 @@ router.get(
   requireAuthz(Permissions.EMPLOYEES_READ),
   async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 100);
+      // Default was 20 with a 100 max and no `total` in the response — and
+      // at least a dozen call sites across the frontend (dropdowns, role
+      // assignment, complaint routing, demo/site-visit handler pickers,
+      // the employee directory itself) call this with no `limit` at all and
+      // never paginate, so any company with more than 20 employees had most
+      // of its roster silently invisible in every one of them: not
+      // searchable, not selectable, not editable. EmployeeManagement.tsx's
+      // "Total Staff"/"Active Roster"/"QR Exempted" stat cards (all derived
+      // from `employees.length`/`.filter().length` on that same truncated
+      // array) under-reported too. Found via the Phase 10 manual QA pass:
+      // logged in as HR for a 214-employee company and the directory showed
+      // "Total Staff: 20". Raising the default (not just the max) fixes the
+      // whole class of caller at once, rather than patching each one to pass
+      // an explicit `limit` — well past realistic company sizes for this app,
+      // and cheaper than building full pagination UI into an admin-only list.
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 500, 1), 1000);
       const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
 
       const whereClause: any = await buildEmployeeScope(req.user!);
 
       const roleQuery = req.query.role as string;
       if (roleQuery) {
+        // Callers may send either the enum KEY (e.g. "PROJECT_MANAGER", as
+        // PropertyAssignmentsWidget.tsx does) or the actual Roles.* VALUE
+        // stored as Role.name in the DB (e.g. "project managers" — these are
+        // not the same string for most roles). Resolve the key to its value
+        // when possible, so a caller using the more natural enum key isn't
+        // silently matched against nothing.
+        const resolvedRoleName = (Roles as Record<string, string>)[roleQuery] || roleQuery;
         const roleCondition = {
           roles: {
             some: {
               role: {
                 name: {
-                  equals: roleQuery,
+                  equals: resolvedRoleName,
                 },
               },
             },
@@ -43,16 +65,19 @@ router.get(
         }
       }
 
-      const employees = await prisma.employee.findMany({
-        take: limit,
-        skip: offset,
-        where: whereClause,
-        include: {
-          branch: true,
-          roles: { include: { role: true } },
-        },
-        orderBy: { created_at: 'desc' },
-      });
+      const [employees, total] = await Promise.all([
+        prisma.employee.findMany({
+          take: limit,
+          skip: offset,
+          where: whereClause,
+          include: {
+            branch: true,
+            roles: { include: { role: true } },
+          },
+          orderBy: { created_at: 'desc' },
+        }),
+        prisma.employee.count({ where: whereClause }),
+      ]);
 
       const formatted = employees.map((emp) => ({
         id: emp.id,
@@ -110,7 +135,7 @@ router.get(
         });
       }
 
-      return res.status(200).json({ employees: formatted, pagination: { limit, offset } });
+      return res.status(200).json({ employees: formatted, pagination: { limit, offset, total } });
     } catch (error) {
       logger.error('Fetch employees error:', error);
       return res.status(500).json({ error: 'Failed to fetch employees list' });

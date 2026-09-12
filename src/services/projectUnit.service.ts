@@ -117,6 +117,7 @@ export class ProjectUnitService {
       type_code: data.type_code ?? null,
 
       bhk: data.bhk ?? null,
+      listing_type: data.listing_type ?? null,
       bedrooms: data.bedrooms ?? null,
       bathrooms: data.bathrooms ?? null,
       balconies: data.balconies ?? null,

@@ -2,12 +2,13 @@ import { logger } from '../../utils/logger';
 import { Router, Response } from 'express';
 import { prisma } from '../../lib/prisma';
 import bcrypt from 'bcryptjs';
-import { authenticateToken, AuthenticatedRequest } from '../../middleware/auth';
+import { authenticateToken, AuthenticatedRequest, requireRole } from '../../middleware/auth';
 import { requireAuthz } from '../../middleware/authz';
 import { Roles, Permissions, EmptyBodySchema, EmployeeRolesUpdateSchema } from '../../shared';
 import { can } from '../../authz/authorization';
 import { notifyEmployee } from '../../utils/notifyEmployee';
 import { validateRequestBody } from '../../middleware/validate';
+import { z } from 'zod';
 
 const router = Router();
 
@@ -188,6 +189,190 @@ router.put(
     } catch (error) {
       logger.error('Update roles error:', error);
       return res.status(500).json({ error: 'Failed to update roles' });
+    }
+  },
+);
+
+const SetPermissionOverrideSchema = z.object({
+  permission: z.string().min(1),
+  is_granted: z.boolean(),
+});
+
+/**
+ * Per-employee permission overrides (#11) — grant or revoke a single
+ * permission for one person without touching their role. Unlike the
+ * role-level RolePermission table (routes/admin/permissions.ts), this table
+ * is read directly into permissionsSet at every token-minting site in
+ * routes/auth.ts, and a `is_granted: false` row actively DELETES the
+ * permission from the set rather than merely not adding it — so both grant
+ * and revoke apply as soon as the employee's JWT is rebuilt. Revoking still
+ * force-invalidates existing sessions here, same as the role-level reset, so
+ * a revoke can't be quietly outlived by an already-issued token.
+ */
+
+// GET /api/v1/employees/:id/permission-overrides — list this employee's overrides
+router.get(
+  '/:id/permission-overrides',
+  authenticateToken,
+  requireRole([Roles.MD, Roles.ADMIN]),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const employeeId = parseInt(req.params.id, 10);
+      if (isNaN(employeeId)) return res.status(400).json({ error: 'Invalid employee ID' });
+
+      const overrides = await prisma.employeePermissionOverride.findMany({
+        where: { employee_id: employeeId },
+        include: { permission: true },
+      });
+
+      return res.status(200).json({
+        overrides: overrides.map((o: any) => ({
+          permission: o.permission.name,
+          is_granted: o.is_granted,
+        })),
+        allPermissionKeys: Object.values(Permissions),
+      });
+    } catch (error) {
+      logger.error('Fetch employee permission overrides error:', error);
+      return res.status(500).json({ error: 'Failed to fetch permission overrides' });
+    }
+  },
+);
+
+// PUT /api/v1/employees/:id/permission-overrides — grant or revoke one permission for this employee
+router.put(
+  '/:id/permission-overrides',
+  authenticateToken,
+  requireRole([Roles.MD, Roles.ADMIN]),
+  validateRequestBody(SetPermissionOverrideSchema),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const employeeId = parseInt(req.params.id, 10);
+      if (isNaN(employeeId)) return res.status(400).json({ error: 'Invalid employee ID' });
+      const { permission, is_granted } = req.body;
+
+      const [targetEmployee, permRecord] = await Promise.all([
+        prisma.employee.findUnique({ where: { id: employeeId } }),
+        prisma.permission.findUnique({ where: { name: permission } }),
+      ]);
+      if (!targetEmployee) return res.status(404).json({ error: 'Employee not found' });
+      if (!permRecord) return res.status(400).json({ error: `Unknown permission: ${permission}` });
+
+      await prisma.$transaction(async (tx) => {
+        await tx.employeePermissionOverride.upsert({
+          where: {
+            employee_id_permission_id: { employee_id: employeeId, permission_id: permRecord.id },
+          },
+          create: { employee_id: employeeId, permission_id: permRecord.id, is_granted },
+          update: { is_granted },
+        });
+
+        // A grant is safely picked up whenever the token is next refreshed;
+        // a revoke needs to force that refresh now, since an already-issued
+        // JWT still carries the permission it removes.
+        if (!is_granted) {
+          await tx.employee.update({
+            where: { id: employeeId },
+            data: { token_version: { increment: 1 } },
+          });
+          await tx.authSession.updateMany({
+            where: { employee_id: employeeId, revoked: false },
+            data: { revoked: true, revocation_reason: 'EMPLOYEE_PERMISSIONS_CHANGED' },
+          });
+        }
+
+        await tx.auditEvent.create({
+          data: {
+            actor_id: req.user!.employeeId,
+            action: is_granted ? 'GRANT_EMPLOYEE_PERMISSION' : 'REVOKE_EMPLOYEE_PERMISSION',
+            entity_type: 'EMPLOYEE',
+            entity_id: employeeId,
+            new_value: JSON.stringify({ permission, is_granted }),
+          },
+        });
+      });
+
+      await notifyEmployee(employeeId, {
+        type: 'ROLE_PERMISSIONS_CHANGED',
+        title: '🔐 Your Access Was Updated',
+        message: is_granted
+          ? `You were individually granted the "${permission}" permission by an administrator.`
+          : `Your "${permission}" permission was revoked by an administrator. Please log in again to apply the update.`,
+      });
+
+      return res.status(200).json({ message: 'Permission override saved', permission, is_granted });
+    } catch (error) {
+      logger.error('Set employee permission override error:', error);
+      return res.status(500).json({ error: 'Failed to set permission override' });
+    }
+  },
+);
+
+// DELETE /api/v1/employees/:id/permission-overrides/:permission — clear one override, reverting to role default
+router.delete(
+  '/:id/permission-overrides/:permission',
+  authenticateToken,
+  requireRole([Roles.MD, Roles.ADMIN]),
+  validateRequestBody(EmptyBodySchema),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const employeeId = parseInt(req.params.id, 10);
+      if (isNaN(employeeId)) return res.status(400).json({ error: 'Invalid employee ID' });
+      const permission = req.params.permission;
+
+      const permRecord = await prisma.permission.findUnique({ where: { name: permission } });
+      if (!permRecord) return res.status(400).json({ error: `Unknown permission: ${permission}` });
+
+      const existing = await prisma.employeePermissionOverride.findUnique({
+        where: {
+          employee_id_permission_id: { employee_id: employeeId, permission_id: permRecord.id },
+        },
+      });
+      if (!existing)
+        return res.status(404).json({ error: 'No override found for this permission' });
+
+      await prisma.$transaction(async (tx) => {
+        await tx.employeePermissionOverride.delete({
+          where: {
+            employee_id_permission_id: { employee_id: employeeId, permission_id: permRecord.id },
+          },
+        });
+
+        // Clearing a revoke restores whatever the role would otherwise grant,
+        // which needs the same forced refresh a grant would; clearing a grant
+        // removes access the employee may still hold via their current JWT.
+        // Force re-auth in both directions since we can't tell locally which
+        // effective outcome this produces without recomputing role defaults.
+        await tx.employee.update({
+          where: { id: employeeId },
+          data: { token_version: { increment: 1 } },
+        });
+        await tx.authSession.updateMany({
+          where: { employee_id: employeeId, revoked: false },
+          data: { revoked: true, revocation_reason: 'EMPLOYEE_PERMISSIONS_CHANGED' },
+        });
+
+        await tx.auditEvent.create({
+          data: {
+            actor_id: req.user!.employeeId,
+            action: 'CLEAR_EMPLOYEE_PERMISSION_OVERRIDE',
+            entity_type: 'EMPLOYEE',
+            entity_id: employeeId,
+            old_value: JSON.stringify({ permission, was_granted: existing.is_granted }),
+          },
+        });
+      });
+
+      await notifyEmployee(employeeId, {
+        type: 'ROLE_PERMISSIONS_CHANGED',
+        title: '🔐 Your Access Was Updated',
+        message: `Your individual override for "${permission}" was cleared by an administrator. Please log in again to apply the update.`,
+      });
+
+      return res.status(200).json({ message: 'Permission override cleared' });
+    } catch (error) {
+      logger.error('Clear employee permission override error:', error);
+      return res.status(500).json({ error: 'Failed to clear permission override' });
     }
   },
 );

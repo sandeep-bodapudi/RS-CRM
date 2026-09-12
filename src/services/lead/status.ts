@@ -99,11 +99,23 @@ export async function updateLeadStatus(
     demo_handler_id?: number;
     qualification?: any;
   },
+  opts?: {
+    // Skips the leads.update/LeadPolicy.canMutate check below. Only for a
+    // trusted internal caller advancing the Lead as an automatic consequence
+    // of an action the user WAS separately authorized for (e.g. completing a
+    // site visit, which needs site_visits.complete, not leads.update) — never
+    // set from an HTTP request body. See routes/siteVisits.ts's /:id/complete
+    // handler for the one real caller: whoever holds site_visits.complete
+    // (typically Agent) usually lacks leads.update and, even with it granted,
+    // is usually not the lead's assignee, so LeadPolicy.canMutate would still
+    // reject a call made on their own authority.
+    skipPermissionCheck?: boolean;
+  },
 ) {
   const lead = await p.lead.findFirst({ where: { id: leadId }, include: { project: true } });
   if (!lead) throw new AppError(404, 'Lead not found');
 
-  if (!can(user, Permissions.LEADS_UPDATE, lead)) {
+  if (!opts?.skipPermissionCheck && !can(user, Permissions.LEADS_UPDATE, lead)) {
     throw new AppError(403, 'Forbidden: You do not have permission to mutate this lead');
   }
 

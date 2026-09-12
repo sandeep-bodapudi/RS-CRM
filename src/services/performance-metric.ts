@@ -32,6 +32,10 @@ export const PERFORMANCE_WEIGHTS = {
   belowTargetPenalty: 1.0,
   overduePenalty: 1.0,
   uninformedAbsentPenalty: 2.0,
+  // Both written by jobs/tasks.ts's dailyAttendanceRollupJob at IST midnight.
+  midnightAutoCheckoutPenalty: 1.0,
+  missingDailyReportPenalty: 1.0,
+  completedAllWorkBoost: 1.0,
 } as const;
 
 export interface PerformanceScoreInputs {
@@ -41,6 +45,9 @@ export interface PerformanceScoreInputs {
   belowTargetEvents: number;
   targetExceededEvents: number;
   uninformedAbsentEvents: number;
+  midnightAutoCheckoutEvents: number;
+  missingDailyReportEvents: number;
+  completedAllWorkEvents: number;
   propertyBookingContributions: number;
   presentCount: number;
   // § Phase 4: pre-summed points across the month's attendance logs, from
@@ -75,6 +82,12 @@ export interface PerformanceScoreBreakdown {
   overduePenalty: number;
   uninformedAbsentEvents: number;
   uninformedAbsentPenalty: number;
+  midnightAutoCheckoutEvents: number;
+  midnightAutoCheckoutPenalty: number;
+  missingDailyReportEvents: number;
+  missingDailyReportPenalty: number;
+  completedAllWorkEvents: number;
+  completedAllWorkBoost: number;
 }
 
 export interface PerformanceScoreResult {
@@ -104,6 +117,12 @@ const ZERO_BREAKDOWN: PerformanceScoreBreakdown = {
   overduePenalty: 0,
   uninformedAbsentEvents: 0,
   uninformedAbsentPenalty: 0,
+  midnightAutoCheckoutEvents: 0,
+  midnightAutoCheckoutPenalty: 0,
+  missingDailyReportEvents: 0,
+  missingDailyReportPenalty: 0,
+  completedAllWorkEvents: 0,
+  completedAllWorkBoost: 0,
 };
 
 /** Round a raw score to one decimal place and clamp to 0 (lower bound). */
@@ -140,6 +159,15 @@ export function calculatePerformanceScore(inputs: PerformanceScoreInputs): Perfo
     uninformedAbsentEvents: inputs.uninformedAbsentEvents,
     uninformedAbsentPenalty:
       inputs.uninformedAbsentEvents * PERFORMANCE_WEIGHTS.uninformedAbsentPenalty,
+    midnightAutoCheckoutEvents: inputs.midnightAutoCheckoutEvents,
+    midnightAutoCheckoutPenalty:
+      inputs.midnightAutoCheckoutEvents * PERFORMANCE_WEIGHTS.midnightAutoCheckoutPenalty,
+    missingDailyReportEvents: inputs.missingDailyReportEvents,
+    missingDailyReportPenalty:
+      inputs.missingDailyReportEvents * PERFORMANCE_WEIGHTS.missingDailyReportPenalty,
+    completedAllWorkEvents: inputs.completedAllWorkEvents,
+    completedAllWorkBoost:
+      inputs.completedAllWorkEvents * PERFORMANCE_WEIGHTS.completedAllWorkBoost,
   };
 
   const rawScore =
@@ -148,12 +176,15 @@ export function calculatePerformanceScore(inputs: PerformanceScoreInputs): Perfo
     breakdown.reportBoost +
     breakdown.presentBoost +
     breakdown.propertyBookingBoost +
-    breakdown.targetExceededBoost -
+    breakdown.targetExceededBoost +
+    breakdown.completedAllWorkBoost -
     breakdown.latePenalty -
     breakdown.halfDayPenalty -
     breakdown.belowTargetPenalty -
     breakdown.overduePenalty -
-    breakdown.uninformedAbsentPenalty;
+    breakdown.uninformedAbsentPenalty -
+    breakdown.midnightAutoCheckoutPenalty -
+    breakdown.missingDailyReportPenalty;
 
   return {
     score: roundPerformanceScore(rawScore),

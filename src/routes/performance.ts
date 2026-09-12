@@ -45,6 +45,10 @@ router.get('/my-score', authenticateToken, async (req: AuthenticatedRequest, res
         assignee_id: employeeId,
         status: 'COMPLETED',
         updated_at: { gte: startOfMonth, lte: endOfMonth },
+        // Self-assigned tasks (created_by === assignee_id) don't count —
+        // otherwise anyone could inflate their own score by creating and
+        // completing trivial tasks for themselves.
+        created_by: { not: employeeId },
       },
     });
     const reportEvents = await p.dailyReport.count({
@@ -75,6 +79,27 @@ router.get('/my-score', authenticateToken, async (req: AuthenticatedRequest, res
       where: {
         actor_id: employeeId,
         action: 'UNINFORMED_ABSENT',
+        created_at: { gte: startOfMonth, lte: endOfMonth },
+      },
+    });
+    const midnightAutoCheckoutEvents = await p.auditEvent.count({
+      where: {
+        actor_id: employeeId,
+        action: 'ATTENDANCE_AUTO_CHECKOUT_MIDNIGHT',
+        created_at: { gte: startOfMonth, lte: endOfMonth },
+      },
+    });
+    const missingDailyReportEvents = await p.auditEvent.count({
+      where: {
+        actor_id: employeeId,
+        action: 'MISSING_DAILY_REPORT',
+        created_at: { gte: startOfMonth, lte: endOfMonth },
+      },
+    });
+    const completedAllWorkEvents = await p.auditEvent.count({
+      where: {
+        actor_id: employeeId,
+        action: 'COMPLETED_ALL_WORK',
         created_at: { gte: startOfMonth, lte: endOfMonth },
       },
     });
@@ -120,6 +145,9 @@ router.get('/my-score', authenticateToken, async (req: AuthenticatedRequest, res
       belowTargetEvents,
       targetExceededEvents,
       uninformedAbsentEvents,
+      midnightAutoCheckoutEvents,
+      missingDailyReportEvents,
+      completedAllWorkEvents,
       propertyBookingContributions,
       presentCount,
       attendanceBoost,
@@ -382,6 +410,9 @@ router.get('/team', authenticateToken, async (req: AuthenticatedRequest, res: Re
           targetExceededEvents,
           attendanceLogs,
           uninformedAbsent,
+          midnightAutoCheckout,
+          missingDailyReport,
+          completedAllWork,
           propertyBookingContributions,
         ] = await Promise.all([
           p.task.count({
@@ -389,6 +420,7 @@ router.get('/team', authenticateToken, async (req: AuthenticatedRequest, res: Re
               assignee_id: emp.id,
               status: 'COMPLETED',
               updated_at: { gte: startOfMonth, lte: endOfMonth },
+              created_by: { not: emp.id },
             },
           }),
           p.task.count({
@@ -429,6 +461,27 @@ router.get('/team', authenticateToken, async (req: AuthenticatedRequest, res: Re
           p.auditEvent.count({
             where: {
               actor_id: emp.id,
+              action: 'ATTENDANCE_AUTO_CHECKOUT_MIDNIGHT',
+              created_at: { gte: startOfMonth, lte: endOfMonth },
+            },
+          }),
+          p.auditEvent.count({
+            where: {
+              actor_id: emp.id,
+              action: 'MISSING_DAILY_REPORT',
+              created_at: { gte: startOfMonth, lte: endOfMonth },
+            },
+          }),
+          p.auditEvent.count({
+            where: {
+              actor_id: emp.id,
+              action: 'COMPLETED_ALL_WORK',
+              created_at: { gte: startOfMonth, lte: endOfMonth },
+            },
+          }),
+          p.auditEvent.count({
+            where: {
+              actor_id: emp.id,
               action: 'PROPERTY_BOOKED_CONTRIBUTION',
               created_at: { gte: startOfMonth, lte: endOfMonth },
             },
@@ -462,6 +515,9 @@ router.get('/team', authenticateToken, async (req: AuthenticatedRequest, res: Re
           belowTargetEvents: belowTargetCount,
           targetExceededEvents,
           uninformedAbsentEvents: uninformedAbsent,
+          midnightAutoCheckoutEvents: midnightAutoCheckout,
+          missingDailyReportEvents: missingDailyReport,
+          completedAllWorkEvents: completedAllWork,
           propertyBookingContributions,
           presentCount,
           attendanceBoost,

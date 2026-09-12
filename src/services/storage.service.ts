@@ -112,14 +112,19 @@ export class FtpPropertyImageStorage implements PropertyImageStorage {
         'images',
       );
 
+      // ensureDir has the side effect of navigating the FTP session's CWD
+      // into remoteDir (confirmed against the real Hostinger account: PWD
+      // after ensureDir('uploads/properties/x/images') is that full path,
+      // not the login root) — uploading with the full remoteDir+filename
+      // path again on top of that looked for a doubled-up path and always
+      // 550'd. Upload by filename alone, relative to the now-current dir.
       await client.ensureDir(remoteDir);
 
       // Write buffer to stream for basic-ftp
       const { Readable } = await import('stream');
       const stream = Readable.from(processedBuffer);
 
-      const remotePath = path.posix.join(remoteDir, filename);
-      await client.uploadFrom(stream, remotePath);
+      await client.uploadFrom(stream, filename);
 
       const baseUrl = process.env.FTP_PUBLIC_BASE_URL || '';
       return `${baseUrl}/properties/${propertyId}/images/${filename}`;
@@ -352,13 +357,14 @@ export class FtpStorageService implements StorageService {
     const client = await getFtpClient();
     try {
       const remoteDir = path.posix.join(process.env.FTP_REMOTE_BASE_PATH || '', this.remoteSubdir);
+      // ensureDir navigates the session's CWD into remoteDir — see the
+      // matching fix/comment in FtpPropertyImageStorage.upload above.
       await client.ensureDir(remoteDir);
 
       const { Readable } = await import('stream');
       const stream = Readable.from(buffer);
 
-      const remotePath = path.posix.join(remoteDir, filename);
-      await client.uploadFrom(stream, remotePath);
+      await client.uploadFrom(stream, filename);
 
       const baseUrl = process.env.FTP_PUBLIC_BASE_URL || '';
       return `${baseUrl}/${this.remoteSubdir}/${filename}`;

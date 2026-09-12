@@ -893,10 +893,11 @@ model Project {
 
   // Approvals & compliance — RERA/DTCP/HMDA numbers are legally required on
   // any public listing, so they are first-class rather than free text.
-  rera_status        String? // NOT_APPLICABLE, APPLIED, APPROVED
-  approval_authority String? // RERA, DTCP, HMDA, PANCHAYAT
-  approval_number    String?
-  lp_number          String?
+  rera_status          String? // NOT_APPLICABLE, APPLIED, APPROVED
+  approval_authority   String? // Deprecated single-value column: superseded by approval_authorities (spec item #13 — a project can need more than one authority's sign-off, e.g. both HMDA and GHMC). Retained for old rows.
+  approval_authorities Json? // Array of: RERA, DTCP, HMDA, GHMC, MUDA, GRAM_PANCHAYAT, MUNICIPALITY, OTHER
+  approval_number      String?
+  lp_number            String?
 
   // Structured location — Property already had these; Project only had a single
   // free-text `location`, so units could not inherit a real address.
@@ -993,6 +994,10 @@ model ProjectUnit {
   utility_rooms  Int?
   has_pooja_room Boolean @default(false)
   has_study_room Boolean @default(false)
+  /// NEW or RESALE — mirrors Property.listing_type (spec item #12); this
+  /// column was added after the model went live, so it's nullable and
+  /// additive rather than backfilled.
+  listing_type   String?
 
   // ---- Area ---------------------------------------------------------------
   // area_value/area_unit hold what was typed (plots are sold in Sq.Yds and the

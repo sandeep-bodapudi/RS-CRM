@@ -34,6 +34,11 @@ export interface LockedInventory {
   state: string;
   locked_until: Date | null;
   label: string;
+  /** Parent Project.status, when this item belongs to one — null for a
+   *  standalone Property with no project_id. Used to block new bookings
+   *  against a held project (#15) without touching bookings already in
+   *  flight, which this check never sees since it only runs on claim. */
+  project_status: string | null;
 }
 
 /**
@@ -101,7 +106,10 @@ export async function lockInventoryRow(
 ): Promise<LockedInventory> {
   if (ref.kind === 'PROPERTY') {
     const rows = (await client.$queryRaw`
-      SELECT id, status, locked_until, company_id FROM Property WHERE id = ${ref.id} FOR UPDATE
+      SELECT p.id, p.status, p.locked_until, p.company_id, proj.status AS project_status
+      FROM Property p
+      LEFT JOIN Project proj ON proj.id = p.project_id
+      WHERE p.id = ${ref.id} FOR UPDATE
     `) as any[];
     if (!rows || rows.length === 0) throw new AppError(404, 'Property not found');
     const row = rows[0];
@@ -112,11 +120,15 @@ export async function lockInventoryRow(
       state: row.status,
       locked_until: row.locked_until ? new Date(row.locked_until) : null,
       label: 'Property',
+      project_status: row.project_status ?? null,
     };
   }
 
   const rows = (await client.$queryRaw`
-    SELECT id, sales_status, locked_until, company_id FROM ProjectUnit WHERE id = ${ref.id} FOR UPDATE
+    SELECT u.id, u.sales_status, u.locked_until, u.company_id, proj.status AS project_status
+    FROM ProjectUnit u
+    LEFT JOIN Project proj ON proj.id = u.project_id
+    WHERE u.id = ${ref.id} FOR UPDATE
   `) as any[];
   if (!rows || rows.length === 0) throw new AppError(404, 'Unit not found');
   const row = rows[0];
@@ -127,6 +139,7 @@ export async function lockInventoryRow(
     state: row.sales_status,
     locked_until: row.locked_until ? new Date(row.locked_until) : null,
     label: 'Unit',
+    project_status: row.project_status ?? null,
   };
 }
 
@@ -136,8 +149,14 @@ export async function lockInventoryRow(
  * available in search too, and the two must agree or search and booking diverge.
  */
 export function assertClaimable(locked: LockedInventory, now: Date): void {
-  const { state, locked_until, label } = locked;
+  const { state, locked_until, label, project_status } = locked;
   const lockActive = locked_until != null && locked_until >= now;
+
+  // A held project blocks NEW bookings against its inventory — existing
+  // locks/bookings are untouched since this only runs on claim (#15).
+  if (project_status === 'ON_HOLD') {
+    throw new AppError(409, `${label}'s project is currently on hold — new bookings are paused`);
+  }
 
   // Property: LIVE is the sellable state. ProjectUnit: AVAILABLE.
   const sellableState = locked.ref.kind === 'PROPERTY' ? 'LIVE' : 'AVAILABLE';
